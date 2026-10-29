@@ -1,285 +1,194 @@
-# Fortress Crawl: Development Plan (Draft v0.1)
+# Fortress Crawl: Development Plan (v0.2)
 
-An endless, procedurally generated 3D dungeon crawler written in C, using SDL and OpenGL.
-The player starts in front of a huge fortress built into a mountain. The entrance is
-**difficulty 0**. Every direction except back outside leads deeper, and the farther you
-get from the entrance, the harder the content becomes.
+An endless, procedurally generated 3D dungeon crawler written in C with SDL3 and OpenGL 3.3.
+The player starts in front of a giant castle built into a mountain. The gate is
+**danger level 0**. Every direction (including up and down) leads deeper, and the farther you
+get from the gate, the harder it gets.
 
-> Status: draft. Open questions are listed at the end and marked **[Q]** throughout.
-
----
-
-## 1. Design pillars
-
-1. **Exploration first.** World generation is the core feature. Every few minutes the
-   player should find something new: a different space, a landmark, a secret or a puzzle.
-2. **Scale you can feel.** Huge halls make the player feel tiny, and crawlspaces make
-   them feel trapped. The engine and the generator are built around this contrast.
-3. **Gloomy look, fun to play.** The visuals are dark and oppressive, but the game is a
-   power fantasy: lots of monsters to kill, fast pacing, and failure that costs little.
-4. **A progression curve that feels powerful.** The player clearly outscales earlier zones
-   and visibly gains new abilities, not only bigger numbers.
-5. **Retro 3D.** Low internal resolution, nearest-neighbour textures, a limited palette,
-   heavy fog and flickering light.
+v0.2 includes your answers and the first prototype (world generation and lighting).
 
 ---
 
-## 2. Technology stack
+## 1. Decisions
 
-No game engine and no framework. We write a small engine of our own and only pull in
-focused libraries that come as single headers or small libraries.
-
-| Concern            | Choice                                   | Why |
-|--------------------|------------------------------------------|-----|
-| Language           | C11 (C99-compatible where practical)     | As requested |
-| Window/input/audio | **SDL3** (fallback: SDL2)                | Cross-platform; SDL3 is stable and has a better API |
-| Graphics           | **OpenGL 3.3 Core**                      | Runs nearly everywhere and is simple enough for a retro look |
-| GL loader          | glad (generated, vendored)               | Standard |
-| Math               | cglm                                     | Pure C, SIMD-friendly, header-only option |
-| Images             | stb_image, stb_image_write (screenshots) | Single header |
-| Noise              | FastNoiseLite (C99 header)               | Fast 2D/3D noise for caverns and the mountain |
-| Font/UI            | Custom bitmap-font renderer + small immediate-mode UI | Pixel-perfect retro UI; Nuklear stays as a fallback for debug tools |
-| Audio              | SDL audio + miniaudio (or SDL_mixer)     | Positional sounds and reverb per space |
-| Build              | CMake, with SDL fetched through FetchContent or found on the system | Simple CI on Linux/Windows/macOS |
-| Tests              | Small custom test runner for deterministic world gen | Same seed must give the same world |
-
-**Why not an existing engine like raylib or sokol?** raylib is a good C library, but it
-hides the GL pipeline and defaults to GLFW. You asked for SDL and full control, so the
-recommendation is a thin engine of our own (roughly 3 to 5k lines) that we fully
-understand. **[Q1]**
-
-### Engine modules (`src/engine/`)
-
-- `platform`: SDL window, GL context, timing with a fixed simulation tick (60 Hz) and
-  interpolated rendering, input mapping (keyboard/mouse plus gamepad).
-- `gfx`: shaders, meshes (VAO/VBO), texture atlas, low-res render target, post-processing,
-  debug lines.
-- `scene`: camera, frustum culling, chunk mesh registry, dynamic entities.
-- `phys`: AABB/capsule collision against the voxel grid, raycasts, simple triggers.
-- `audio`: sound bank, 3D panning, reverb zones tied to room size.
-- `ui`: bitmap font, panels, menus, HUD.
-- `core`: arena allocators, hash maps, PRNG (PCG32 / SplitMix64), job system for
-  background chunk generation (SDL threads).
+| Topic | Decision |
+|-------|----------|
+| Engine | Own small engine: SDL3 + OpenGL 3.3 core. No other runtime dependencies (GL loader, math and noise are our own code). |
+| Camera | First person. |
+| Character | Customisation is gameplay only for now (origin/class, attributes, starting skills). |
+| World extent | Endless in all 6 directions. Height and compass direction both drive the look and content (section 3). |
+| Death | Respawn at the last shrine, keep levels and gear. |
+| Combat | Fast action. Melee, magic and bows, depending on the character's skills. |
+| Worlds | Fixed seed per world, several worlds (save slots) possible. No minimap; a map screen in the inventory. |
+| Puzzles | Easy mechanical puzzles (levers, plates, rotating statues, light beams). |
+| Platforms | Linux, Windows, macOS. Keyboard and mouse. |
+| Assets | All textures generated in code. Audio decided later. |
+| First focus | World generation and lighting (done as prototype, see section 6). |
 
 ---
 
-## 3. Rendering: "retro, pixelated, gloomy"
+## 2. Design pillars
 
-- Render into a **low-resolution off-screen framebuffer** (for example 480×270 or 320×180,
-  configurable) and upscale with nearest-neighbour filtering to the window.
-- **Textures:** 16×16 or 32×32 pixel textures in one atlas, `GL_NEAREST`, no mipmaps
-  (or mipmaps with a nearest filter).
-- **Optional PS1 effects** (each one can be toggled): vertex snapping, affine texture
-  warp, colour quantisation to a palette, ordered (Bayer) dithering.
-- **Lighting:** very low ambient light. The player carries a torch or lantern, which is a
-  flickering point light. Braziers, glowing runes and monster eyes add a few more lights
-  (forward rendering with a small fixed light count per chunk, around 8 to 16). Light is
-  sampled per vertex or per pixel and then quantised into bands for the retro look.
-- **Fog:** exponential, dark, with a colour that depends on the zone (blue-black crypts,
-  red-black forges, green-black sewers). In giant halls the fog thins so the player can
-  see how far the space reaches.
-- **Scale tools:** FOV changes slightly with the space, the camera lowers when the player
-  crouches, footsteps echo, dust particles drift in large halls, and tall vertical
-  elements such as pillars, chains and statues give the eye a reference.
-- **Monsters (for now):** coloured primitives (cubes, spheres, cones, capsules) with
-  emissive eyes, palette-coded by family and tier.
+1. **Exploration first.** Every few minutes there is a new kind of space, landmark or secret.
+2. **Scale you can feel.** Giant halls with galleries, colossi and chasms next to 1 m wide
+   squeeze tunnels and crawlspaces.
+3. **Gloomy look, fun to play.** The game is dark and oppressive to look at, but a power fantasy
+   to play, with little frustration.
+4. **A progression curve that feels powerful.** New abilities and visibly bigger effects, not
+   just bigger numbers.
+5. **Retro 3D.** Low internal resolution, 16x16 textures, quantised light, dithering, fog.
 
 ---
 
-## 4. World structure and generation (the core)
+## 3. The world: height x direction
 
-### 4.1 Coordinate system and determinism
+Every position in the world gets two independent properties:
 
-- The world is a 3D grid of **chunks**. Suggested size: 32×32×32 cells, with one cell
-  being 1 m.
-- A global `world_seed`. Each chunk gets its own seed from
-  `hash(world_seed, cx, cy, cz)`, so generation is deterministic, needs no stored
-  history, and any chunk can be generated in any order and on any thread.
-- **Entrance = chunk (0, 0, 0).** The castle facade and the mountain lie in the −Z
-  half-space. That half is "outside" and is sealed off beyond the courtyard. Everything
-  else is endless.
-- **Difficulty** `D = f(distance)`. The distance is a weighted 3D distance that may count
-  depth extra, for example `sqrt(dx² + dz²) + 1.5·|dy|`. The value is smoothed and
-  quantised into **tiers**, and the zone banners make it visible ("Depth 7 – The Drowned
-  Archive"). **[Q4]**
+### 3.1 Stratum: chosen by height. Controls *layout and features*.
 
-### 4.2 Hierarchical generation (coarse to fine)
+| Chunk y (32 m) | Stratum | Character |
+|---------------:|---------|-----------|
+| 31 and up | **Astral Void** | open space, floating platforms and crystals, stars |
+| 21 to 30 | **Heaven** | bright marble, floating islands with little temples |
+| 14 to 20 | **Cloud Cloisters** | mostly open air, bridges, pale haze |
+| 8 to 13 | **Spires** | towers and open-air bridges, night sky |
+| 3 to 7 | **Castle** | built halls, arenas, great halls with galleries |
+| -3 to 2 | **Dungeon** | rooms, corridors, cell blocks (start area) |
+| -9 to -4 | **Mines** | timbered tunnels, lanterns, ore veins, chasms |
+| -16 to -10 | **Roots of the Mountain** | caves, giant caverns, roots, glowing fungus |
+| -25 to -17 | **Limbo** (first circle) | grey, bones, cell blocks |
+| -39 to -26 | **Inferno** | lava, red light, chasms |
+| -40 and below | **World Core** | magenta crystal caves, molten core |
 
-```
-Region (e.g. 8×4×8 chunks)  -> theme/biome, megastructure placement, difficulty band
-  Structure (1..N chunks)   -> great hall, cathedral, chasm, cistern, tower shaft, cavern
-    Chunk (32³ cells)       -> rooms + corridors from a chunk archetype
-      Cell (1 m voxel)      -> solid/air/material + props, lights, spawns, traps
-```
+Each stratum has weights for the chunk archetypes and megastructures, plus feature
+frequencies (lava, crystals, fungus, roots), fog, ambient light and light colour.
+Boundaries are warped with noise so they are irregular.
 
-1. **Region layer:** a coarse noise field plus hashing picks the theme for each region
-   (crypts, barracks, forges, flooded cisterns, libraries, natural caverns inside the
-   mountain, collapsed sections, ...). Themes pick palettes, textures, fog, monster
-   families, trap and puzzle types.
-2. **Megastructure layer:** some regions reserve a multi-chunk volume for a landmark,
-   such as a **Great Hall** of 3×2×3 chunks (96 m wide, 64 m tall), a bottomless
-   **Chasm** crossed by bridges, a **Vertical Shaft** with spiral stairs, an
-   **Underground Lake**, or a **Colossus Chamber**. They are placed with jittered-grid
-   sampling so each one is rare and far from the others.
-3. **Chunk archetypes:** every chunk not taken by a structure picks an archetype that fits
-   its theme and difficulty:
-   - *Dungeon cells:* BSP rooms plus corridors.
-   - *Crawlspace network:* tunnels 1 m wide and 1.2 to 1.5 m high that force crouching
-     or crawling.
-   - *Natural cavern:* 3D noise carving (FastNoiseLite) inside the mountain.
-   - *Vault / puzzle room:* hand-authored template with random variations.
-   - *Arena:* an open room with waves of monsters and a reward.
-   - *Stair hub:* vertical connector between layers.
-   - *Ruined / collapsed:* partial cave-in, the player has to climb through rubble.
-4. **Hand-authored "prefab" templates** (small text or binary files) mixed with procedural
-   parts give the world recognisable rooms (shrines, libraries, armouries) while the
-   overall layout stays random.
+### 3.2 Flavor: chosen by compass direction. Controls *look*.
 
-### 4.3 Seamless connectivity in an endless world
+| Direction | Tier 1 (from ~4 chunks) | Tier 2 (~10) | Tier 3 (~18) |
+|-----------|------------------------|--------------|--------------|
+| North (colder) | Frostbitten | Glacial | Everwinter (aurora light) |
+| South (hotter) | Sandstone | Sunscorched | Ember-forged (lava) |
+| East | Boyar (carved wood, red and gold) | Steppe (felt, earth, bones) | Jade (red lacquer, jade, lanterns) |
+| West | Gothic (stained glass) | Druidic (moss, roots, water) | Drowned (bioluminescent, flooded) |
 
-The hard problem: neighbouring chunks are generated independently, but their passages
-must meet.
+A flavor controls the palette and wall/floor patterns, torch and lantern colours, fog colour,
+typical decoration (cobwebs, bones, roots, lanterns, chains) and fluids (ice, water, lava).
+On diagonals, the dominant axis wins; near the diagonal it is chosen per 3x3x3 region,
+which gives patchy borders.
 
-- **Portal contract per chunk face:** the openings on a shared face come from
-  `hash(world_seed, face_id)`. Both chunks compute the same openings (position, size and
-  type: corridor, crawlspace, big arch or stair) without knowing anything about each
-  other.
-- Inside the chunk, the generator **must connect all its portals** (spanning tree plus
-  some extra loops) and then fills the rest with rooms. Multi-chunk structures own their
-  internal faces and only expose portals on their outer boundary.
-- **Guarantees:**
-  - Every face has a non-zero chance of an opening.
-  - Every chunk has at least 2 openings.
-  - A global "spine" (a coarse lattice of guaranteed main corridors) ensures the world
-    has no closed-off pockets near the start.
-- **Sealing the outside:** faces toward −Z beyond the courtyard never get portals.
-- **Scale transitions:** opening types are chosen so that a crawlspace can lead into a
-  great hall. These contrast moments are planned on purpose with a weighted transition
-  table (narrow → huge gets a bonus).
+**Stratum x flavor = theme.** There are 11 x 13 = 143 combinations, for example
+*Frostbitten Mines*, *Jade Heaven*, *Drowned Inferno* or *Everwinter Inferno* (a frozen hell,
+like Dante's Cocytus). Each theme gets its own generated texture set.
 
-### 4.4 Streaming
+### 3.3 Danger level
 
-- Chunks within radius R (for example 3 to 4 horizontally and 2 vertically) are kept
-  loaded. Generation and meshing run on background threads, and the mesh upload happens
-  on the main thread.
-- Meshing uses greedy meshing of the voxel faces plus prop meshes per chunk, and each
-  chunk is culled against the view frustum.
-- Chunk state the player changes (opened chests, solved puzzles, killed bosses) is stored
-  as a small **delta** per chunk in the save file. Everything else is regenerated from
-  the seed.
-
-### 4.5 The starting area (hand-designed)
-
-- An outdoor approach: a cliff path, the mountain silhouette, the giant gate, falling ash
-  or snow, and the castle half swallowed by rock.
-- A courtyard with the first shrine (save/respawn point), a training dummy and the
-  character creation moment.
-- The gate leads into a **Grand Vestibule** (a megastructure), with exits to the left,
-  right, ahead, up and down: the first branching choice.
+`danger = sqrt(dx^2 + dz^2) + 1.5 * |dy|` in chunks from the gate. Today it already reduces
+light density (the deeper you go, the darker it gets) and increases crawlspace frequency.
+Later it will drive monsters, traps, loot and puzzles.
 
 ---
 
-## 5. Gameplay
+## 4. Generation technique
 
-### 5.1 Camera and controls
+- **Chunks** are 32^3 cells of 1 m. Every chunk is a pure function of (seed, coordinates), so
+  generation needs no stored history, runs in any order, and runs on worker threads.
+- **Floor levels:** each normal chunk has one or two floor levels, from its own hash.
+  Corridors run flat on a level and are routed with A* (they avoid stairwells and reuse
+  existing passages). Height changes always go through **spiral stairwells**. This keeps
+  everything connected and avoids corridors cutting through each other.
+- **Portals:** the openings on the face between two chunks are computed from that face's own
+  hash, so both neighbours carve them identically. Portal heights are taken from the
+  neighbouring chunks' floor levels or from a structure's gallery levels. Types: corridor,
+  narrow (1 x 2 m squeeze), crawl (1 x 1 m), grand (7 x 10 m arch), gate. Vertical
+  connections are spiral **shafts** through floors and ceilings. Crawl-heavy chunks prefer
+  crawl portals, structures prefer grand arches, and a crawl tunnel opening into a great hall
+  is a deliberate contrast.
+- **Chunk archetypes:** rooms, crawlspace, caves, mine, cell block, arena, open void.
+- **Megastructures**, at most one per 6x6x6-chunk cell, spanning several chunks:
+  - **Great Hall** (64-96 m wide, 64 m tall): pillar rows, vaulted ceiling, galleries on
+    every level linked by stairs, tall glowing windows, braziers, chandeliers. Variants:
+    *Colossus* (a 30 m statue with glowing eyes and a sword) and *Cistern* (flooded floor
+    with walkways).
+  - **Cavern** (up to 96 m): noise-carved, with columns, stalactites, ponds, crystals and fungus.
+  - **Chasm** (up to 160 m deep): ledge rings on each level, stairs, wooden bridges,
+    braziers and lava or water at the bottom.
+  - **Grand Vestibule**: the fixed hall behind the gate, with a spiral stair down into the
+    floor and a 60 m free-standing spiral up through the ceiling.
+- **Outside:** the valley in front of the gate with mountain walls, the castle front (curtain
+  wall, gatehouse, towers with lit windows and conical roofs), dead trees, a graveyard, a
+  shrine and a brazier-lined path. The castle sits against a sheer cliff that rises into the
+  dark.
 
-- **First person** (recommended for the scale and claustrophobia feeling), with mouse
-  look and WASD, jump, crouch, crawl, sprint and dodge. **[Q2]**
+## 5. Lighting and rendering
 
-### 5.2 Combat (fun, fast, lots of slaying)
-
-- Real-time melee (light and heavy attacks with arcs and hit-stop), ranged attacks
-  (bow/crossbow) and spells (bolt, nova, chain).
-- Monsters come in packs. Many weak enemies with a few elites keeps the slaughter fun.
-- **Monster families** (coloured primitives for now): swarmers (small fast cubes),
-  brutes (big slow boxes), casters (floating octahedra), chargers (cones), spawners
-  (pillars), and per-tier **elites** with affixes (fiery, shielded, splitting, teleporting).
-- **Scaling:** `HP/damage ∝ base · growth^tier`, plus more affixes and new behaviours at
-  higher tiers, so difficulty changes the gameplay instead of only the stats.
-- Simple AI: a state machine (idle, notice, chase, attack, flee) with pathfinding on the
-  chunk's walkable grid (A* or flow fields for packs).
-
-### 5.3 Traps
-
-Pressure plates, swinging blades, dart walls, collapsing floors, flame jets, rolling
-boulders in narrow tunnels and gas rooms. Trap density and lethality scale with
-difficulty, and traps can hurt monsters too.
-
-### 5.4 Riddles and puzzles
-
-- Lever or rune sequences (the clues are written on walls elsewhere in the chunk),
-  rotating statues to face a symbol, light-beam or brazier lighting puzzles, weight
-  plates, and a "which door is lying" riddle room.
-- Puzzles guard **vaults** with much better loot. They are optional, never block
-  progress and scale in complexity with distance.
-
-### 5.5 Progression ("feel powerful")
-
-- **XP and levels:** fast early levelling, and each level gives attribute points.
-- **Skill tree or talents:** active skills with visual effects that grow bigger (cleave
-  turns into a whirlwind, a firebolt turns into a meteor).
-- **Loot:** rarity tiers with random affixes. Item power grows with difficulty, so going
-  deeper is the main motivation.
-- **Power checks:** the player comes back to a low-tier area and one-shots everything.
-  Tiers adjacent to your level are the "sweet spot".
-- **Shrines:** sparse checkpoints and respawn points, with optional small permanent buffs.
-
-### 5.6 Death and failure (low frustration)
-
-Recommendation: on death, respawn at the last shrine and keep your levels and gear, but
-lose some unbanked gold or XP. No permadeath by default. **[Q5]**
-
-### 5.7 Character customisation
-
-- **Origin / class** sets the starting skills and stats (Warrior, Ranger, Mage, or a
-  classless start).
-- Attribute allocation, name, and visual options (colours, helmet, cloak; these show up
-  as the hands or weapon in first person, and in the inventory doll). **[Q3]**
+- **Coloured flood-fill light** (RGB, 0-15 per channel) computed per chunk with a 15-cell
+  border taken from neighbouring chunks, so light crosses chunk borders without seams. Walls
+  block it naturally, so there is no light bleeding.
+- A separate **fire channel** marks how much light comes from flames; the shader makes exactly
+  that part flicker.
+- Smooth per-vertex light plus **ambient occlusion**. Emissive blocks (lava, crystals, windows,
+  flames) are full-bright and cut through the fog.
+- **Moonlight** on open-sky cells outside, with a starfield and a moon in the sky shader.
+- **Player torch** as a dynamic point light with flicker.
+- **Adaptive fog**: rays measure how open the space is. Fog thins in giant halls so you see
+  how far they reach, and thickens in tunnels.
+- **Retro pipeline**: render at 480x270 (or 320x180 / 640x360), nearest upscale, light
+  quantised into 14 bands, 4x4 Bayer dithering to 20 levels per channel, vignette, optional
+  PS1 vertex snapping.
 
 ---
 
-## 6. Milestones
+## 6. Status (prototype)
 
-Each milestone ends in something you can play or look at.
+Done:
+- Engine: SDL3 window, GL 3.3 core loader, shaders, worker pool, bitmap font.
+- Everything in sections 3 to 5.
+- Chunk streaming around the player (generation and meshing on worker threads).
+- First-person walking with step-up, automatic crouch/crawl in low tunnels, fly mode.
+- Debug overlay, teleport keys, screenshot mode.
+- `test_worldgen`: determinism, portal alignment, reachability from the gate (99-100% of
+  openings in a 7x5x7-chunk region), connectivity inside each chunk (about 96%).
 
-| #   | Milestone              | Deliverable |
-|-----|------------------------|-------------|
-| M0  | Skeleton               | CMake project, SDL window, GL 3.3 context, fixed-tick loop, CI build |
-| M1  | Retro renderer         | Low-res framebuffer and upscale, textured meshes, camera, fog, torch light, bitmap font |
-| M2  | Player controller      | First-person movement, capsule-vs-voxel collision, crouch/crawl, a small test map |
-| M3  | Chunks and streaming   | Seeded chunks, greedy meshing, background generation, debug overlay (chunk coordinates, difficulty) |
-| M4  | World gen v1           | Portal contract, BSP rooms and corridors, guaranteed connectivity, the castle entrance |
-| M5  | World gen v2: variety  | Region themes, megastructures (great hall, chasm, shaft), crawlspaces, caverns, prefabs |
-| M6  | Combat and monsters    | Primitive monsters, AI, melee/ranged/spells, hit feedback, packs and elites |
-| M7  | Progression and loot   | XP, levels, skills, items with affixes, inventory and HUD |
-| M8  | Traps and riddles      | Trap set, 3 to 4 puzzle types, vaults |
-| M9  | Character creation and saves | Creation screen, save/load (seed plus chunk deltas plus player) |
-| M10 | Atmosphere pass        | Audio and reverb zones, particles, palette/dither options, lighting polish |
-
-M0–M3 are the engine foundation. M4–M5 are the heart of the project and should take the
-most time.
-
----
-
-## 7. Repository layout (proposed)
-
-```
-fortress_crawl/
-  CMakeLists.txt
-  external/            # glad, cglm, stb, FastNoiseLite, miniaudio (vendored)
-  src/
-    engine/            # platform, gfx, phys, audio, ui, core
-    world/             # chunk, region, structures, portals, meshing, prefabs
-    game/              # player, combat, monsters, ai, items, skills, traps, puzzles
-    main.c
-  assets/
-    shaders/ textures/ prefabs/ sounds/ fonts/
-  tests/               # determinism and connectivity tests for the generator
-  docs/
-```
+Known gaps / next steps for the world:
+- A few chunks still have an opening that is only reachable from outside the chunk
+  (stairwell placement fails when space is tight).
+- Lava and water are not yet dangerous or swimmable.
+- Open-air strata can have chunks without a floor, where you can fall a long way.
+- More structures: a tower shaft with a wall-hugging spiral, an underground lake, a library,
+  a forge, sealed vaults (puzzle rooms), and landmark set pieces at fixed distances.
+- Prefabs: hand-authored rooms (shrines, armouries, libraries) mixed into the layouts.
+- Transitions: bigger, deliberate scale contrasts (a crawlspace that opens onto a gallery high
+  above a hall floor).
 
 ---
 
-## 8. Open questions
+## 7. Milestones
 
-See the list in the conversation / PR. Answers will be folded into v0.2 of this plan.
+| #   | Milestone | Status |
+|-----|-----------|--------|
+| M0  | Skeleton (CMake, SDL3, GL, loop) | done |
+| M1  | Retro renderer (low-res, fog, torch, dithering, font) | done |
+| M2  | Player controller (collision, crouch/crawl, step-up) | done (basic) |
+| M3  | Chunks and streaming (threads, meshing, culling) | done |
+| M4  | World gen v1 (portals, levels, stairwells, castle entrance) | done |
+| M5  | World gen v2 (strata x flavors, megastructures) | first version done |
+| M6  | Combat and monsters (coloured primitives, AI, melee/magic/bow) | next |
+| M7  | Progression and loot (XP, skill trees, affixes, inventory, map screen) | |
+| M8  | Traps and easy mechanical puzzles, vaults | |
+| M9  | Character creation (gameplay), shrines, save/load per world | |
+| M10 | Atmosphere: audio, particles, polish | |
+
+---
+
+## 8. Open questions for the next phase
+
+1. **Combat feel:** melee hit-stop and knockback like a modern action game, or more retro
+   (Hexen / Heretic style)?
+2. **Classes:** fixed classes (Warrior, Ranger, Mage) or a classless skill tree where
+   melee, bow and magic are branches?
+3. **Map:** should the map in the inventory reveal only explored cells, or whole chunks once
+   entered?
+4. **Monsters per theme:** should monster families follow the theme (ice creatures up north,
+   demons in the Inferno), or be independent of it?
