@@ -5,8 +5,10 @@ You start in front of a huge castle built into a mountain. Everything behind the
 generated on the fly, without end, in every direction including up and down. The farther you
 get from the gate, the more dangerous it gets.
 
-This is an early prototype. It covers **world generation, lighting and the retro renderer**.
-There is no combat yet. See [`docs/PLAN.md`](docs/PLAN.md) for the full plan.
+This is an early prototype. It has **world generation, lighting, the retro renderer,
+Hexen-style combat against primitive monsters, a classless skill tree, shrines and an
+explored-cells map**. There is no loot, saving or audio yet. See [`docs/PLAN.md`](docs/PLAN.md)
+for the full plan.
 
 ## Screenshots (prototype, seed 1337)
 
@@ -20,6 +22,10 @@ There is no combat yet. See [`docs/PLAN.md`](docs/PLAN.md) for the full plan.
 | Heaven (far up) | Ember-forged dungeon (far south) |
 | ![Jade dungeon](docs/screenshots/jade.png) | ![Gothic dungeon](docs/screenshots/gothic.png) |
 | Jade dungeon (far east) | Gothic dungeon (west) |
+| ![Combat](docs/screenshots/combat.png) | ![Combat in the mines](docs/screenshots/combat_mines.png) |
+| A pack with an elite brute in the vestibule | A brute in a mine tunnel |
+| ![Skill tree](docs/screenshots/skills.png) | ![Map](docs/screenshots/map.png) |
+| Classless skill tree (TAB) | Map of explored cells (M) |
 
 ## Build
 
@@ -40,11 +46,15 @@ packages, for example on Ubuntu: `libx11-dev libxext-dev libgl-dev libegl-dev`.
 | Key | Action |
 |-----|--------|
 | WASD / mouse | move / look |
+| Left / right mouse button | attack / alternate attack (unlocked by skills) |
+| 1, 2, 3 or mouse wheel | sword, bow, staff |
+| TAB | skill tree (arrows or WASD to select, Enter to learn) |
+| M | map of the cells you have seen |
 | Space, Shift, Ctrl | jump, sprint, crouch (you duck and crawl automatically in low tunnels) |
 | F | fly / noclip (Space up, Ctrl down, Shift fast) |
 | T | jump 8 chunks ahead in the view direction (enables fly) |
 | Page Up / Page Down | one chunk (32 m) up / down |
-| F1 | debug overlay |
+| F1 | debug overlay (position, danger level, chunk and monster counts) |
 | F2 | internal resolution 320x180 / 480x270 / 640x360 |
 | F3 / F4 | ordered dithering / PS1-style vertex snapping |
 | F5 / F6 | full-bright (inspect the generator) / player torch |
@@ -55,11 +65,17 @@ Command line:
 
 ```
 fortress_crawl [--seed N] [--pos x y z] [--look yaw pitch] [--fly] [--radius n] [--vradius n]
-               [--window w h] [--lowres w h] [--shot file.bmp] [--nohud]
+               [--window w h] [--lowres w h] [--debug]
+               [--shot file.bmp] [--shot-time seconds] [--demo combat|sword|death|skills|map]
 ```
 
 `--shot` waits until the view has loaded, saves one frame and exits. It is useful for
-comparing seeds and changes to the generator.
+comparing seeds and changes to the generator. `--demo` sets up a scene for that frame: a
+level-8 character facing a monster pack (`combat`, `sword`, `death` with 1 HP), or the `skills` or `map`
+screen.
+
+Shrines (glowing rune stones) are respawn points: walk up to one to attune it. When you die,
+you return to the last attuned shrine and keep everything.
 
 ## Tools and tests
 
@@ -77,7 +93,7 @@ src/core     hashing, RNG, noise, math (no dependencies)
 src/engine   GL loader, shaders, bitmap font, worker threads
 src/world    themes, texture generator, world layout, chunk generators, mesher + lighting,
              chunk streaming
-src/render   low-res renderer, sky, post-processing
-src/game     player controller
+src/render   low-res renderer, sky, post-processing, entity/UI batches
+src/game     player controller, physics, monsters and AI, combat, skills, map
 tests, tools headless generator checks and map exporters
 ```

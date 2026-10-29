@@ -26,6 +26,7 @@ enum {
     B_GLASS,     /* glowing window */
     B_ROOF,      /* roof tiles, statues */
     B_ORE,       /* veins in rock (mines) */
+    B_SHRINE,    /* glowing shrine stone: touching it sets the respawn point */
     /* sprites: drawn as two crossed quads */
     B_TORCH,
     B_FIRE,

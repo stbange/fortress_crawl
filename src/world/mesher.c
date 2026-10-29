@@ -272,6 +272,10 @@ void mesh_build(const MeshInput *in, MeshScratch *s, MeshOutput *out) {
                     emit_face(&solid, s, x, y, z, f, b, tile, tint, liquid_top);
                 }
             }
+    out->light = malloc((size_t)CHUNK_VOL * 4);
+    for (int y = 0; y < CHUNK; y++)
+        for (int z = 0; z < CHUNK; z++)
+            memcpy(&out->light[cidx(0, y, z) * 4], &s->light[pidx(MESH_PAD, y + MESH_PAD, z + MESH_PAD) * 4], CHUNK * 4);
     out->nsolid = solid.n / 4;
     out->nsprite = sprite.n / 4;
     out->verts = malloc(sizeof(MeshVertex) * (size_t)(solid.n + sprite.n + 1));

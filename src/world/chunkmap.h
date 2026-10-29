@@ -18,6 +18,7 @@ typedef struct Chunk {
     int cx, cy, cz;
     int state;
     Block *blocks;
+    u8 *light; /* light field from the last meshing, CHUNK_VOL * 4, or NULL */
     ChunkInfo info;
     bool mesh_queued, has_mesh;
     GLuint vao, vbo;
@@ -50,6 +51,8 @@ void chunkmap_draw(ChunkMap *m);
 Chunk *chunkmap_get(ChunkMap *m, int cx, int cy, int cz);
 /* Block at world coordinates; *known is false if the chunk is not generated yet. */
 Block chunkmap_block(ChunkMap *m, int wx, int wy, int wz, bool *known);
+/* Light at a world cell (r, g, b, fire as 0..15); false if not known yet. */
+bool chunkmap_light(ChunkMap *m, int wx, int wy, int wz, u8 out[4]);
 /* True once every chunk within the mesh radius has a mesh. */
 bool chunkmap_settled(ChunkMap *m, vec3 pos);
 

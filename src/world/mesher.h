@@ -38,6 +38,7 @@ typedef struct MeshInput {
 typedef struct MeshOutput {
     MeshVertex *verts; /* solid quads first, then sprite quads; 4 vertices per quad */
     int nsolid, nsprite;
+    u8 *light;         /* CHUNK_VOL * 4 light of the centre chunk (r, g, b, fire), malloc'd */
 } MeshOutput;
 
 MeshScratch *mesh_scratch_new(void);

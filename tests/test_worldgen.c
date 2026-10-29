@@ -283,6 +283,7 @@ int main(int argc, char **argv) {
                (double)(clock() - t0) * 1000.0 / CLOCKS_PER_SEC);
         CHECK(out.nsolid > 100, "vestibule mesh suspiciously small");
         free(out.verts);
+        free(out.light);
         mesh_scratch_free(s);
     }
 

@@ -2,9 +2,7 @@
 #define FC_PLAYER_H
 
 #include "core/fmath.h"
-
-/* Returns 1 for solid, 0 for free, -1 for not loaded yet (treated as solid). */
-typedef int (*SolidFn)(void *user, int x, int y, int z);
+#include "game/physics.h"
 
 enum { STANCE_STAND, STANCE_CROUCH, STANCE_CRAWL };
 
@@ -21,11 +19,13 @@ typedef struct Player {
     int stance;
     float eye_offset; /* smoothing for step-ups and stance changes */
     float bob;
+    float speed_mult; /* from skills */
 } Player;
 
 void player_init(Player *p, vec3 pos, float yaw);
 void player_update(Player *p, const PlayerInput *in, float dt, SolidFn solid, void *user);
 vec3 player_eye(const Player *p);
 float player_height(int stance);
+#define PLAYER_HALF_W 0.3f
 
 #endif

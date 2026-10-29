@@ -55,7 +55,14 @@ add_executable(fortress_crawl
   src/engine/font.c
   src/engine/jobs.c
   src/game/player.c
+  src/game/physics.c
+  src/game/skills.c
+  src/game/game.c
+  src/game/monsters.c
+  src/game/combat.c
+  src/game/explore.c
   src/render/renderer.c
+  src/render/batch.c
   src/world/chunkmap.c)
 target_link_libraries(fortress_crawl PRIVATE fcworld SDL3::SDL3)
 target_compile_options(fortress_crawl PRIVATE ${FC_WARN})

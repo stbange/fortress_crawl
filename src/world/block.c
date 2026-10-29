@@ -19,6 +19,7 @@ const BlockDef BLOCKS[B_COUNT] = {
     [B_GLASS]   = { "window", RENDER_CUBE, true, true, true, 12, LIGHT_GLASS, false },
     [B_ROOF]    = { "roof", RENDER_CUBE, true, true, false, 0, 0, false },
     [B_ORE]     = { "ore", RENDER_CUBE, true, true, false, 0, 0, false },
+    [B_SHRINE]  = { "shrine", RENDER_CUBE, true, true, true, 14, LIGHT_GLASS, false },
     [B_TORCH]   = { "torch", RENDER_CROSS, false, false, true, 13, LIGHT_TORCH, true },
     [B_FIRE]    = { "fire", RENDER_CROSS, false, false, true, 15, LIGHT_TORCH, true },
     [B_WEB]     = { "web", RENDER_CROSS, false, false, false, 0, 0, false },

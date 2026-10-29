@@ -1,64 +1,18 @@
-/* Fortress Crawl - prototype focused on world generation and lighting.
+/* Fortress Crawl - platform layer: window, GL context, main loop.
  *
- * Controls: WASD move, mouse look, Space jump, Shift sprint, Ctrl crouch,
- * F fly/noclip, T teleport ahead (fly), PgUp/PgDn one chunk up/down,
- * F1 debug overlay, F2 resolution, F3 dither, F4 vertex snap, F5 fullbright,
- * F6 torch, F12 screenshot, Esc release mouse (again to quit). */
+ * Controls: WASD move, mouse look, LMB attack, RMB alternate attack, 1-3 / wheel weapon,
+ * Space jump, Shift sprint, Ctrl crouch, TAB skills, M map, F fly, T teleport ahead,
+ * PgUp/PgDn one chunk up/down, F1 debug overlay, F2 resolution, F3 dither,
+ * F4 vertex snap, F5 fullbright, F6 torch, F12 screenshot, Esc release mouse (again: quit). */
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 
-#include "core/fmath.h"
 #include "engine/font.h"
 #include "engine/gl.h"
 #include "engine/jobs.h"
-#include "game/player.h"
-#include "render/renderer.h"
-#include "world/chunkmap.h"
-#include "world/layout.h"
+#include "game/game.h"
 
-typedef struct Options {
-    u64 seed;
-    bool has_pos;
-    vec3 pos;
-    float yaw, pitch;
-    bool fly;
-    int radius, vradius;
-    const char *shot;
-    int win_w, win_h;
-    int low_w, low_h;
-    bool hud;
-} Options;
-
-typedef struct Game {
-    SDL_Window *win;
-    Renderer r;
-    ChunkMap map;
-    World world;
-    Player pl;
-    Options opt;
-    bool hud;
-    bool mouse;
-    float time;
-    /* smoothed atmosphere */
-    vec3 fog, ambient;
-    float fog_density, stars, openness;
-    float openness_timer;
-    char place[128];
-    float banner_time;
-    char banner[128];
-    float fps;
-    int res_mode;
-} Game;
-
-static const int RES_MODES[3][2] = { { 320, 180 }, { 480, 270 }, { 640, 360 } };
-
-static int solid_at(void *user, int x, int y, int z) {
-    Game *g = user;
-    bool known;
-    Block b = chunkmap_block(&g->map, x, y, z, &known);
-    if (!known) return -1;
-    return block_solid(b) ? 1 : 0;
-}
+static const char *g_demo_kind;
 
 static bool parse_args(Options *o, int argc, char **argv) {
     memset(o, 0, sizeof *o);
@@ -69,7 +23,7 @@ static bool parse_args(Options *o, int argc, char **argv) {
     o->win_h = 720;
     o->low_w = 480;
     o->low_h = 270;
-    o->hud = true;
+    o->hud = false;
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i];
         if (!strcmp(a, "--seed") && i + 1 < argc) o->seed = strtoull(argv[++i], NULL, 10);
@@ -87,110 +41,16 @@ static bool parse_args(Options *o, int argc, char **argv) {
         else if (!strcmp(a, "--shot") && i + 1 < argc) o->shot = argv[++i];
         else if (!strcmp(a, "--window") && i + 2 < argc) { o->win_w = atoi(argv[i + 1]); o->win_h = atoi(argv[i + 2]); i += 2; }
         else if (!strcmp(a, "--lowres") && i + 2 < argc) { o->low_w = atoi(argv[i + 1]); o->low_h = atoi(argv[i + 2]); i += 2; }
-        else if (!strcmp(a, "--nohud")) o->hud = false;
+        else if (!strcmp(a, "--debug")) o->hud = true;
+        else if (!strcmp(a, "--shot-time") && i + 1 < argc) o->shot_time = strtof(argv[++i], NULL);
+        else if (!strcmp(a, "--demo") && i + 1 < argc) { o->demo = true; g_demo_kind = argv[++i]; }
         else {
             SDL_Log("usage: fortress_crawl [--seed N] [--pos x y z] [--look yaw pitch] [--fly] [--radius n] [--vradius n]\n"
-                    "                      [--window w h] [--lowres w h] [--shot file.bmp] [--nohud]");
+                    "                      [--window w h] [--lowres w h] [--debug] [--shot file.bmp [--demo combat|map|skills]]");
             return false;
         }
     }
     return true;
-}
-
-/* Average free distance around the eye: big halls get thin fog, tunnels thick. */
-static float measure_openness(Game *g, vec3 eye) {
-    static const float DIRS[14][3] = {
-        { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 }, { 0.7f, 0, 0.7f }, { -0.7f, 0, 0.7f }, { 0.7f, 0, -0.7f },
-        { -0.7f, 0, -0.7f }, { 0, 1, 0 }, { 0, -1, 0 }, { 0.6f, 0.6f, 0 }, { -0.6f, 0.6f, 0 }, { 0, 0.6f, 0.6f }, { 0, 0.6f, -0.6f },
-    };
-    float sum = 0;
-    for (int i = 0; i < 14; i++) {
-        float d = 0;
-        for (; d < 96.0f; d += 1.0f) {
-            vec3 p = v3_add(eye, v3_scale(v3(DIRS[i][0], DIRS[i][1], DIRS[i][2]), d));
-            bool known;
-            Block b = chunkmap_block(&g->map, (int)floorf(p.x), (int)floorf(p.y), (int)floorf(p.z), &known);
-            if (!known || block_opaque(b)) break;
-        }
-        sum += d;
-    }
-    return sum / 14.0f;
-}
-
-static void update_atmosphere(Game *g, float dt, vec3 eye) {
-    int cx = floordiv((int)floorf(eye.x), CHUNK), cy = floordiv((int)floorf(eye.y), CHUNK), cz = floordiv((int)floorf(eye.z), CHUNK);
-    Chunk *c = chunkmap_get(&g->map, cx, cy, cz);
-    ChunkInfo ci;
-    if (c && c->state == CH_READY) ci = c->info;
-    else world_chunk_info(&g->world, cx, cy, cz, &ci);
-    ThemeInfo ti;
-    theme_info(ci.theme, &ti);
-    vec3 fog = v3(ti.fog[0], ti.fog[1], ti.fog[2]);
-    vec3 amb = v3(ti.ambient[0], ti.ambient[1], ti.ambient[2]);
-    float stars = ti.sky ? 0.6f : 0.0f;
-    float density = ti.fog_density;
-    if (ci.arch == ARCH_EXTERIOR) {
-        fog = v3(0.045f, 0.05f, 0.075f);
-        amb = v3(0.05f, 0.055f, 0.08f);
-        stars = 1.0f;
-        density = 0.012f;
-    }
-    g->openness_timer -= dt;
-    if (g->openness_timer <= 0) {
-        g->openness = measure_openness(g, eye);
-        g->openness_timer = 0.2f;
-    }
-    float open_t = clampf((g->openness - 4.0f) / 40.0f, 0.0f, 1.0f);
-    density *= lerpf(1.5f, 0.45f, open_t);
-    float k = 1.0f - expf(-dt * 1.5f);
-    g->fog = v3_lerp(g->fog, fog, k);
-    g->ambient = v3_lerp(g->ambient, amb, k);
-    g->fog_density = lerpf(g->fog_density, density, k);
-    g->stars = lerpf(g->stars, stars, k);
-
-    char name[128];
-    world_place_name(&ci, name, sizeof name);
-    if (strcmp(name, g->place) != 0) {
-        snprintf(g->place, sizeof g->place, "%s", name);
-        snprintf(g->banner, sizeof g->banner, "%s", name);
-        g->banner_time = 3.5f;
-    }
-}
-
-static void draw_hud(Game *g, vec3 eye) {
-    Renderer *r = &g->r;
-    font_begin(r->fbo_w, r->fbo_h);
-    /* crosshair */
-    font_text(r->fbo_w / 2 - 3, r->fbo_h / 2 - 4, "+", 0.8f, 0.75f, 0.6f);
-    if (g->banner_time > 0) {
-        float a = clampf(g->banner_time, 0, 1);
-        int w = font_text_width(g->banner);
-        font_text((r->fbo_w - w) / 2, r->fbo_h / 4, g->banner, 0.9f * a, 0.8f * a, 0.55f * a);
-    }
-    if (g->hud) {
-        char buf[256];
-        int y = 4;
-        int cx = floordiv((int)floorf(eye.x), CHUNK), cy = floordiv((int)floorf(eye.y), CHUNK), cz = floordiv((int)floorf(eye.z), CHUNK);
-        Chunk *c = chunkmap_get(&g->map, cx, cy, cz);
-        snprintf(buf, sizeof buf, "FORTRESS CRAWL  seed %llu  %.0f fps", (unsigned long long)g->world.seed, g->fps);
-        font_text(4, y, buf, 0.85f, 0.7f, 0.45f); y += FONT_LINE;
-        font_text(4, y, g->place, 0.9f, 0.85f, 0.75f); y += FONT_LINE;
-        snprintf(buf, sizeof buf, "pos %.1f %.1f %.1f  chunk %d %d %d", eye.x, eye.y, eye.z, cx, cy, cz);
-        font_text(4, y, buf, 0.7f, 0.7f, 0.7f); y += FONT_LINE;
-        if (c && c->state == CH_READY) {
-            snprintf(buf, sizeof buf, "danger level %d  %s / %s", c->info.level, STRATA[c->info.stratum].name, FLAVORS[c->info.flavor].name);
-            font_text(4, y, buf, 0.7f, 0.7f, 0.7f); y += FONT_LINE;
-        }
-        snprintf(buf, sizeof buf, "chunks %d loaded %d meshed %d drawn  jobs %d", g->map.stats.loaded, g->map.stats.meshed,
-                 g->map.stats.drawn, g->map.stats.jobs);
-        font_text(4, y, buf, 0.6f, 0.6f, 0.6f); y += FONT_LINE;
-        static const char *STANCES[3] = { "standing", "crouching", "crawling" };
-        snprintf(buf, sizeof buf, "%s  %s  open %.0fm  %dx%d%s%s", g->pl.fly ? "FLY" : "WALK", STANCES[g->pl.stance], g->openness,
-                 r->fbo_w, r->fbo_h, r->set.dither ? " dither" : "", r->set.vertex_snap ? " snap" : "");
-        font_text(4, y, buf, 0.6f, 0.6f, 0.6f);
-        font_text(4, r->fbo_h - 12, "WASD SPACE SHIFT CTRL  F FLY  T JUMP AHEAD  PGUP/DN  F1-F6 F12", 0.5f, 0.45f, 0.4f);
-    }
-    font_end();
 }
 
 static void save_screenshot(Game *g, const char *path) {
@@ -205,23 +65,44 @@ static void save_screenshot(Game *g, const char *path) {
     free(px);
 }
 
-static void render_frame(Game *g) {
+/* Scripted setups for screenshots of the combat systems. */
+static void demo_setup(Game *g) {
+    Stats *s = &g->st;
+    game_add_xp(g, 1500.0f);
+    s->ranks[SK_KEEN_EDGE] = 2; s->ranks[SK_CLEAVE] = 1;
+    s->ranks[SK_FOCUS] = 2; s->ranks[SK_FIREBALL] = 1;
+    s->ranks[SK_TOUGHNESS] = 1;
+    s->points -= 7;
+    if (s->points < 0) s->points = 1;
+    stats_refresh(g);
+    s->hp = s->maxhp * 0.8f;
+    s->mana = s->maxmana;
+    g->banner_time = 0;
+    if (!strcmp(g_demo_kind, "skills")) { g->show_skills = true; g->skill_sel = skill_id(BR_ARCANE, 2); return; }
+    if (!strcmp(g_demo_kind, "map")) { g->show_map = true; return; }
+    /* combat: a pack in front of the player */
+    for (int i = 0; i < MAX_MONSTERS; i++) g->mons[i].alive = false;
     vec3 eye = player_eye(&g->pl);
-    SceneParams sp;
-    float aspect = (float)g->r.fbo_w / (float)g->r.fbo_h;
-    sp.proj = m4_perspective(g->r.set.fov_deg * PI_F / 180.0f, aspect, 0.05f, 400.0f);
-    sp.view = m4_look_dir(eye, dir_from_angles(g->pl.yaw, g->pl.pitch), v3(0, 1, 0));
-    sp.cam = eye;
-    sp.fog = g->fog;
-    sp.fog_density = g->fog_density;
-    sp.ambient = g->ambient;
-    sp.stars = g->stars;
-    sp.time = g->time;
-    renderer_begin(&g->r, &sp);
-    chunkmap_draw(&g->map);
-    renderer_end_world(&g->r);
-    draw_hud(g, eye);
-    renderer_present(&g->r, g->time);
+    static const struct { int type; float dist, side; bool elite; } PACK[] = {
+        { MON_CRAWLER, 8.0f, -1.5f, false }, { MON_CRAWLER, 9.0f, 1.2f, false }, { MON_HORNED, 11.0f, 2.6f, false },
+        { MON_WISP, 10.0f, -3.0f, false }, { MON_BRUTE, 14.0f, 0.3f, true },
+    };
+    vec3 f = v3(cosf(g->pl.yaw), 0, sinf(g->pl.yaw)), r = v3(-sinf(g->pl.yaw), 0, cosf(g->pl.yaw));
+    for (int i = 0; i < ARRAY_LEN(PACK); i++) {
+        vec3 p = v3_add(v3_add(eye, v3_scale(f, PACK[i].dist)), v3_scale(r, PACK[i].side));
+        int x = (int)floorf(p.x), z = (int)floorf(p.z);
+        for (int y = (int)floorf(eye.y) + 2; y > (int)floorf(eye.y) - 8; y--)
+            if (game_solid(g, x, y, z) == 0 && game_solid(g, x, y - 1, z) == 1) {
+                vec3 at = v3(x + 0.5f, (float)y + (PACK[i].type == MON_WISP ? 1.2f : 0.0f), z + 0.5f);
+                monster_spawn(g, PACK[i].type, at, 4, PACK[i].elite, v3(0.5f, 0.45f, 0.4f), 777 + (u64)i);
+                g->mons[0].yaw = 0;
+                break;
+            }
+    }
+    for (int i = 0; i < MAX_MONSTERS; i++)
+        if (g->mons[i].alive) g->mons[i].yaw = g->pl.yaw + PI_F;
+    s->weapon = !strcmp(g_demo_kind, "sword") ? WPN_SWORD : WPN_STAFF;
+    if (!strcmp(g_demo_kind, "death")) s->hp = 1.0f; /* exercises death and shrine respawn */
 }
 
 int main(int argc, char **argv) {
@@ -237,12 +118,12 @@ int main(int argc, char **argv) {
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-    g->win = SDL_CreateWindow("Fortress Crawl", g->opt.win_w, g->opt.win_h, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
-    if (!g->win) {
+    SDL_Window *win = SDL_CreateWindow("Fortress Crawl", g->opt.win_w, g->opt.win_h, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
+    if (!win) {
         SDL_Log("window failed: %s", SDL_GetError());
         return 1;
     }
-    SDL_GLContext ctx = SDL_GL_CreateContext(g->win);
+    SDL_GLContext ctx = SDL_GL_CreateContext(win);
     if (!ctx || !gl_load()) {
         SDL_Log("OpenGL 3.3 context failed: %s", SDL_GetError());
         return 1;
@@ -260,11 +141,10 @@ int main(int argc, char **argv) {
     g->r.set.fov_deg = 72.0f;
     g->res_mode = 1;
     int ww, wh;
-    SDL_GetWindowSizeInPixels(g->win, &ww, &wh);
+    SDL_GetWindowSizeInPixels(win, &ww, &wh);
     if (!renderer_init(&g->r, ww, wh)) return 1;
     font_init();
     chunkmap_init(&g->map, &g->world, &g->r, g->opt.radius, g->opt.vradius);
-    g->hud = g->opt.hud;
 
     vec3 start = g->opt.has_pos ? g->opt.pos : v3(-70.5f, 6.0f, 0.5f);
     player_init(&g->pl, start, g->opt.yaw);
@@ -272,23 +152,24 @@ int main(int argc, char **argv) {
     g->pl.fly = g->opt.fly;
     g->fog = v3(0.04f, 0.05f, 0.07f);
     g->fog_density = 0.02f;
+    game_init(g);
 
     if (!g->opt.shot) {
-        SDL_SetWindowRelativeMouseMode(g->win, true);
+        SDL_SetWindowRelativeMouseMode(win, true);
         g->mouse = true;
     }
 
     u64 last = SDL_GetTicksNS();
-    float acc = 0, fps_acc = 0;
+    float acc = 0, fps_acc = 0, shot_wait = 0;
     int fps_frames = 0;
-    bool running = true;
-    float shot_wait = 0;
+    bool running = true, demo_done = false;
     const float DT = 1.0f / 60.0f;
     while (running) {
         u64 now = SDL_GetTicksNS();
         float frame_dt = (float)((now - last) / 1e9);
         last = now;
         if (frame_dt > 0.25f) frame_dt = 0.25f;
+        if (g->opt.shot) frame_dt = DT; /* deterministic stepping for screenshots */
         fps_acc += frame_dt;
         fps_frames++;
         if (fps_acc > 0.5f) { g->fps = fps_frames / fps_acc; fps_acc = 0; fps_frames = 0; }
@@ -297,46 +178,23 @@ int main(int argc, char **argv) {
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_EVENT_QUIT) running = false;
             else if (e.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED) renderer_resize(&g->r, e.window.data1, e.window.data2);
-            else if (e.type == SDL_EVENT_MOUSE_MOTION && g->mouse) {
-                g->pl.yaw += e.motion.xrel * 0.0025f;
-                g->pl.pitch = clampf(g->pl.pitch - e.motion.yrel * 0.0025f, -1.55f, 1.55f);
-            } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && !g->mouse) {
-                SDL_SetWindowRelativeMouseMode(g->win, true);
+            else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && !g->mouse) {
+                SDL_SetWindowRelativeMouseMode(win, true);
                 g->mouse = true;
-            } else if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat) {
-                switch (e.key.key) {
-                case SDLK_ESCAPE:
-                    if (g->mouse) { SDL_SetWindowRelativeMouseMode(g->win, false); g->mouse = false; }
-                    else running = false;
-                    break;
-                case SDLK_F1: g->hud = !g->hud; break;
-                case SDLK_F2:
-                    g->res_mode = (g->res_mode + 1) % 3;
-                    g->r.set.low_w = RES_MODES[g->res_mode][0];
-                    g->r.set.low_h = RES_MODES[g->res_mode][1];
-                    break;
-                case SDLK_F3: g->r.set.dither = !g->r.set.dither; break;
-                case SDLK_F4: g->r.set.vertex_snap = !g->r.set.vertex_snap; break;
-                case SDLK_F5: g->r.set.fullbright = !g->r.set.fullbright; break;
-                case SDLK_F6: g->r.set.torch = !g->r.set.torch; break;
-                case SDLK_F12: save_screenshot(g, "screenshot.bmp"); break;
-                case SDLK_F: g->pl.fly = !g->pl.fly; g->pl.vel = v3(0, 0, 0); break;
-                case SDLK_T: {
-                    vec3 d = dir_from_angles(g->pl.yaw, g->pl.pitch);
-                    g->pl.pos = v3_add(g->pl.pos, v3_scale(d, 8.0f * CHUNK));
-                    g->pl.fly = true;
-                    break;
-                }
-                case SDLK_PAGEUP: g->pl.pos.y += CHUNK; g->pl.fly = true; break;
-                case SDLK_PAGEDOWN: g->pl.pos.y -= CHUNK; g->pl.fly = true; break;
-                default: break;
-                }
+            } else if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE && !e.key.repeat) {
+                if (g->show_skills || g->show_map) { g->show_skills = g->show_map = false; }
+                else if (g->mouse) { SDL_SetWindowRelativeMouseMode(win, false); g->mouse = false; g->attack_held = g->alt_held = false; }
+                else running = false;
+            } else if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_F12 && !e.key.repeat) {
+                save_screenshot(g, "screenshot.bmp");
+            } else {
+                game_event(g, &e);
             }
         }
 
         const bool *keys = SDL_GetKeyboardState(NULL);
         PlayerInput in = { 0 };
-        if (g->mouse || g->opt.shot) {
+        if (g->mouse && !g->show_skills && !g->show_map) {
             in.move_z = (keys[SDL_SCANCODE_W] ? 1.0f : 0.0f) - (keys[SDL_SCANCODE_S] ? 1.0f : 0.0f);
             in.move_x = (keys[SDL_SCANCODE_D] ? 1.0f : 0.0f) - (keys[SDL_SCANCODE_A] ? 1.0f : 0.0f);
             in.jump = keys[SDL_SCANCODE_SPACE];
@@ -348,36 +206,53 @@ int main(int argc, char **argv) {
         vec3 eye = player_eye(&g->pl);
         chunkmap_update(&g->map, eye);
         /* do not simulate until the ground under the player exists */
-        bool ground_known = solid_at(g, (int)floorf(g->pl.pos.x), (int)floorf(g->pl.pos.y) - 1, (int)floorf(g->pl.pos.z)) >= 0;
+        bool ground_known = game_solid(g, (int)floorf(g->pl.pos.x), (int)floorf(g->pl.pos.y) - 1, (int)floorf(g->pl.pos.z)) >= 0;
         acc += frame_dt;
         while (acc >= DT) {
-            if (ground_known || g->pl.fly) player_update(&g->pl, &in, DT, solid_at, g);
+            if (ground_known || g->pl.fly) game_update(g, &in, DT);
             acc -= DT;
-            g->time += DT;
         }
         g->banner_time -= frame_dt;
-        update_atmosphere(g, frame_dt, player_eye(&g->pl));
+        game_update_atmosphere(g, frame_dt, player_eye(&g->pl));
+        game_render(g);
 
-        render_frame(g);
         if (g->opt.shot) {
             if (chunkmap_settled(&g->map, player_eye(&g->pl))) shot_wait += frame_dt;
-            if (shot_wait > 1.0f || g->time > 120.0f) {
-                /* atmosphere snaps to its target for a deterministic screenshot */
-                g->openness = measure_openness(g, player_eye(&g->pl));
-                for (int i = 0; i < 60; i++) update_atmosphere(g, 0.5f, player_eye(&g->pl));
-                g->banner_time = 0;
-                render_frame(g);
+            if (g->opt.demo && !demo_done && shot_wait > 0.5f) {
+                g->openness = game_measure_openness(g, player_eye(&g->pl));
+                for (int i = 0; i < 60; i++) game_update_atmosphere(g, 0.5f, player_eye(&g->pl));
+                demo_setup(g);
+                demo_done = true;
+            }
+            bool fight = !strcmp(g_demo_kind ? g_demo_kind : "", "combat") || !strcmp(g_demo_kind ? g_demo_kind : "", "sword") ||
+                         !strcmp(g_demo_kind ? g_demo_kind : "", "death");
+            if (g->opt.demo && demo_done && fight) {
+                g->attack_held = shot_wait > 0.9f && shot_wait < 0.95f;
+                g->alt_held = false;
+            }
+            float capture = g->opt.shot_time > 0 ? g->opt.shot_time : 1.0f;
+            if (g->opt.demo && fight && g->opt.shot_time <= 0) capture = !strcmp(g_demo_kind, "sword") ? 1.0f : 1.08f;
+            bool ready = shot_wait > capture;
+            if (ready || (g->time > 120.0f && g->opt.shot_time <= 0)) {
+                if (!g->opt.demo) {
+                    g->openness = game_measure_openness(g, player_eye(&g->pl));
+                    for (int i = 0; i < 60; i++) game_update_atmosphere(g, 0.5f, player_eye(&g->pl));
+                    g->banner_time = 0;
+                }
+                game_render(g);
+                SDL_Log("time %.1f  hp %.0f/%.0f  level %d  kills %d  dead %d  pos %.1f %.1f %.1f", g->time, g->st.hp, g->st.maxhp,
+                        g->st.level, g->st.kills, g->st.dead, g->pl.pos.x, g->pl.pos.y, g->pl.pos.z);
                 save_screenshot(g, g->opt.shot);
                 running = false;
             }
         }
-        SDL_GL_SwapWindow(g->win);
+        SDL_GL_SwapWindow(win);
     }
 
     chunkmap_shutdown(&g->map);
     jobs_shutdown();
     SDL_GL_DestroyContext(ctx);
-    SDL_DestroyWindow(g->win);
+    SDL_DestroyWindow(win);
     SDL_Quit();
     free(g);
     return 0;

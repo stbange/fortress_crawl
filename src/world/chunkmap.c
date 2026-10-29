@@ -67,6 +67,7 @@ void chunkmap_shutdown(ChunkMap *m) {
     for (int i = 0; i < n; i++) {
         renderer_free_mesh(&m->slots[i].vao, &m->slots[i].vbo);
         free(m->slots[i].blocks);
+        free(m->slots[i].light);
     }
     free(m->slots);
     free(m->offsets);
@@ -90,6 +91,13 @@ Block chunkmap_block(ChunkMap *m, int wx, int wy, int wz, bool *known) {
     }
     if (known) *known = true;
     return c->blocks[cidx(floormod(wx, CHUNK), floormod(wy, CHUNK), floormod(wz, CHUNK))];
+}
+
+bool chunkmap_light(ChunkMap *m, int wx, int wy, int wz, u8 out[4]) {
+    Chunk *c = chunkmap_get(m, floordiv(wx, CHUNK), floordiv(wy, CHUNK), floordiv(wz, CHUNK));
+    if (!c || !c->light) { memset(out, 0, 4); return false; }
+    memcpy(out, &c->light[cidx(floormod(wx, CHUNK), floormod(wy, CHUNK), floormod(wz, CHUNK)) * 4], 4);
+    return true;
 }
 
 /* ---------- jobs ---------- */
@@ -125,6 +133,8 @@ static void mesh_done(Job *j) {
     c->mesh_queued = false;
     for (int i = 0; i < 27; i++)
         if (mj->nb[i]) mj->nb[i]->pins--;
+    free(c->light);
+    c->light = mj->out.light;
     free(mj->out.verts);
     free(mj);
 }
@@ -133,6 +143,8 @@ static bool evict(ChunkMap *m, Chunk *c) {
     if (c->pins > 0 || c->state == CH_GENERATING || c->mesh_queued) return false;
     if (c->has_mesh) renderer_slot_ref(m->renderer, c->theme_slot, -1);
     renderer_free_mesh(&c->vao, &c->vbo);
+    free(c->light);
+    c->light = NULL;
     c->used = false;
     c->has_mesh = false;
     c->state = CH_EMPTY;

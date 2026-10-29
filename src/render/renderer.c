@@ -53,6 +53,9 @@ static const char *WORLD_FS =
     "uniform float u_torch_radius;\n"
     "uniform float u_time;\n"
     "uniform float u_fullbright;\n"
+    "uniform int u_ndl;\n"
+    "uniform vec4 u_dl_pos[8];\n"
+    "uniform vec3 u_dl_col[8];\n"
     "out vec4 frag;\n"
     "const vec3 N[7] = vec3[](vec3(1,0,0), vec3(-1,0,0), vec3(0,1,0), vec3(0,-1,0), vec3(0,0,1), vec3(0,0,-1), vec3(0,1,0));\n"
     "void main() {\n"
@@ -72,6 +75,13 @@ static const char *WORLD_FS =
     "  float ndl = (v_n == 6u) ? 0.8 : max(dot(N[min(v_n, 6u)], L / max(ld, 0.001)), 0.0) * 0.75 + 0.25;\n"
     "  float tfl = 0.92 + 0.08 * sin(u_time * 11.0) * sin(u_time * 7.3 + 1.0);\n"
     "  light += u_torch * att * ndl * tfl;\n"
+    "  for (int i = 0; i < u_ndl; i++) {\n"
+    "    vec3 dl = u_dl_pos[i].xyz - v_wpos;\n"
+    "    float dd = length(dl);\n"
+    "    float a = clamp(1.0 - dd / u_dl_pos[i].w, 0.0, 1.0);\n"
+    "    float nl = (v_n == 6u) ? 0.8 : max(dot(N[min(v_n, 6u)], dl / max(dd, 0.001)), 0.0) * 0.8 + 0.2;\n"
+    "    light += u_dl_col[i] * a * a * nl;\n"
+    "  }\n"
     "  light = max(light, u_ambient);\n"
     "  if (emissive) light = vec3(max(v_light.r, 0.85)) * (0.92 + 0.08 * fl);\n"
     "  light = mix(light, vec3(1.0), u_fullbright);\n"
@@ -187,6 +197,9 @@ bool renderer_init(Renderer *r, int win_w, int win_h) {
     r->u_time = U(r->world_prog, "u_time");
     r->u_fullbright = U(r->world_prog, "u_fullbright");
     r->u_atlas = U(r->world_prog, "u_atlas");
+    r->u_ndl = U(r->world_prog, "u_ndl");
+    r->u_dl_pos = U(r->world_prog, "u_dl_pos");
+    r->u_dl_col = U(r->world_prog, "u_dl_col");
     r->s_inv_vp = U(r->sky_prog, "u_inv_vp");
     r->s_fog = U(r->sky_prog, "u_fog");
     r->s_stars = U(r->sky_prog, "u_stars");
@@ -349,6 +362,20 @@ void renderer_begin(Renderer *r, const SceneParams *sp) {
     glUniform1f(r->u_torch_radius, 11.0f);
     glUniform1f(r->u_time, sp->time);
     glUniform1f(r->u_fullbright, r->set.fullbright ? 1.0f : 0.0f);
+    {
+        float pos[MAX_DLIGHTS * 4], col[MAX_DLIGHTS * 3];
+        int n = MINI(sp->ndl, MAX_DLIGHTS);
+        for (int i = 0; i < n; i++) {
+            pos[i * 4 + 0] = sp->dl_pos[i].x; pos[i * 4 + 1] = sp->dl_pos[i].y; pos[i * 4 + 2] = sp->dl_pos[i].z;
+            pos[i * 4 + 3] = sp->dl_rad[i];
+            col[i * 3 + 0] = sp->dl_col[i].x; col[i * 3 + 1] = sp->dl_col[i].y; col[i * 3 + 2] = sp->dl_col[i].z;
+        }
+        glUniform1i(r->u_ndl, n);
+        if (n > 0) {
+            glUniform4fv(r->u_dl_pos, n, pos);
+            glUniform3fv(r->u_dl_col, n, col);
+        }
+    }
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, r->atlas);
     glUniform1i(r->u_atlas, 0);

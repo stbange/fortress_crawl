@@ -192,7 +192,7 @@ static void gen_hall(GenCtx *g) {
         if (world_face_portals(g->w, 1, 1, 1, 0, &p, 1)) carve_helix_w(g, p.x, p.z, p.y_low, Y1, p.phase, true);
         /* a shrine opposite the gate */
         g_fill_w(g, lmax - 3, floor, smid - 1, lmax - 1, floor + 1, smid + 1, B_ACCENT);
-        g_set_w(g, lmax - 2, floor + 2, smid, B_CRYSTAL);
+        g_set_w(g, lmax - 2, floor + 2, smid, B_SHRINE);
     }
 
     carve_portal_mouths(g, 4, false);

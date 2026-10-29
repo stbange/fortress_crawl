@@ -59,6 +59,17 @@ static void room_pillars(GenCtx *g, const Room *r) {
         for (int j = 0; j < 2; j++) g_fill(g, px[i], r->y0, pz[j], px[i], r->y1, pz[j], B_PILLAR);
 }
 
+/* Roughly one room in five or six chunks holds a shrine: a respawn point. */
+static void maybe_shrine(GenCtx *g, const Room *r) {
+    if (hash3f(g->info.seed, 0, 0, 0, 0x5481) > 0.18f) return;
+    int w = r->x1 - r->x0 + 1, d = r->z1 - r->z0 + 1, h = r->y1 - r->y0 + 1;
+    if (w < 5 || d < 5 || h < 4) return;
+    int cx = (r->x0 + r->x1) / 2, cz = (r->z0 + r->z1) / 2;
+    g_fill(g, cx - 1, r->y0 - 1, cz - 1, cx + 1, r->y0 - 1, cz + 1, B_ACCENT);
+    g_set(g, cx, r->y0, cz, B_ACCENT);
+    g_set(g, cx, r->y0 + 1, cz, B_SHRINE);
+}
+
 static void add_room_nodes(GenCtx *g, const Room *rooms, int n) {
     for (int i = 0; i < n; i++)
         g_add_node(g, (rooms[i].x0 + rooms[i].x1) / 2, rooms[i].y0, (rooms[i].z0 + rooms[i].z1) / 2, 99, 99);
@@ -78,6 +89,7 @@ static void gen_rooms(GenCtx *g) {
     carve_portal_mouths(g, 3, false);
     add_room_nodes(g, rooms, n);
     connect_nodes(g, rng_chance(&g->rng, 0.7f) ? 3 : 2, rng_chance(&g->rng, 0.6f) ? 4 : 3, 0.15f, false, false);
+    if (n > 0) maybe_shrine(g, &rooms[0]);
     skin_pass(g, true);
     decorate(g, false);
 }
@@ -105,6 +117,7 @@ static void gen_cave(GenCtx *g) {
     carve_portal_mouths(g, 3, false);
     add_room_nodes(g, rooms, n);
     connect_nodes(g, 3, 3, 0.2f, false, false);
+    if (n > 0) maybe_shrine(g, &rooms[0]);
     skin_pass(g, false);
     decorate(g, true);
 }

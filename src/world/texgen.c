@@ -318,6 +318,18 @@ static void tex_ore(u8 *p, u64 seed, RGB base, RGB vein) {
     }
 }
 
+static void tex_shrine(u8 *p, u64 seed) {
+    /* a glowing rune ring on dark stone */
+    for (int y = 0; y < N; y++)
+        for (int x = 0; x < N; x++) {
+            float dx = x - 7.5f, dy = y - 7.5f, d = sqrtf(dx * dx + dy * dy);
+            RGB c = rgb_scale((RGB){ 60, 55, 70 }, 0.8f + 0.2f * pn(seed, x, y));
+            if (fabsf(d - 5.5f) < 0.8f || (d < 3.0f && (x == 7 || x == 8 || y == 7 || y == 8))) c = (RGB){ 255, 230, 150 };
+            if (x == 0 || y == 0 || x == N - 1 || y == N - 1) c = (RGB){ 200, 170, 90 };
+            put(p, x, y, c, 1);
+        }
+}
+
 /* ---------- sprites (with transparency) ---------- */
 
 static void clear(u8 *p) { memset(p, 0, N * N * 4); }
@@ -486,6 +498,7 @@ void texgen_theme(int theme, u8 *out) {
             case B_BRAZIER: tex_brazier(p, seed, base); break;
             case B_GLASS: tex_glass(p, seed, base, theme_flavor(theme) == FL_GOTHIC || theme_stratum(theme) == ST_HEAVEN); break;
             case B_ROOF: tex_roof(p, seed, base); break;
+            case B_SHRINE: tex_shrine(p, seed); break;
             case B_ORE: tex_ore(p, seed, rgb(t.mat[B_ROCK]), rgb(t.mat[B_ACCENT])); break;
             case B_TORCH: spr_torch(p, seed, rgb(t.mat[B_WOOD])); break;
             case B_FIRE: spr_fire(p, seed); break;

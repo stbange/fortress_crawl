@@ -9,6 +9,7 @@
 #define ATLAS_TILES_PER_ROW (ATLAS_SIZE / 16)
 #define THEME_SLOTS 32
 #define MAX_QUADS_PER_DRAW 250000
+#define MAX_DLIGHTS 8
 
 typedef struct RenderSettings {
     int low_w, low_h;   /* internal resolution */
@@ -28,6 +29,11 @@ typedef struct SceneParams {
     vec3 ambient;
     float stars;  /* 0..1 night sky visibility */
     float time;
+    /* dynamic point lights (spells, explosions) */
+    int ndl;
+    vec3 dl_pos[MAX_DLIGHTS];
+    vec3 dl_col[MAX_DLIGHTS];
+    float dl_rad[MAX_DLIGHTS];
 } SceneParams;
 
 typedef struct Renderer {
@@ -45,7 +51,7 @@ typedef struct Renderer {
     GLuint empty_vao;
     /* uniform locations */
     GLint u_vp, u_origin, u_snap, u_res, u_cam, u_fog, u_fog_density, u_ambient, u_torch, u_torch_radius, u_time,
-        u_fullbright, u_atlas;
+        u_fullbright, u_atlas, u_ndl, u_dl_pos, u_dl_col;
     GLint s_inv_vp, s_fog, s_stars, s_time;
     GLint p_tex, p_dither, p_low, p_time;
     mat4 vp;

@@ -109,7 +109,7 @@ void gen_exterior(GenCtx *g) {
     {
         int y = ground_height(seed, -76, -7);
         g_fill_w(g, -77, y, -8, -76, y + 1, -7, B_ACCENT);
-        g_fill_w(g, -77, y + 2, -8, -76, y + 2, -7, B_CRYSTAL);
+        g_fill_w(g, -77, y + 2, -8, -76, y + 2, -7, B_SHRINE);
     }
 
     /* dead trees and a graveyard, placed on a jittered grid */

@@ -55,6 +55,8 @@
     X(void, Uniform2f, (GLint, GLfloat, GLfloat)) \
     X(void, Uniform3f, (GLint, GLfloat, GLfloat, GLfloat)) \
     X(void, Uniform4f, (GLint, GLfloat, GLfloat, GLfloat, GLfloat)) \
+    X(void, Uniform3fv, (GLint, GLsizei, const GLfloat *)) \
+    X(void, Uniform4fv, (GLint, GLsizei, const GLfloat *)) \
     X(void, UniformMatrix4fv, (GLint, GLsizei, GLboolean, const GLfloat *)) \
     X(void, GenBuffers, (GLsizei, GLuint *)) \
     X(void, DeleteBuffers, (GLsizei, const GLuint *)) \
@@ -124,6 +126,8 @@ FC_GL_FUNCS(FC_GL_DECLARE)
 #define glUniform2f fcgl_Uniform2f
 #define glUniform3f fcgl_Uniform3f
 #define glUniform4f fcgl_Uniform4f
+#define glUniform3fv fcgl_Uniform3fv
+#define glUniform4fv fcgl_Uniform4fv
 #define glUniformMatrix4fv fcgl_UniformMatrix4fv
 #define glGenBuffers fcgl_GenBuffers
 #define glDeleteBuffers fcgl_DeleteBuffers
