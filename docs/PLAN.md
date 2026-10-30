@@ -1,12 +1,13 @@
-# Fortress Crawl: Development Plan (v0.3)
+# Fortress Crawl: Development Plan (v0.4)
 
 An endless, procedurally generated 3D dungeon crawler written in C with SDL3 and OpenGL 3.3.
 The player starts in front of a giant castle built into a mountain. The gate is
 **danger level 0**. Every direction (including up and down) leads deeper, and the farther you
 get from the gate, the harder it gets.
 
-v0.3 adds the combat milestone: Hexen-style combat, a classless skill tree, monsters, shrines
-and a map of explored cells.
+v0.3 added the combat milestone: Hexen-style combat, a classless skill tree, monsters, shrines
+and a map of explored cells. v0.4 adds local split-screen co-op for up to four players with
+gamepads (section 6.4).
 
 ---
 
@@ -201,6 +202,27 @@ map shows a 110 x 110-cell area around you, top-down with north up. It shows the
 cells you have seen within a few metres of your height (brighter = your level, darker = lower
 down), walls, water and light sources.
 
+### 6.4 Split-screen co-op (v0.4)
+
+- Up to four local players, each a **separate character** (own level, skills, weapon, HP,
+  shrine). Player 1 uses keyboard and mouse; any gamepad joins with **START**. **BACK** on an
+  idle pad gives it to player 1 instead.
+- **Free roam:** nobody is tied to anyone. Chunk streaming keeps the world loaded around every
+  player (the chunk map is a pool with a hash index and up to four streaming centres; chunks
+  far from all players are evicted).
+- Layout: 1 player full screen, 2 side by side, 3 or 4 in quarters (with 3, the spare
+  quarter shows a roster). Each view has its own atmosphere, HUD, menus and map; the views
+  get a frame in the player's colour, and the HUD becomes compact in small views.
+- Monsters chase the nearest living player (with some stickiness) and turn on whoever hits
+  them. Every player has their own flow field. Monster HP grows by 50% per extra player.
+- The killer gets the full XP; other players within 30 m get half.
+- Gamepad players get light aim assist for arrows and bolts (6 degree cone, 40 m, line of
+  sight) and rumble when hit.
+- Menus only pause the game in single player.
+- Other players are shown as figures in their colour with a marker above the head; their
+  torches light your view too.
+- The explored map is shared and shows everyone's position.
+
 ## 7. Status
 
 Done:
@@ -210,7 +232,9 @@ Done:
   openings from the gate across several seeds.
 - First-person controller with automatic crouch and crawl, fly mode.
 - Combat, monsters, shrines, death/respawn, XP and levels, skill tree, map (section 6).
-- Screenshot and demo modes (`--shot`, `--demo combat|sword|death|skills|map`, `--shot-time`).
+- Split-screen co-op for up to four players with gamepads (section 6.4).
+- Screenshot and demo modes (`--shot`, `--demo combat|sword|death|skills|map|coop`,
+  `--shot-time`, `--players n`, `--test-pad` with a scripted virtual gamepad).
 
 Known gaps:
 - No loot yet. Weapons only improve through skills and levels.
@@ -219,6 +243,8 @@ Known gaps:
 - No saving yet: the explored map, cleared chunks and the character are lost on exit.
 - A few chunks still contain an opening that is only reachable from outside the chunk.
 - No audio yet.
+- Split screen draws the world once per view, so four views cost about four times the GPU
+  and draw-call time of one. Gamepad buttons cannot be remapped yet.
 
 ## 8. Milestones
 
@@ -235,6 +261,7 @@ Known gaps:
 | M8  | Traps and easy mechanical puzzles, vaults | |
 | M9  | Character creation (gameplay), shrines, save/load per world | shrines done |
 | M10 | Atmosphere: audio, particles, polish | |
+| M11 | Local split-screen co-op (up to 4, gamepads) | first version done |
 
 ---
 

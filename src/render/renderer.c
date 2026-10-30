@@ -325,12 +325,29 @@ static mat4 m4_inverse(mat4 m) {
     return out;
 }
 
-void renderer_begin(Renderer *r, const SceneParams *sp) {
+void renderer_frame_begin(Renderer *r) {
     r->frame++;
     if (r->fbo_w != r->set.low_w || r->fbo_h != r->set.low_h) create_fbo(r);
-    r->vp = m4_mul(sp->proj, sp->view);
     glBindFramebuffer(GL_FRAMEBUFFER, r->fbo);
+    glDisable(GL_SCISSOR_TEST);
     glViewport(0, 0, r->fbo_w, r->fbo_h);
+    glClearColor(0.02f, 0.015f, 0.02f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+}
+
+void renderer_set_view(Renderer *r, int x, int y, int w, int h) {
+    /* x, y from the top-left like the UI, GL wants bottom-left */
+    r->view_x = x;
+    r->view_y = r->fbo_h - y - h;
+    r->view_w = w;
+    r->view_h = h;
+    glViewport(r->view_x, r->view_y, w, h);
+    glScissor(r->view_x, r->view_y, w, h);
+    glEnable(GL_SCISSOR_TEST);
+}
+
+void renderer_begin(Renderer *r, const SceneParams *sp) {
+    r->vp = m4_mul(sp->proj, sp->view);
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
 
@@ -352,7 +369,7 @@ void renderer_begin(Renderer *r, const SceneParams *sp) {
     glUseProgram(r->world_prog);
     glUniformMatrix4fv(r->u_vp, 1, GL_FALSE, r->vp.m);
     glUniform1f(r->u_snap, r->set.vertex_snap ? 1.0f : 0.0f);
-    glUniform2f(r->u_res, (float)r->fbo_w, (float)r->fbo_h);
+    glUniform2f(r->u_res, (float)r->view_w, (float)r->view_h);
     glUniform3f(r->u_cam, sp->cam.x, sp->cam.y, sp->cam.z);
     glUniform3f(r->u_fog, sp->fog.x, sp->fog.y, sp->fog.z);
     glUniform1f(r->u_fog_density, sp->fog_density);
@@ -404,6 +421,7 @@ void renderer_end_world(Renderer *r) {
 }
 
 void renderer_present(Renderer *r, float time) {
+    glDisable(GL_SCISSOR_TEST);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     /* letterbox: keep the low-res aspect ratio */
     float sx = (float)r->win_w / r->fbo_w, sy = (float)r->win_h / r->fbo_h;

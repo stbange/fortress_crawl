@@ -3,7 +3,8 @@
  * Controls: WASD move, mouse look, LMB attack, RMB alternate attack, 1-3 / wheel weapon,
  * Space jump, Shift sprint, Ctrl crouch, TAB skills, M map, F fly, T teleport ahead,
  * PgUp/PgDn one chunk up/down, F1 debug overlay, F2 resolution, F3 dither,
- * F4 vertex snap, F5 fullbright, F6 torch, F12 screenshot, Esc release mouse (again: quit). */
+ * F4 vertex snap, F5 fullbright, F6 torch, F12 screenshot, Esc release mouse (again: quit).
+ * Gamepads: START on an idle pad joins as a new split-screen player, BACK gives it to player 1. */
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 #ifdef __EMSCRIPTEN__
@@ -54,11 +55,14 @@ static bool parse_args(Options *o, int argc, char **argv) {
         else if (!strcmp(a, "--sens") && i + 1 < argc) o->sens = strtof(argv[++i], NULL);
         else if (!strcmp(a, "--shot-time") && i + 1 < argc) o->shot_time = strtof(argv[++i], NULL);
         else if (!strcmp(a, "--demo") && i + 1 < argc) { o->demo = true; g_demo_kind = argv[++i]; }
+        else if (!strcmp(a, "--players") && i + 1 < argc) o->players = atoi(argv[++i]);
+        else if (!strcmp(a, "--test-pad")) o->test_pad = true;
         else {
             SDL_Log("usage: fortress_crawl [--seed N] [--pos x y z] [--look yaw pitch] [--fly] [--radius n] [--vradius n]\n"
                     "                      [--window w h] [--lowres w h] [--debug] [--invert-x] [--invert-y] [--sens s]\n"
                     "                      [--recenter | --no-recenter]\n"
-                    "                      [--shot file.bmp] [--shot-time s] [--demo combat|sword|death|skills|map]");
+                    "                      [--shot file.bmp] [--shot-time s] [--demo combat|sword|death|skills|map|coop]\n"
+                    "                      [--players n] [--test-pad]");
             return false;
         }
     }
@@ -79,27 +83,31 @@ static void save_screenshot(Game *g, const char *path) {
 
 /* Scripted setups for screenshots of the combat systems. */
 static void demo_setup(Game *g) {
-    Stats *s = &g->st;
-    game_add_xp(g, 1500.0f);
+    PlayerSlot *p1 = &g->players[0];
+    Stats *s = &p1->st;
+    for (int i = 0; i < MAX_PLAYERS; i++)
+        if (g->players[i].active) {
+            game_add_xp(g, &g->players[i], 1500.0f);
+            g->players[i].banner_time = 0;
+        }
     s->ranks[SK_KEEN_EDGE] = 2; s->ranks[SK_CLEAVE] = 1;
     s->ranks[SK_FOCUS] = 2; s->ranks[SK_FIREBALL] = 1;
     s->ranks[SK_TOUGHNESS] = 1;
     s->points -= 7;
     if (s->points < 0) s->points = 1;
-    stats_refresh(g);
+    stats_refresh(p1);
     s->hp = s->maxhp * 0.8f;
     s->mana = s->maxmana;
-    g->banner_time = 0;
-    if (!strcmp(g_demo_kind, "skills")) { g->show_skills = true; g->skill_sel = skill_id(BR_ARCANE, 2); return; }
-    if (!strcmp(g_demo_kind, "map")) { g->show_map = true; return; }
+    if (!strcmp(g_demo_kind, "skills")) { p1->show_skills = true; p1->skill_sel = skill_id(BR_ARCANE, 2); return; }
+    if (!strcmp(g_demo_kind, "map")) { p1->show_map = true; return; }
     /* combat: a pack in front of the player */
     for (int i = 0; i < MAX_MONSTERS; i++) g->mons[i].alive = false;
-    vec3 eye = player_eye(&g->pl);
+    vec3 eye = player_eye(&p1->pl);
     static const struct { int type; float dist, side; bool elite; } PACK[] = {
         { MON_CRAWLER, 8.0f, -1.5f, false }, { MON_CRAWLER, 9.0f, 1.2f, false }, { MON_HORNED, 11.0f, 2.6f, false },
         { MON_WISP, 10.0f, -3.0f, false }, { MON_BRUTE, 14.0f, 0.3f, true },
     };
-    vec3 f = v3(cosf(g->pl.yaw), 0, sinf(g->pl.yaw)), r = v3(-sinf(g->pl.yaw), 0, cosf(g->pl.yaw));
+    vec3 f = v3(cosf(p1->pl.yaw), 0, sinf(p1->pl.yaw)), r = v3(-sinf(p1->pl.yaw), 0, cosf(p1->pl.yaw));
     for (int i = 0; i < ARRAY_LEN(PACK); i++) {
         vec3 p = v3_add(v3_add(eye, v3_scale(f, PACK[i].dist)), v3_scale(r, PACK[i].side));
         int x = (int)floorf(p.x), z = (int)floorf(p.z);
@@ -112,8 +120,17 @@ static void demo_setup(Game *g) {
             }
     }
     for (int i = 0; i < MAX_MONSTERS; i++)
-        if (g->mons[i].alive) g->mons[i].yaw = g->pl.yaw + PI_F;
+        if (g->mons[i].alive) g->mons[i].yaw = p1->pl.yaw + PI_F;
     s->weapon = !strcmp(g_demo_kind, "sword") ? WPN_SWORD : WPN_STAFF;
+    /* co-op: the other players stand beside player 1 and look at the pack */
+    for (int i = 1; i < MAX_PLAYERS; i++) {
+        PlayerSlot *o = &g->players[i];
+        if (!o->active) continue;
+        o->st.weapon = i % 2 ? WPN_BOW : WPN_SWORD;
+        vec3 at = v3_add(v3_add(p1->pl.pos, v3_scale(f, 3.0f)), v3_scale(r, (i % 2 ? -1.3f : 1.3f) * (float)((i + 1) / 2)));
+        if (phys_box_free(at, PLAYER_HALF_W, player_height(STANCE_STAND), game_solid, g)) o->pl.pos = at;
+        o->pl.yaw = p1->pl.yaw + (i % 2 ? 0.35f : -0.35f);
+    }
     if (!strcmp(g_demo_kind, "death")) s->hp = 1.0f; /* exercises death and shrine respawn */
 }
 
@@ -138,6 +155,7 @@ typedef struct App {
     bool warp_ok, warp_pending;
     float last_x, last_y;
     int suspicious; /* motion events that show relative mode is not really active */
+    SDL_Joystick *vpad; /* --test-pad */
 } App;
 
 static void mouse_capture(App *a, bool on);
@@ -161,7 +179,7 @@ static void mouse_capture(App *a, bool on) {
             SDL_SetWindowRelativeMouseMode(a->win, false);
         }
         g->mouse = false;
-        g->attack_held = g->alt_held = false;
+        g->players[0].attack_held = g->players[0].alt_held = false;
         return;
     }
     if (!a->manual && SDL_SetWindowRelativeMouseMode(a->win, true)) {
@@ -266,7 +284,8 @@ static void handle_events(App *a) {
         } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && !g->mouse) {
             mouse_capture(a, true); /* the click that captures the mouse does not attack */
         } else if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE && !e.key.repeat) {
-            if (g->show_skills || g->show_map) g->show_skills = g->show_map = false;
+            PlayerSlot *p1 = &g->players[0];
+            if (p1->show_skills || p1->show_map) p1->show_skills = p1->show_map = false;
             else if (g->mouse) mouse_capture(a, false);
 #ifndef __EMSCRIPTEN__
             else a->running = false;
@@ -283,38 +302,60 @@ static void handle_events(App *a) {
     /* the browser releases pointer lock on its own (Esc, tab switch) */
     if (g->mouse && !a->manual && !SDL_GetWindowRelativeMouseMode(a->win)) {
         g->mouse = false;
-        g->attack_held = g->alt_held = false;
+        g->players[0].attack_held = g->players[0].alt_held = false;
     }
 #endif
 }
 
+/* --test-pad: a virtual gamepad joins with START, walks forward, turns and attacks. */
+static void test_pad_step(App *a) {
+    if (!a->vpad) return;
+    float t = a->shot_wait;
+    bool start = t > 0.1f && t < 0.2f;
+    SDL_SetJoystickVirtualButton(a->vpad, SDL_GAMEPAD_BUTTON_START, start);
+    bool go = t > 0.4f;
+    SDL_SetJoystickVirtualAxis(a->vpad, SDL_GAMEPAD_AXIS_LEFTY, go ? -32767 : 0);
+    SDL_SetJoystickVirtualAxis(a->vpad, SDL_GAMEPAD_AXIS_RIGHTX, go && t < 0.7f ? 20000 : 0);
+    SDL_SetJoystickVirtualAxis(a->vpad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER, go && fmodf(t, 0.5f) < 0.25f ? 32767 : 0);
+}
+
 static void screenshot_step(App *a, float frame_dt) {
     Game *g = a->g;
-    if (chunkmap_settled(&g->map, player_eye(&g->pl))) a->shot_wait += frame_dt;
+    PlayerSlot *p1 = &g->players[0];
+    if (chunkmap_settled(&g->map, player_eye(&p1->pl))) a->shot_wait += frame_dt;
+    test_pad_step(a);
     if (g->opt.demo && !a->demo_done && a->shot_wait > 0.5f) {
-        g->openness = game_measure_openness(g, player_eye(&g->pl));
-        for (int i = 0; i < 60; i++) game_update_atmosphere(g, 0.5f, player_eye(&g->pl));
+        for (int i = 0; i < MAX_PLAYERS; i++) {
+            PlayerSlot *ps = &g->players[i];
+            if (!ps->active) continue;
+            ps->openness = game_measure_openness(g, player_eye(&ps->pl));
+            for (int k = 0; k < 60; k++) game_update_atmosphere(g, ps, 0.5f);
+        }
         demo_setup(g);
         a->demo_done = true;
     }
     const char *kind = g_demo_kind ? g_demo_kind : "";
-    bool fight = !strcmp(kind, "combat") || !strcmp(kind, "sword") || !strcmp(kind, "death");
+    bool fight = !strcmp(kind, "combat") || !strcmp(kind, "sword") || !strcmp(kind, "death") || !strcmp(kind, "coop");
     if (g->opt.demo && a->demo_done && fight) {
-        g->attack_held = a->shot_wait > 0.9f && a->shot_wait < 0.95f;
-        g->alt_held = false;
+        p1->attack_held = a->shot_wait > 0.9f && a->shot_wait < 0.95f;
+        p1->alt_held = false;
     }
     float capture = g->opt.shot_time > 0 ? g->opt.shot_time : 1.0f;
     if (g->opt.demo && fight && g->opt.shot_time <= 0) capture = !strcmp(kind, "sword") ? 1.0f : 1.08f;
     if (a->shot_wait > capture || (g->time > 120.0f && g->opt.shot_time <= 0)) {
-        if (!g->opt.demo) {
-            g->openness = game_measure_openness(g, player_eye(&g->pl));
-            for (int i = 0; i < 60; i++) game_update_atmosphere(g, 0.5f, player_eye(&g->pl));
-            g->banner_time = 0;
+        for (int i = 0; i < MAX_PLAYERS; i++) {
+            PlayerSlot *ps = &g->players[i];
+            if (!ps->active) continue;
+            if (!g->opt.demo) {
+                ps->openness = game_measure_openness(g, player_eye(&ps->pl));
+                for (int k = 0; k < 60; k++) game_update_atmosphere(g, ps, 0.5f);
+                ps->banner_time = 0;
+            }
+            SDL_Log("P%d time %.1f  hp %.0f/%.0f  level %d  kills %d  dead %d  pad %d  pos %.1f %.1f %.1f  yaw %.1f pitch %.1f",
+                    i + 1, g->time, ps->st.hp, ps->st.maxhp, ps->st.level, ps->st.kills, ps->st.dead, ps->pad != NULL,
+                    ps->pl.pos.x, ps->pl.pos.y, ps->pl.pos.z, ps->pl.yaw * 180.0f / PI_F, ps->pl.pitch * 180.0f / PI_F);
         }
         game_render(g);
-        SDL_Log("time %.1f  hp %.0f/%.0f  level %d  kills %d  dead %d  pos %.1f %.1f %.1f  yaw %.1f pitch %.1f", g->time,
-                g->st.hp, g->st.maxhp, g->st.level, g->st.kills, g->st.dead, g->pl.pos.x, g->pl.pos.y, g->pl.pos.z,
-                g->pl.yaw * 180.0f / PI_F, g->pl.pitch * 180.0f / PI_F);
         save_screenshot(g, g->opt.shot);
         a->running = false;
     }
@@ -337,7 +378,7 @@ static void frame(void *user) {
 
     const bool *keys = SDL_GetKeyboardState(NULL);
     PlayerInput in = { 0 };
-    if (g->mouse && !g->show_skills && !g->show_map) {
+    if (g->mouse && !g->players[0].show_skills && !g->players[0].show_map) {
         in.move_z = (keys[SDL_SCANCODE_W] ? 1.0f : 0.0f) - (keys[SDL_SCANCODE_S] ? 1.0f : 0.0f);
         in.move_x = (keys[SDL_SCANCODE_D] ? 1.0f : 0.0f) - (keys[SDL_SCANCODE_A] ? 1.0f : 0.0f);
         in.jump = keys[SDL_SCANCODE_SPACE];
@@ -346,16 +387,16 @@ static void frame(void *user) {
         in.down = in.crouch;
         in.sprint = keys[SDL_SCANCODE_LSHIFT];
     }
-    chunkmap_update(&g->map, player_eye(&g->pl));
-    /* do not simulate until the ground under the player exists */
-    bool ground_known = game_solid(g, (int)floorf(g->pl.pos.x), (int)floorf(g->pl.pos.y) - 1, (int)floorf(g->pl.pos.z)) >= 0;
+    vec3 centres[MAX_PLAYERS];
+    int ncentres = game_centres(g, centres);
+    chunkmap_update(&g->map, centres, ncentres);
     a->acc += frame_dt;
     while (a->acc >= DT) {
-        if (ground_known || g->pl.fly) game_update(g, &in, DT);
+        game_update(g, &in, DT);
         a->acc -= DT;
     }
-    g->banner_time -= frame_dt;
-    game_update_atmosphere(g, frame_dt, player_eye(&g->pl));
+    for (int i = 0; i < MAX_PLAYERS; i++)
+        if (g->players[i].active) game_update_atmosphere(g, &g->players[i], frame_dt);
     game_render(g);
     if (g->opt.shot) screenshot_step(a, frame_dt);
     SDL_GL_SwapWindow(a->win);
@@ -379,7 +420,7 @@ int main(int argc, char **argv) {
 #ifdef __EMSCRIPTEN__
     SDL_SetHint(SDL_HINT_EMSCRIPTEN_KEYBOARD_ELEMENT, "#canvas");
 #endif
-    if (!SDL_Init(SDL_INIT_VIDEO)) {
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) {
         SDL_Log("SDL_Init failed: %s", SDL_GetError());
         return 1;
     }
@@ -429,12 +470,25 @@ int main(int argc, char **argv) {
     chunkmap_init(&g->map, &g->world, &g->r, g->opt.radius, g->opt.vradius);
 
     vec3 start = g->opt.has_pos ? g->opt.pos : v3(-70.5f, 6.0f, 0.5f);
-    player_init(&g->pl, start, g->opt.yaw);
-    g->pl.pitch = g->opt.pitch;
-    g->pl.fly = g->opt.fly;
-    g->fog = v3(0.04f, 0.05f, 0.07f);
-    g->fog_density = 0.02f;
-    game_init(g);
+    game_init(g, start, g->opt.yaw);
+    g->players[0].pl.pitch = g->opt.pitch;
+    g->players[0].pl.fly = g->opt.fly;
+    /* --players n: extra characters without a device yet (a pad takes one over with START) */
+    for (int i = 1; i < g->opt.players && i < MAX_PLAYERS; i++) {
+        PlayerSlot *ps = game_add_player(g);
+        if (ps) { ps->pl.pitch = g->opt.pitch; ps->pl.fly = g->opt.fly; }
+    }
+    if (g->opt.test_pad) {
+        SDL_VirtualJoystickDesc desc;
+        SDL_INIT_INTERFACE(&desc);
+        desc.type = SDL_JOYSTICK_TYPE_GAMEPAD;
+        desc.naxes = SDL_GAMEPAD_AXIS_COUNT;
+        desc.nbuttons = SDL_GAMEPAD_BUTTON_COUNT;
+        desc.name = "Fortress Crawl test pad";
+        SDL_JoystickID id = SDL_AttachVirtualJoystick(&desc);
+        a->vpad = id ? SDL_OpenJoystick(id) : NULL;
+        if (!a->vpad) SDL_Log("virtual gamepad failed: %s", SDL_GetError());
+    }
 
 #ifndef __EMSCRIPTEN__
     /* in the browser, pointer lock needs a click first */

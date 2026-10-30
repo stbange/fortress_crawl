@@ -16,6 +16,7 @@
 #define MAX_PARTICLES 1600
 #define MAX_FLASHES 16
 #define MAX_SHRINES 128
+#define MAX_PLAYERS 4
 
 /* Flow field around the player that monsters follow (cells). */
 #define FLOW_R 24
@@ -45,6 +46,8 @@ typedef struct Monster {
     float timer, cooldown, flash, anim;
     vec3 color, charge_dir;
     u64 chunk_key;
+    int target;      /* player slot being chased */
+    int last_hitter; /* player slot that hit it last (gets the kill), -1 none */
 } Monster;
 
 typedef struct Projectile {
@@ -55,6 +58,7 @@ typedef struct Projectile {
     int pierce;
     bool explode, chain;
     int last_hit;
+    int owner; /* player slot that fired it, -1 for monsters */
 } Projectile;
 
 typedef struct Particle {
@@ -92,7 +96,6 @@ typedef struct ExploredChunk {
 typedef struct Explored {
     ExploredChunk **table;
     int cap, count;
-    float timer;
 } Explored;
 
 typedef struct Options {
@@ -112,15 +115,53 @@ typedef struct Options {
     bool grab; /* capture the mouse even in screenshot mode (input tests) */
     int recenter; /* 1 force, -1 never, 0 auto (off under WSL) */
     float sens;
+    int players;   /* start with this many characters (split screen) */
+    bool test_pad; /* scripted virtual gamepad that joins and plays (test) */
 } Options;
+
+/* One local player: a separate character with its own input device, view and menus. */
+typedef struct PlayerSlot {
+    bool active;
+    int index;
+    Player pl;
+    Stats st;
+    vec3 color;
+    /* input */
+    bool keyboard;            /* keyboard and mouse (player 1) */
+    SDL_Gamepad *pad;
+    SDL_JoystickID pad_id;
+    u32 pad_prev;             /* buttons held last frame, for presses */
+    bool sprint_toggle;
+    bool attack_held, alt_held; /* mouse buttons (player 1) */
+    bool pad_attack, pad_alt;   /* gamepad triggers */
+    /* ui */
+    bool show_map, show_skills;
+    int skill_sel;
+    char banner[128];
+    float banner_time;
+    char place[128];
+    /* atmosphere of this player's view */
+    vec3 fog, ambient;
+    float fog_density, stars, openness, openness_timer;
+    float explore_timer;
+    /* flow field toward this player, followed by the monsters chasing them */
+    u16 *flow;
+    u8 *flow_solid;
+    int flow_ox, flow_oy, flow_oz;
+    float flow_timer;
+    int flow_px, flow_py, flow_pz;
+} PlayerSlot;
 
 typedef struct Game {
     Options opt;
     World world;
     Renderer r;
     ChunkMap map;
-    Player pl;
-    Stats st;
+    PlayerSlot players[MAX_PLAYERS];
+    int nplayers;
+    vec3 start_pos;
+    float start_yaw;
+    SDL_Gamepad *idle_pads[8]; /* connected pads not yet driving a player */
 
     Monster mons[MAX_MONSTERS];
     Projectile proj[MAX_PROJECTILES];
@@ -135,74 +176,64 @@ typedef struct Game {
     vec3 shrines[MAX_SHRINES];
     int nshrines;
 
-    /* flow field */
-    u16 *flow;
-    u8 *flow_solid;
-    int flow_ox, flow_oy, flow_oz;
-    float flow_timer;
-    int flow_px, flow_py, flow_pz;
-
     Explored explored;
 
-    /* input */
-    bool attack_held, alt_held;
-    bool mouse;
-
-    /* ui */
-    bool hud, show_map, show_skills;
-    int skill_sel;
-    char banner[128];
-    float banner_time;
-    char place[128];
+    bool mouse; /* player 1's mouse is captured */
+    bool hud;
     float fps;
     int res_mode;
-
-    /* atmosphere */
     float time;
-    vec3 fog, ambient;
-    float fog_density, stars, openness, openness_timer;
 } Game;
 
 /* game.c */
-void game_init(Game *g);
+void game_init(Game *g, vec3 start, float yaw);
+PlayerSlot *game_add_player(Game *g);
 void game_event(Game *g, const SDL_Event *e);
-/* Mouse look from a motion in window pixels. */
+/* Mouse look for player 1 from a motion in window pixels. */
 void game_look(Game *g, float dx, float dy);
-void game_update(Game *g, const PlayerInput *in, float dt);
+/* kb: keyboard input for player 1; gamepads are read inside. */
+void game_update(Game *g, const PlayerInput *kb, float dt);
 void game_render(Game *g);
+/* Eye positions of the active players (chunk streaming centres); returns the count. */
+int game_centres(Game *g, vec3 *out);
 int game_solid(void *user, int x, int y, int z);
-void game_banner(Game *g, const char *text);
-void game_add_xp(Game *g, float xp);
-void game_hurt_player(Game *g, float dmg, vec3 from);
+void game_banner(PlayerSlot *ps, const char *text);
+void game_banner_all(Game *g, const char *text);
+void game_add_xp(Game *g, PlayerSlot *ps, float xp);
+void game_hurt_player(Game *g, PlayerSlot *ps, float dmg, vec3 from);
 float game_measure_openness(Game *g, vec3 eye);
-void game_update_atmosphere(Game *g, float dt, vec3 eye);
-/* Light at a world position as linear brightness, including ambient, torch and flashes. */
+void game_update_atmosphere(Game *g, PlayerSlot *ps, float dt);
+/* Light at a world position as linear brightness, including ambient, torches and flashes. */
 vec3 game_light_at(Game *g, vec3 p);
+/* Nearest living player to p within max_dist, or NULL. */
+PlayerSlot *game_nearest_player(Game *g, vec3 p, float max_dist);
 
 /* monsters.c */
 void monsters_spawn_for_chunks(Game *g);
 void monsters_update(Game *g, float dt);
-void monsters_draw(Game *g);
-void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock);
+void monsters_draw(Game *g, vec3 eye);
+void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int attacker);
 void monster_spawn(Game *g, int type, vec3 pos, int level, bool elite, vec3 tint, u64 key);
 Monster *monster_nearest(Game *g, vec3 p, float max_dist, const Monster *exclude);
-void flow_update(Game *g, float dt);
+void flow_update(Game *g, PlayerSlot *ps, float dt);
+/* Other players as figures in the world, seen from viewer's view. */
+void players_draw(Game *g, const PlayerSlot *viewer);
 
 /* combat.c */
 void combat_update(Game *g, float dt);
-void combat_draw_world(Game *g);
-void combat_draw_viewmodel(Game *g);
-void combat_collect_lights(Game *g, SceneParams *sp);
+void combat_draw_world(Game *g, vec3 eye);
+void combat_draw_viewmodel(Game *g, PlayerSlot *ps);
+void combat_collect_lights(Game *g, PlayerSlot *viewer, SceneParams *sp);
 void particles_burst(Game *g, vec3 p, vec3 color, int n, float speed, float size, bool emissive);
 void flash_add(Game *g, vec3 p, vec3 color, float radius, float life);
 float stats_max_hp(const Stats *s);
 const char *combat_weapon_name(int w);
 float stats_max_mana(const Stats *s);
-void stats_refresh(Game *g);
+void stats_refresh(PlayerSlot *ps);
 
 /* explore.c */
-void explore_update(Game *g, float dt);
+void explore_update(Game *g, PlayerSlot *ps, float dt);
 bool explore_get(Game *g, int x, int y, int z);
-void explore_draw_map(Game *g);
+void explore_draw_map(Game *g, PlayerSlot *ps, int w, int h);
 
 #endif

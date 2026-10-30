@@ -80,12 +80,18 @@ void monster_spawn(Game *g, int type, vec3 pos, int level, bool elite, vec3 tint
     m->elite = elite;
     m->pos = pos;
     m->scale = elite ? 1.35f : 1.0f;
-    m->maxhp = m->hp = d->hp * (1.0f + 0.18f * level) * (elite ? 3.0f : 1.0f);
+    /* more players, tougher monsters (but not proportionally: slaying should stay quick) */
+    int np = 0;
+    for (int i = 0; i < MAX_PLAYERS; i++) np += g->players[i].active;
+    float party = 1.0f + 0.5f * (float)MAXI(0, np - 1);
+    m->maxhp = m->hp = d->hp * (1.0f + 0.18f * level) * (elite ? 3.0f : 1.0f) * party;
     m->dmg = d->dmg * (1.0f + 0.10f * level) * (elite ? 1.5f : 1.0f);
     m->xp = d->xp * (1.0f + 0.15f * level) * (elite ? 4.0f : 1.0f);
     m->color = v3_lerp(d->color, tint, 0.2f);
     m->state = MS_IDLE;
     m->chunk_key = key;
+    m->target = 0;
+    m->last_hitter = -1;
     m->yaw = (float)((key + (u64)g->mons_anim_seed * 97) % 628) * 0.01f;
     m->anim = (float)((key + (u64)g->mons_anim_seed * 31) % 100) * 0.1f;
 }
@@ -123,7 +129,6 @@ static void spawn_chunk(Game *g, Chunk *c) {
     ThemeInfo ti;
     theme_info(ci->theme, &ti);
     vec3 tint = v3(ti.mat[B_ACCENT].r / 255.0f, ti.mat[B_ACCENT].g / 255.0f, ti.mat[B_ACCENT].b / 255.0f);
-    vec3 eye = player_eye(&g->pl);
     for (int i = 0; i < n; i++) {
         int type = (level > 1 && rng_chance(&r, 0.3f)) ? pick_weighted(rng_float(&r), w, MON_TYPE_COUNT) : main_type;
         bool elite = level > 2 && rng_chance(&r, 0.04f + 0.004f * level);
@@ -136,7 +141,10 @@ static void spawn_chunk(Game *g, Chunk *c) {
                 if (standable_cell(g, wx, c->cy * CHUNK + y, wz, head)) { found = c->cy * CHUNK + y; break; }
             if (found < 0) continue;
             vec3 p = v3(wx + 0.5f, (float)found + (MONSTERS[type].flies ? 1.0f : 0.0f), wz + 0.5f);
-            if (v3_len(v3_sub(p, eye)) < 12.0f) continue;
+            bool near_player = false;
+            for (int k = 0; k < MAX_PLAYERS; k++)
+                if (g->players[k].active && v3_len(v3_sub(p, player_eye(&g->players[k].pl))) < 12.0f) near_player = true;
+            if (near_player) continue;
             monster_spawn(g, type, p, level, elite, tint, key);
             g->mons_anim_seed++;
             break;
@@ -148,28 +156,42 @@ static void spawn_chunk(Game *g, Chunk *c) {
 #define SPAWN_RADIUS_V 1
 #define DESPAWN_DIST 110.0f
 
+/* Distance from p to the nearest active player's eye. */
+static float player_dist(Game *g, vec3 p) {
+    float best = 1e9f;
+    for (int i = 0; i < MAX_PLAYERS; i++)
+        if (g->players[i].active) best = fminf(best, v3_len(v3_sub(p, player_eye(&g->players[i].pl))));
+    return best;
+}
+
 void monsters_spawn_for_chunks(Game *g) {
     ChunkMap *m = &g->map;
-    vec3 eye = player_eye(&g->pl);
-    int pcx = floordiv((int)floorf(eye.x), CHUNK), pcy = floordiv((int)floorf(eye.y), CHUNK), pcz = floordiv((int)floorf(eye.z), CHUNK);
-    /* monsters far away go back to sleep in their chunk: it will be repopulated on return */
+    /* monsters far from everyone go back to sleep in their chunk: it will be repopulated on return */
     for (int i = 0; i < MAX_MONSTERS; i++) {
         Monster *mo = &g->mons[i];
-        if (!mo->alive || v3_len(v3_sub(mo->pos, eye)) < DESPAWN_DIST) continue;
+        if (!mo->alive || player_dist(g, mo->pos) < DESPAWN_DIST) continue;
         mo->alive = false;
         spawned_remove(g, mo->chunk_key);
     }
-    int n = m->dx * m->dy * m->dz;
-    for (int i = 0; i < n; i++) {
-        Chunk *c = &m->slots[i];
+    for (int i = 0; i < m->pool_cap; i++) {
+        Chunk *c = &m->pool[i];
         if (!c->used || c->state != CH_READY || !c->has_mesh) continue;
-        if (abs(c->cx - pcx) > SPAWN_RADIUS_H || abs(c->cz - pcz) > SPAWN_RADIUS_H || abs(c->cy - pcy) > SPAWN_RADIUS_V) continue;
-        if (v3_len(v3_sub(v3(c->cx * CHUNK + 16.0f, c->cy * CHUNK + 16.0f, c->cz * CHUNK + 16.0f), eye)) > 70.0f) continue;
+        vec3 centre = v3(c->cx * CHUNK + 16.0f, c->cy * CHUNK + 16.0f, c->cz * CHUNK + 16.0f);
+        bool in_range = false, too_close = false;
+        for (int k = 0; k < MAX_PLAYERS; k++) {
+            PlayerSlot *ps = &g->players[k];
+            if (!ps->active) continue;
+            vec3 eye = player_eye(&ps->pl);
+            int pcx = floordiv((int)floorf(eye.x), CHUNK), pcy = floordiv((int)floorf(eye.y), CHUNK), pcz = floordiv((int)floorf(eye.z), CHUNK);
+            float d = v3_len(v3_sub(centre, eye));
+            if (abs(c->cx - pcx) <= SPAWN_RADIUS_H && abs(c->cz - pcz) <= SPAWN_RADIUS_H && abs(c->cy - pcy) <= SPAWN_RADIUS_V && d <= 70.0f)
+                in_range = true;
+            /* never spawn into the chunk a player is standing in */
+            if (d < 20.0f && c->info.arch != ARCH_EXTERIOR) too_close = true;
+        }
+        if (!in_range || too_close) continue;
         u64 key = chunk_key(c->cx, c->cy, c->cz);
         if (spawned_has(g, key)) continue;
-        /* never spawn into the chunk the player is standing in */
-        vec3 centre = v3(c->cx * CHUNK + 16.0f, c->cy * CHUNK + 16.0f, c->cz * CHUNK + 16.0f);
-        if (v3_len(v3_sub(centre, eye)) < 20.0f && c->info.arch != ARCH_EXTERIOR) continue;
         spawn_chunk(g, c);
     }
 }
@@ -178,13 +200,13 @@ void monsters_spawn_for_chunks(Game *g) {
 
 static inline int fidx(int x, int y, int z) { return (y * FLOW_W + z) * FLOW_W + x; }
 #define SY0 4 /* solid cache has 4 extra layers below and above */
-static inline bool fsolid(const Game *g, int x, int y, int z) {
+static inline bool fsolid(const PlayerSlot *g, int x, int y, int z) {
     if ((unsigned)x >= FLOW_W || (unsigned)z >= FLOW_W || y < -SY0 || y >= FLOW_Y + SY0) return true;
     return g->flow_solid[((y + SY0) * FLOW_W + z) * FLOW_W + x];
 }
-static inline bool fstand(const Game *g, int x, int y, int z) { return !fsolid(g, x, y, z) && fsolid(g, x, y - 1, z); }
+static inline bool fstand(const PlayerSlot *g, int x, int y, int z) { return !fsolid(g, x, y, z) && fsolid(g, x, y - 1, z); }
 
-void flow_update(Game *g, float dt) {
+void flow_update(Game *game, PlayerSlot *g, float dt) {
     if (!g->flow) {
         g->flow = malloc(sizeof(u16) * FLOW_W * FLOW_W * FLOW_Y);
         g->flow_solid = malloc((size_t)FLOW_W * FLOW_W * (FLOW_Y + 2 * SY0));
@@ -201,7 +223,7 @@ void flow_update(Game *g, float dt) {
         for (int z = 0; z < FLOW_W; z++)
             for (int x = 0; x < FLOW_W; x++)
                 g->flow_solid[((y + SY0) * FLOW_W + z) * FLOW_W + x] =
-                    game_solid(g, g->flow_ox + x, g->flow_oy + y, g->flow_oz + z) != 0;
+                    game_solid(game, g->flow_ox + x, g->flow_oy + y, g->flow_oz + z) != 0;
     memset(g->flow, 0xFF, sizeof(u16) * FLOW_W * FLOW_W * FLOW_Y);
     int sx = FLOW_R, sy = FLOW_H, sz = FLOW_R;
     for (int k = 0; k < 4 && !fstand(g, sx, sy, sz); k++) sy--;
@@ -239,8 +261,8 @@ void flow_update(Game *g, float dt) {
 }
 
 /* Next cell centre on the way to the player, or false if the field does not cover it. */
-static bool flow_next(Game *g, vec3 pos, vec3 *target) {
-    if (!g->flow) return false;
+static bool flow_next(const PlayerSlot *g, vec3 pos, vec3 *target) {
+    if (!g->flow || g->flow_timer <= -1.0f) return false;
     int x = (int)floorf(pos.x) - g->flow_ox, y = (int)floorf(pos.y + 0.01f) - g->flow_oy, z = (int)floorf(pos.z) - g->flow_oz;
     if ((unsigned)x >= FLOW_W || (unsigned)z >= FLOW_W || y < 0 || y >= FLOW_Y) return false;
     if (g->flow[fidx(x, y, z)] == 0xFFFF && y > 0 && g->flow[fidx(x, y - 1, z)] != 0xFFFF) y--;
@@ -299,10 +321,14 @@ static void wake_neighbours(Game *g, Monster *m) {
     }
 }
 
-void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock) {
+void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int attacker) {
     if (!m->alive) return;
     m->hp -= dmg;
     m->flash = 0.15f;
+    if (attacker >= 0 && attacker < MAX_PLAYERS && g->players[attacker].active) {
+        m->last_hitter = attacker;
+        if (!g->players[attacker].st.dead) m->target = attacker; /* turn on whoever hurts you */
+    }
     if (!m->awake) { m->awake = true; m->state = MS_CHASE; wake_neighbours(g, m); }
     vec3 dir = v3_sub(m->pos, from);
     dir.y = 0;
@@ -317,8 +343,18 @@ void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock) {
         particles_burst(g, c, m->color, 18, 5.0f, 0.12f, false);
         particles_burst(g, c, v3_scale(m->color, 0.4f), 10, 4.0f, 0.08f, false);
         if (m->elite) flash_add(g, c, v3(1.0f, 0.6f, 0.3f), 8.0f, 0.4f);
-        g->st.kills++;
-        game_add_xp(g, m->xp);
+        /* the killer gets the full XP, everyone else nearby half of it */
+        int killer = m->last_hitter;
+        for (int i = 0; i < MAX_PLAYERS; i++) {
+            PlayerSlot *ps = &g->players[i];
+            if (!ps->active) continue;
+            if (i == killer) {
+                ps->st.kills++;
+                game_add_xp(g, ps, m->xp);
+            } else if (v3_len(v3_sub(ps->pl.pos, m->pos)) < 30.0f) {
+                game_add_xp(g, ps, m->xp * 0.5f);
+            }
+        }
     }
 }
 
@@ -383,14 +419,30 @@ static void monster_physics(Game *g, Monster *m, vec3 want, float dt) {
     }
 }
 
+/* Keep chasing the current target unless another living player is clearly closer. */
+static PlayerSlot *monster_target(Game *g, Monster *m, vec3 c) {
+    PlayerSlot *cur = NULL;
+    if (m->target >= 0 && m->target < MAX_PLAYERS && g->players[m->target].active && !g->players[m->target].st.dead)
+        cur = &g->players[m->target];
+    PlayerSlot *near = game_nearest_player(g, c, 1e9f);
+    if (!near) return NULL;
+    if (!cur || v3_len(v3_sub(player_eye(&near->pl), c)) + 4.0f < v3_len(v3_sub(player_eye(&cur->pl), c)))
+        cur = near;
+    m->target = cur->index;
+    return cur;
+}
+
 void monsters_update(Game *g, float dt) {
-    vec3 eye = player_eye(&g->pl);
-    vec3 feet = g->pl.pos;
     for (int i = 0; i < MAX_MONSTERS; i++) {
         Monster *m = &g->mons[i];
         if (!m->alive) continue;
         const MonsterDef *d = &MONSTERS[m->type];
         vec3 c = monster_centre(m);
+        PlayerSlot *tp = monster_target(g, m, c);
+        bool all_dead = tp == NULL;
+        if (!tp) tp = &g->players[0];
+        vec3 eye = player_eye(&tp->pl);
+        vec3 feet = tp->pl.pos;
         vec3 to = v3_sub(eye, c);
         float dist = v3_len(to);
         if (dist > 80.0f) continue; /* frozen far away (their chunk may be unloaded) */
@@ -402,8 +454,8 @@ void monsters_update(Game *g, float dt) {
         float hdist = sqrtf((feet.x - m->pos.x) * (feet.x - m->pos.x) + (feet.z - m->pos.z) * (feet.z - m->pos.z));
         float dy = feet.y - m->pos.y;
         bool los = dist < 40.0f && phys_line_of_sight(c, eye, game_solid, g);
-        if (g->st.dead) { m->awake = false; m->state = MS_IDLE; }
-        if (!m->awake && !g->st.dead) {
+        if (all_dead) { m->awake = false; m->state = MS_IDLE; }
+        if (!m->awake && !all_dead) {
             if (dist < 7.0f || (dist < 24.0f && los)) {
                 m->awake = true;
                 m->state = MS_CHASE;
@@ -426,7 +478,7 @@ void monsters_update(Game *g, float dt) {
                 m->timer -= dt;
                 m->yaw = atan2f(hdir.z, hdir.x);
                 if (m->timer <= 0) {
-                    if (hdist < d->reach + d->hw * m->scale + 0.6f && fabsf(dy) < 2.0f) game_hurt_player(g, m->dmg, c);
+                    if (hdist < d->reach + d->hw * m->scale + 0.6f && fabsf(dy) < 2.0f) game_hurt_player(g, tp, m->dmg, c);
                     m->cooldown = d->attack_time;
                     m->state = MS_CHASE;
                 }
@@ -435,7 +487,7 @@ void monsters_update(Game *g, float dt) {
                 m->timer -= dt;
                 want = v3_scale(m->charge_dir, 12.0f);
                 if (hdist < d->hw * m->scale + 0.7f && fabsf(dy) < 1.5f) {
-                    game_hurt_player(g, m->dmg * 1.3f, c);
+                    game_hurt_player(g, tp, m->dmg * 1.3f, c);
                     m->state = MS_STUN;
                     m->timer = 0.6f;
                 } else if (m->timer <= 0) {
@@ -478,7 +530,7 @@ void monsters_update(Game *g, float dt) {
                 if (!moved) {
                     vec3 target;
                     if (los && dist < 5.0f) want = v3_scale(hdir, speed);
-                    else if (flow_next(g, m->pos, &target)) {
+                    else if (flow_next(tp, m->pos, &target)) {
                         vec3 dir = v3_norm(v3(target.x - m->pos.x, 0, target.z - m->pos.z));
                         want = v3_scale(dir, speed);
                         if (d->flies) want.y = (target.y + 1.2f - m->pos.y) * 2.0f;
@@ -513,8 +565,7 @@ void monsters_update(Game *g, float dt) {
 
 /* ---------- drawing ---------- */
 
-void monsters_draw(Game *g) {
-    vec3 eye = player_eye(&g->pl);
+void monsters_draw(Game *g, vec3 eye) {
     for (int i = 0; i < MAX_MONSTERS; i++) {
         Monster *m = &g->mons[i];
         if (!m->alive) continue;
@@ -597,5 +648,55 @@ void monsters_draw(Game *g) {
             vec3 top = v3_add(p, v3(0, d->h * s + 0.25f, 0));
             batch3d_octa(top, 0.12f, 0.12f, m->anim * 2.0f, v3(1.0f, 0.5f, 0.2f), true);
         }
+    }
+}
+
+/* Other players: a simple knight figure in the player's colour, with a torch glow. */
+void players_draw(Game *g, const PlayerSlot *viewer) {
+    for (int i = 0; i < MAX_PLAYERS; i++) {
+        const PlayerSlot *ps = &g->players[i];
+        if (!ps->active || ps == viewer) continue;
+        const Player *pl = &ps->pl;
+        vec3 p = pl->pos;
+        float h = player_height(pl->stance);
+        vec3 light = game_light_at(g, v3_add(p, v3(0, 1.0f, 0)));
+        light = v3(fmaxf(light.x, 0.3f), fmaxf(light.y, 0.3f), fmaxf(light.z, 0.3f));
+        vec3 base = ps->st.dead ? v3(0.3f, 0.3f, 0.3f) : ps->color;
+        if (ps->st.hurt > 0.3f) base = v3_lerp(base, v3(1.0f, 0.2f, 0.2f), 0.5f);
+        vec3 col = v3(base.x * light.x, base.y * light.y, base.z * light.z);
+        vec3 dark = v3_scale(col, 0.55f);
+        vec3 steel = v3(0.6f * light.x, 0.62f * light.y, 0.66f * light.z);
+        float y = pl->yaw;
+        vec3 f = v3(cosf(y), 0, sinf(y)), r = v3(-sinf(y), 0, cosf(y));
+        if (ps->st.dead) {
+            /* a fallen marker until they respawn */
+            batch3d_box(v3_add(p, v3(0, 0.15f, 0)), v3(0.25f, 0.15f, 0.7f), y, dark, false);
+            continue;
+        }
+        float walk = sqrtf(pl->vel.x * pl->vel.x + pl->vel.z * pl->vel.z);
+        float sw = sinf(g->time * 9.0f) * fminf(1.0f, walk / 5.0f) * 0.3f;
+        float s = h / 1.75f;
+        for (int k = -1; k <= 1; k += 2) {
+            vec3 leg = v3_add(v3_add(p, v3_scale(r, 0.12f * k)), v3_add(v3(0, 0.38f * s, 0), v3_scale(f, sw * k)));
+            batch3d_box(leg, v3(0.09f, 0.38f * s, 0.09f), y, dark, false);
+        }
+        vec3 torso = v3_add(p, v3(0, 1.05f * s, 0));
+        batch3d_box(torso, v3(0.16f, 0.32f * s, 0.26f), y, col, false);
+        vec3 head = v3_add(torso, v3(0, 0.48f * s, 0));
+        batch3d_box(head, v3(0.15f, 0.15f, 0.15f), y, steel, false);
+        batch3d_box(v3_add(head, v3_scale(f, 0.15f)), v3(0.02f, 0.03f, 0.1f), y, v3(1.0f, 0.85f, 0.5f), true);
+        /* weapon in the right hand, torch flame in the left */
+        float swing = ps->st.swing > 0 ? ps->st.swing / fmaxf(ps->st.swing_len, 0.01f) : 0.0f;
+        vec3 hand = v3_add(v3_add(torso, v3_scale(r, 0.3f)), v3_add(v3(0, -0.1f, 0), v3_scale(f, 0.25f + swing * 0.3f)));
+        if (ps->st.weapon == WPN_SWORD)
+            batch3d_spike(hand, v3_add(f, v3(0, 1.2f - swing * 2.0f, 0)), 0.04f, 0.8f, steel, false);
+        else if (ps->st.weapon == WPN_BOW)
+            batch3d_box(hand, v3(0.03f, 0.35f, 0.03f), y, v3(0.5f * light.x, 0.32f * light.y, 0.18f * light.z), false);
+        else
+            batch3d_octa(v3_add(hand, v3(0, 0.35f, 0)), 0.07f, 0.09f, g->time * 3.0f, v3(0.5f, 0.6f, 1.0f), true);
+        vec3 lhand = v3_add(v3_add(torso, v3_scale(r, -0.3f)), v3_add(v3(0, 0.05f, 0), v3_scale(f, 0.2f)));
+        batch3d_octa(lhand, 0.06f, 0.1f, g->time * 5.0f, v3(1.0f, 0.65f, 0.25f), true);
+        /* a coloured marker above the head so you can find your friends */
+        batch3d_octa(v3_add(head, v3(0, 0.45f, 0)), 0.07f, 0.1f, g->time * 2.0f, ps->color, true);
     }
 }

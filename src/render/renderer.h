@@ -55,6 +55,7 @@ typedef struct Renderer {
     GLint s_inv_vp, s_fog, s_stars, s_time;
     GLint p_tex, p_dither, p_low, p_time;
     mat4 vp;
+    int view_x, view_y, view_w, view_h; /* current view inside the low-res target (GL coordinates) */
 } Renderer;
 
 bool renderer_init(Renderer *r, int win_w, int win_h);
@@ -63,7 +64,10 @@ void renderer_resize(Renderer *r, int win_w, int win_h);
 int renderer_theme_slot(Renderer *r, int theme);
 void renderer_slot_ref(Renderer *r, int slot, int delta);
 
-/* Frame structure: begin -> draw chunks -> end_world -> (text into the low-res target) -> present. */
+/* Frame structure: frame_begin, then per view: set_view -> begin -> draw chunks -> end_world ->
+ * (UI into the view), then present. A view is a rectangle of the low-res target (split screen). */
+void renderer_frame_begin(Renderer *r);
+void renderer_set_view(Renderer *r, int x, int y, int w, int h);
 void renderer_begin(Renderer *r, const SceneParams *sp);
 void renderer_draw_chunk(Renderer *r, GLuint vao, int nsolid, int nsprite, vec3 origin);
 void renderer_end_world(Renderer *r);

@@ -6,8 +6,8 @@ generated on the fly, without end, in every direction including up and down. The
 get from the gate, the more dangerous it gets.
 
 This is an early prototype. It has **world generation, lighting, the retro renderer,
-Hexen-style combat against primitive monsters, a classless skill tree, shrines and an
-explored-cells map**. There is no loot, saving or audio yet. See [`docs/PLAN.md`](docs/PLAN.md)
+Hexen-style combat against primitive monsters, a classless skill tree, shrines, an
+explored-cells map and split-screen co-op for up to four players**. There is no loot, saving or audio yet. See [`docs/PLAN.md`](docs/PLAN.md)
 for the full plan.
 
 ## Screenshots (prototype, seed 1337)
@@ -26,6 +26,8 @@ for the full plan.
 | A pack with an elite brute in the vestibule | A brute in a mine tunnel |
 | ![Skill tree](docs/screenshots/skills.png) | ![Map](docs/screenshots/map.png) |
 | Classless skill tree (TAB) | Map of explored cells (M) |
+| ![Two players](docs/screenshots/coop2.png) | ![Three players](docs/screenshots/coop3.png) |
+| Split screen with two players | Three players and the roster |
 
 ## Build
 
@@ -108,19 +110,43 @@ preview URLs.
 | F12 | save `screenshot.bmp` (desktop only) |
 | Esc | release the mouse (press again to quit) |
 
+### Split screen and gamepads
+
+Up to four players can play on one screen. Player 1 uses keyboard and mouse. Press **START**
+on a gamepad to join as a new player with your own character; the screen splits in two,
+then in quarters. Press **BACK** on a gamepad that has not joined to control player 1 with it
+instead. Everyone can go wherever they like: the world is loaded around each player.
+If a pad disconnects, its character waits until a pad presses START again.
+
+| Gamepad | Action |
+|---------|--------|
+| Left stick / right stick | move / look |
+| RT / LT | attack / alternate attack (bows and staffs get a little aim assist) |
+| LB / RB | previous / next weapon |
+| A, B | jump, crouch |
+| Left stick click | sprint (until you stop) |
+| Y | skill tree (D-pad or stick to select, A to learn, B to close) |
+| BACK | map (B to close) |
+
+Menus only pause the game when you play alone. Kills give the killer full XP and everyone
+else within 30 m half. Monsters get tougher with each extra player.
+
 Command line:
 
 ```
 fortress_crawl [--seed N] [--pos x y z] [--look yaw pitch] [--fly] [--radius n] [--vradius n]
                [--window w h] [--lowres w h] [--debug]
                [--invert-x] [--invert-y] [--sens s] [--recenter | --no-recenter]
-               [--shot file.bmp] [--shot-time seconds] [--demo combat|sword|death|skills|map]
+               [--shot file.bmp] [--shot-time seconds] [--demo combat|sword|death|skills|map|coop]
+               [--players n] [--test-pad]
 ```
 
 `--shot` waits until the view has loaded, saves one frame and exits. It is useful for
 comparing seeds and changes to the generator. `--demo` sets up a scene for that frame: a
-level-8 character facing a monster pack (`combat`, `sword`, `death` with 1 HP), or the `skills` or `map`
-screen.
+level-8 character facing a monster pack (`combat`, `sword`, `death` with 1 HP, `coop` with
+the other players beside you), or the `skills` or `map` screen. `--players n` starts with n
+characters (gamepads take them over with START). `--test-pad` attaches a virtual gamepad
+that joins, walks, turns and attacks, to test the gamepad path without hardware.
 
 Shrines (glowing rune stones) are respawn points: walk up to one to attune it. When you die,
 you return to the last attuned shrine and keep everything.

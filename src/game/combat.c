@@ -12,10 +12,10 @@ static float level_mult(const Stats *s) { return 1.0f + 0.07f * (float)(s->level
 float stats_max_hp(const Stats *s) { return 100.0f + 12.0f * (s->level - 1) + 25.0f * s->ranks[SK_TOUGHNESS]; }
 float stats_max_mana(const Stats *s) { return 40.0f + 6.0f * (s->level - 1); }
 
-void stats_refresh(Game *g) {
-    g->st.maxhp = stats_max_hp(&g->st);
-    g->st.maxmana = stats_max_mana(&g->st);
-    g->pl.speed_mult = 1.0f + 0.12f * g->st.ranks[SK_FLEET_FOOT];
+void stats_refresh(PlayerSlot *ps) {
+    ps->st.maxhp = stats_max_hp(&ps->st);
+    ps->st.maxmana = stats_max_mana(&ps->st);
+    ps->pl.speed_mult = 1.0f + 0.12f * ps->st.ranks[SK_FLEET_FOOT];
 }
 
 /* ---------- particles and flashes ---------- */
@@ -67,7 +67,7 @@ static void update_particles(Game *g, float dt) {
 
 /* ---------- projectiles ---------- */
 
-static Projectile *proj_new(Game *g, u8 kind, vec3 pos, vec3 vel, float dmg) {
+static Projectile *proj_new(Game *g, int owner, u8 kind, vec3 pos, vec3 vel, float dmg) {
     for (int i = 0; i < MAX_PROJECTILES; i++) {
         Projectile *p = &g->proj[i];
         if (p->alive) continue;
@@ -79,6 +79,7 @@ static Projectile *proj_new(Game *g, u8 kind, vec3 pos, vec3 vel, float dmg) {
         p->dmg = dmg;
         p->life = kind == PJ_NOVA ? 0.9f : 4.0f;
         p->last_hit = -1;
+        p->owner = owner;
         return p;
     }
     return NULL;
@@ -93,7 +94,7 @@ static vec3 proj_color(const Projectile *p) {
     }
 }
 
-static void explode(Game *g, vec3 at, float dmg, float radius, const Monster *skip) {
+static void explode(Game *g, int owner, vec3 at, float dmg, float radius, const Monster *skip) {
     flash_add(g, at, v3(1.4f, 0.75f, 0.3f), radius * 3.0f, 0.35f);
     particles_burst(g, at, v3(1.0f, 0.55f, 0.2f), 24, 6.0f, 0.08f, true);
     for (int i = 0; i < MAX_MONSTERS; i++) {
@@ -101,11 +102,11 @@ static void explode(Game *g, vec3 at, float dmg, float radius, const Monster *sk
         if (!m->alive || m == skip) continue;
         vec3 c = v3_add(m->pos, v3(0, MONSTERS[m->type].h * 0.5f, 0));
         float d = v3_len(v3_sub(c, at));
-        if (d < radius) monster_damage(g, m, dmg * (1.0f - 0.5f * d / radius), at, 4.0f);
+        if (d < radius) monster_damage(g, m, dmg * (1.0f - 0.5f * d / radius), at, 4.0f, owner);
     }
 }
 
-static void chain_lightning(Game *g, Monster *from, float dmg) {
+static void chain_lightning(Game *g, int owner, Monster *from, float dmg) {
     Monster *prev = from;
     for (int k = 0; k < 2; k++) {
         vec3 pc = v3_add(prev->pos, v3(0, 0.6f, 0));
@@ -125,17 +126,17 @@ static void chain_lightning(Game *g, Monster *from, float dmg) {
             particles_burst(g, q, v3(0.7f, 0.8f, 1.0f), 1, 0.5f, 0.05f, true);
         }
         flash_add(g, bc, v3(0.6f, 0.7f, 1.2f), 6.0f, 0.2f);
-        monster_damage(g, best, dmg, pc, 2.0f);
+        monster_damage(g, best, dmg, pc, 2.0f, owner);
         prev = best;
     }
 }
 
 static void projectile_hit_monster(Game *g, Projectile *p, Monster *m, int index) {
-    monster_damage(g, m, p->dmg, v3_sub(p->pos, p->vel), p->kind == PJ_ARROW ? 3.0f : 5.0f);
+    monster_damage(g, m, p->dmg, v3_sub(p->pos, p->vel), p->kind == PJ_ARROW ? 3.0f : 5.0f, p->owner);
     p->last_hit = index;
     if (p->kind == PJ_BOLT) {
-        if (p->explode) explode(g, p->pos, p->dmg * 0.6f, 3.0f, m);
-        if (p->chain) chain_lightning(g, m, p->dmg * 0.6f);
+        if (p->explode) explode(g, p->owner, p->pos, p->dmg * 0.6f, 3.0f, m);
+        if (p->chain) chain_lightning(g, p->owner, m, p->dmg * 0.6f);
         flash_add(g, p->pos, proj_color(p), 6.0f, 0.2f);
     }
     if (p->pierce > 0) p->pierce--;
@@ -143,7 +144,6 @@ static void projectile_hit_monster(Game *g, Projectile *p, Monster *m, int index
 }
 
 static void update_projectiles(Game *g, float dt) {
-    vec3 eye = player_eye(&g->pl);
     for (int i = 0; i < MAX_PROJECTILES; i++) {
         Projectile *p = &g->proj[i];
         if (!p->alive) continue;
@@ -158,18 +158,22 @@ static void update_projectiles(Game *g, float dt) {
             if (game_solid(g, (int)floorf(p->pos.x), (int)floorf(p->pos.y), (int)floorf(p->pos.z)) != 0) {
                 p->alive = false;
                 vec3 back = v3_sub(p->pos, step);
-                if (p->kind == PJ_BOLT && p->explode) explode(g, back, p->dmg * 0.6f, 3.0f, NULL);
+                if (p->kind == PJ_BOLT && p->explode) explode(g, p->owner, back, p->dmg * 0.6f, 3.0f, NULL);
                 else particles_burst(g, back, proj_color(p), 6, 2.5f, 0.04f, p->kind != PJ_ARROW);
                 if (p->kind != PJ_ARROW) flash_add(g, back, proj_color(p), 5.0f, 0.15f);
                 break;
             }
             if (p->kind == PJ_ENEMY_FIRE) {
-                vec3 f = g->pl.pos;
-                if (!g->st.dead && fabsf(p->pos.x - f.x) < 0.45f && fabsf(p->pos.z - f.z) < 0.45f && p->pos.y > f.y &&
-                    p->pos.y < f.y + player_height(g->pl.stance) + 0.1f) {
-                    game_hurt_player(g, p->dmg, v3_sub(p->pos, step));
-                    particles_burst(g, p->pos, proj_color(p), 10, 3.0f, 0.05f, true);
-                    p->alive = false;
+                for (int k = 0; k < MAX_PLAYERS && p->alive; k++) {
+                    PlayerSlot *ps = &g->players[k];
+                    vec3 f = ps->pl.pos;
+                    if (!ps->active || ps->st.dead) continue;
+                    if (fabsf(p->pos.x - f.x) < 0.45f && fabsf(p->pos.z - f.z) < 0.45f && p->pos.y > f.y &&
+                        p->pos.y < f.y + player_height(ps->pl.stance) + 0.1f) {
+                        game_hurt_player(g, ps, p->dmg, v3_sub(p->pos, step));
+                        particles_burst(g, p->pos, proj_color(p), 10, 3.0f, 0.05f, true);
+                        p->alive = false;
+                    }
                 }
                 continue;
             }
@@ -185,7 +189,7 @@ static void update_projectiles(Game *g, float dt) {
             }
         }
         /* trailing sparks for spells */
-        if (p->alive && p->kind != PJ_ARROW && v3_len(v3_sub(p->pos, eye)) < 40.0f && g->nparts < MAX_PARTICLES - 1) {
+        if (p->alive && p->kind != PJ_ARROW && g->nparts < MAX_PARTICLES - 1 && game_nearest_player(g, p->pos, 40.0f)) {
             Particle *q = &g->parts[g->nparts++];
             q->pos = p->pos;
             q->vel = v3(0, 0.3f, 0);
@@ -200,10 +204,10 @@ static void update_projectiles(Game *g, float dt) {
 
 /* ---------- attacks ---------- */
 
-static void sword_strike(Game *g, bool whirl) {
-    Stats *s = &g->st;
-    vec3 eye = player_eye(&g->pl);
-    vec3 fwd = v3(cosf(g->pl.yaw), 0, sinf(g->pl.yaw));
+static void sword_strike(Game *g, PlayerSlot *ps, bool whirl) {
+    Stats *s = &ps->st;
+    vec3 eye = player_eye(&ps->pl);
+    vec3 fwd = v3(cosf(ps->pl.yaw), 0, sinf(ps->pl.yaw));
     float dmg = 20.0f * (1.0f + 0.3f * s->ranks[SK_KEEN_EDGE]) * level_mult(s) * (whirl ? 1.5f : 1.0f);
     float range = whirl ? 3.4f : 2.7f;
     float arc = whirl ? 2.0f * PI_F : (s->ranks[SK_CLEAVE] ? 150.0f : 80.0f) * PI_F / 180.0f;
@@ -224,7 +228,7 @@ static void sword_strike(Game *g, bool whirl) {
         if (ang > arc * 0.5f && dist > 0.4f) continue;
         if (!phys_line_of_sight(eye, c, game_solid, g)) continue;
         if (hit_all) {
-            monster_damage(g, m, dmg, g->pl.pos, 5.0f);
+            monster_damage(g, m, dmg, ps->pl.pos, 5.0f, ps->index);
             hits++;
         } else if (dist < best_d) {
             best_d = dist;
@@ -232,51 +236,78 @@ static void sword_strike(Game *g, bool whirl) {
         }
     }
     if (best) {
-        monster_damage(g, best, dmg, g->pl.pos, 5.0f);
+        monster_damage(g, best, dmg, ps->pl.pos, 5.0f, ps->index);
         hits++;
     }
     if (hits) {
         s->hp = fminf(s->maxhp, s->hp + 3.0f * s->ranks[SK_BLOODTHIRST] * hits);
     } else {
         /* sparks when hitting a wall */
-        vec3 look = dir_from_angles(g->pl.yaw, g->pl.pitch);
+        vec3 look = dir_from_angles(ps->pl.yaw, ps->pl.pitch);
         float d = phys_raycast(eye, look, range, game_solid, g);
         if (d < range) particles_burst(g, v3_add(eye, v3_scale(look, d - 0.05f)), v3(1.0f, 0.85f, 0.5f), 6, 2.5f, 0.03f, true);
     }
 }
 
-static void fire_arrows(Game *g, int count, float spread_deg) {
-    Stats *s = &g->st;
-    vec3 eye = player_eye(&g->pl);
+/* Shot direction. Gamepad players get a little aim assist: a monster within a few
+ * degrees of the crosshair pulls the shot onto itself. */
+static vec3 aim_dir(Game *g, PlayerSlot *ps, float yaw_off, float pitch_off) {
+    vec3 eye = player_eye(&ps->pl);
+    vec3 look = dir_from_angles(ps->pl.yaw, ps->pl.pitch);
+    vec3 d = dir_from_angles(ps->pl.yaw + yaw_off, ps->pl.pitch + pitch_off);
+    if (!ps->pad || (ps->keyboard && g->mouse)) return d;
+    float best = cosf(6.0f * PI_F / 180.0f);
+    vec3 target = d;
+    for (int i = 0; i < MAX_MONSTERS; i++) {
+        Monster *m = &g->mons[i];
+        if (!m->alive) continue;
+        vec3 c = v3_add(m->pos, v3(0, MONSTERS[m->type].h * m->scale * 0.5f, 0));
+        vec3 to = v3_sub(c, eye);
+        float dist = v3_len(to);
+        if (dist > 40.0f || dist < 0.5f) continue;
+        float cs = v3_dot(v3_scale(to, 1.0f / dist), look);
+        if (cs <= best || !phys_line_of_sight(eye, c, game_solid, g)) continue;
+        best = cs;
+        target = v3_scale(to, 1.0f / dist);
+    }
+    if (target.x == d.x && target.y == d.y && target.z == d.z) return d;
+    /* keep the spread of multishot around the assisted direction */
+    float ty = atan2f(target.z, target.x), tp = asinf(clampf(target.y, -1.0f, 1.0f));
+    return dir_from_angles(ty + yaw_off, tp + pitch_off * 0.5f);
+}
+
+static void fire_arrows(Game *g, PlayerSlot *ps, int count, float spread_deg) {
+    Stats *s = &ps->st;
+    vec3 eye = player_eye(&ps->pl);
     float dmg = 15.0f * (1.0f + 0.3f * s->ranks[SK_STEADY_AIM]) * level_mult(s);
     for (int i = 0; i < count; i++) {
         float off = count > 1 ? ((float)i / (count - 1) - 0.5f) * 2.0f * spread_deg * PI_F / 180.0f : 0.0f;
-        vec3 d = dir_from_angles(g->pl.yaw + off, g->pl.pitch + 0.02f);
-        Projectile *p = proj_new(g, PJ_ARROW, v3_add(eye, v3_scale(d, 0.3f)), v3_scale(d, 48.0f), dmg);
+        vec3 d = aim_dir(g, ps, off, 0.02f);
+        Projectile *p = proj_new(g, ps->index, PJ_ARROW, v3_add(eye, v3_scale(d, 0.3f)), v3_scale(d, 48.0f), dmg);
         if (p && s->ranks[SK_PIERCING]) p->pierce = 3;
     }
 }
 
-static void cast_bolt(Game *g) {
-    Stats *s = &g->st;
-    vec3 eye = player_eye(&g->pl);
-    vec3 d = dir_from_angles(g->pl.yaw, g->pl.pitch);
+static void cast_bolt(Game *g, PlayerSlot *ps) {
+    Stats *s = &ps->st;
+    vec3 eye = player_eye(&ps->pl);
+    vec3 d = aim_dir(g, ps, 0.0f, 0.0f);
     float dmg = 24.0f * (1.0f + 0.3f * s->ranks[SK_FOCUS]) * level_mult(s);
-    Projectile *p = proj_new(g, PJ_BOLT, v3_add(eye, v3_scale(d, 0.4f)), v3_scale(d, 24.0f), dmg);
+    Projectile *p = proj_new(g, ps->index, PJ_BOLT, v3_add(eye, v3_scale(d, 0.4f)), v3_scale(d, 24.0f), dmg);
     if (p) {
         p->explode = s->ranks[SK_FIREBALL] > 0;
         p->chain = s->ranks[SK_CHAIN] > 0;
     }
 }
 
-static void cast_nova(Game *g) {
-    Stats *s = &g->st;
-    vec3 c = v3_add(g->pl.pos, v3(0, 0.8f, 0));
+static void cast_nova(Game *g, PlayerSlot *ps) {
+    Stats *s = &ps->st;
+    vec3 c = v3_add(ps->pl.pos, v3(0, 0.8f, 0));
     float dmg = 30.0f * (1.0f + 0.3f * s->ranks[SK_FOCUS]) * level_mult(s);
     for (int i = 0; i < 20; i++) {
         float a = i * 2.0f * PI_F / 20.0f;
         vec3 d = v3(cosf(a), 0, sinf(a));
-        Projectile *p = proj_new(g, PJ_NOVA, v3_add(c, v3_scale(d, 0.5f)), v3_scale(d, 14.0f), dmg);
+        Projectile *p = proj_new(g, ps->index, PJ_NOVA, v3_add(c, v3_scale(d, 0.5f)), v3_scale(d, 14.0f), dmg);
         if (p) p->pierce = 2;
     }
     flash_add(g, c, v3(1.5f, 0.7f, 0.25f), 12.0f, 0.5f);
@@ -284,18 +315,18 @@ static void cast_nova(Game *g) {
 
 static float mana_cost(const Stats *s, float base) { return base * (1.0f - 0.15f * s->ranks[SK_FOCUS]); }
 
-static void try_attack(Game *g, bool alt) {
-    Stats *s = &g->st;
+static void try_attack(Game *g, PlayerSlot *ps, bool alt) {
+    Stats *s = &ps->st;
     if (s->cooldown > 0 || s->dead) return;
     switch (s->weapon) {
     case WPN_SWORD:
         if (alt) {
             if (!s->ranks[SK_WHIRLWIND] || s->mana < 12) return;
             s->mana -= 12;
-            sword_strike(g, true);
+            sword_strike(g, ps, true);
             s->cooldown = s->swing_len = 0.8f;
         } else {
-            sword_strike(g, false);
+            sword_strike(g, ps, false);
             s->cooldown = s->swing_len = 0.45f;
         }
         break;
@@ -303,10 +334,10 @@ static void try_attack(Game *g, bool alt) {
         if (alt) {
             if (!s->ranks[SK_ARROW_STORM] || s->mana < 15) return;
             s->mana -= 15;
-            fire_arrows(g, 9, 20.0f);
+            fire_arrows(g, ps, 9, 20.0f);
             s->cooldown = s->swing_len = 1.0f;
         } else {
-            fire_arrows(g, s->ranks[SK_MULTISHOT] ? 3 : 1, 6.0f);
+            fire_arrows(g, ps, s->ranks[SK_MULTISHOT] ? 3 : 1, 6.0f);
             s->cooldown = s->swing_len = 0.55f;
         }
         break;
@@ -315,13 +346,13 @@ static void try_attack(Game *g, bool alt) {
             float c = mana_cost(s, 25);
             if (!s->ranks[SK_NOVA] || s->mana < c) return;
             s->mana -= c;
-            cast_nova(g);
+            cast_nova(g, ps);
             s->cooldown = s->swing_len = 1.1f;
         } else {
             float c = mana_cost(s, 6);
             if (s->mana < c) return;
             s->mana -= c;
-            cast_bolt(g);
+            cast_bolt(g, ps);
             s->cooldown = s->swing_len = 0.45f;
         }
         break;
@@ -331,18 +362,22 @@ static void try_attack(Game *g, bool alt) {
 }
 
 void combat_update(Game *g, float dt) {
-    Stats *s = &g->st;
-    s->cooldown -= dt;
-    s->swing = fmaxf(0.0f, s->swing - dt);
-    s->hurt = fmaxf(0.0f, s->hurt - dt * 1.5f);
-    s->since_hurt += dt;
-    if (!s->dead) {
+    for (int i = 0; i < MAX_PLAYERS; i++) {
+        PlayerSlot *ps = &g->players[i];
+        if (!ps->active) continue;
+        Stats *s = &ps->st;
+        s->cooldown -= dt;
+        s->swing = fmaxf(0.0f, s->swing - dt);
+        s->hurt = fmaxf(0.0f, s->hurt - dt * 1.5f);
+        s->since_hurt += dt;
+        if (s->dead) continue;
         s->mana = fminf(s->maxmana, s->mana + (3.0f + 0.1f * s->level) * dt);
         if (s->since_hurt > 4.0f) s->hp = fminf(s->maxhp, s->hp + (1.5f + 2.0f * s->ranks[SK_SECOND_WIND]) * dt);
-        if (g->mouse || g->opt.demo) {
-            if (g->attack_held) try_attack(g, false);
-            else if (g->alt_held) try_attack(g, true);
-        }
+        bool mouse = ps->keyboard && (g->mouse || g->opt.demo);
+        bool attack = (mouse && ps->attack_held) || ps->pad_attack;
+        bool alt = (mouse && ps->alt_held) || ps->pad_alt;
+        if (attack) try_attack(g, ps, false);
+        else if (alt) try_attack(g, ps, true);
     }
     update_projectiles(g, dt);
     update_particles(g, dt);
@@ -350,8 +385,7 @@ void combat_update(Game *g, float dt) {
 
 /* ---------- drawing ---------- */
 
-void combat_draw_world(Game *g) {
-    vec3 eye = player_eye(&g->pl);
+void combat_draw_world(Game *g, vec3 eye) {
     for (int i = 0; i < MAX_PROJECTILES; i++) {
         Projectile *p = &g->proj[i];
         if (!p->alive) continue;
@@ -384,9 +418,20 @@ void combat_draw_world(Game *g) {
     }
 }
 
-void combat_collect_lights(Game *g, SceneParams *sp) {
-    vec3 eye = player_eye(&g->pl);
+void combat_collect_lights(Game *g, PlayerSlot *viewer, SceneParams *sp) {
+    vec3 eye = player_eye(&viewer->pl);
     sp->ndl = 0;
+    /* the other players' torches (the viewer's own torch is part of the scene lighting) */
+    for (int i = 0; i < MAX_PLAYERS && sp->ndl < MAX_DLIGHTS; i++) {
+        PlayerSlot *ps = &g->players[i];
+        if (!ps->active || ps == viewer || ps->st.dead) continue;
+        vec3 p = player_eye(&ps->pl);
+        if (v3_len(v3_sub(p, eye)) > 60.0f) continue;
+        sp->dl_pos[sp->ndl] = p;
+        sp->dl_col[sp->ndl] = v3(1.0f, 0.62f, 0.3f);
+        sp->dl_rad[sp->ndl] = 9.0f;
+        sp->ndl++;
+    }
     /* flashes first, then the nearest glowing projectiles */
     for (int i = 0; i < MAX_FLASHES && sp->ndl < MAX_DLIGHTS; i++) {
         Flash *f = &g->flashes[i];
@@ -411,13 +456,13 @@ void combat_collect_lights(Game *g, SceneParams *sp) {
 }
 
 /* Weapon in view: drawn in camera space (x right, y up, -z forward). */
-void combat_draw_viewmodel(Game *g) {
-    Stats *s = &g->st;
-    if (s->dead || g->pl.fly) return;
-    vec3 light = game_light_at(g, player_eye(&g->pl));
+void combat_draw_viewmodel(Game *g, PlayerSlot *ps) {
+    Stats *s = &ps->st;
+    if (s->dead || ps->pl.fly) return;
+    vec3 light = game_light_at(g, player_eye(&ps->pl));
     light = v3(fminf(light.x + 0.15f, 1.3f), fminf(light.y + 0.12f, 1.3f), fminf(light.z + 0.1f, 1.3f));
     float t = s->swing_len > 0 ? 1.0f - s->swing / s->swing_len : 1.0f; /* 0 at start of an attack */
-    float walk = sinf(g->pl.bob * 2.0f) * 0.015f;
+    float walk = sinf(ps->pl.bob * 2.0f) * 0.015f;
     switch (s->weapon) {
     case WPN_SWORD: {
         /* swing from upper right to lower left */

@@ -6,10 +6,12 @@
 #include "render/renderer.h"
 #include "world/layout.h"
 
-/* Streams chunks around the camera: generation and meshing run on worker
- * threads, uploads happen on the main thread. Chunks live in a 3D ring buffer
- * indexed by coordinates modulo its size, so far-away chunks are recycled
- * automatically when their slot is needed. */
+/* Streams chunks around one or more centres (one per player, so split-screen
+ * players can roam freely). Generation and meshing run on worker threads,
+ * uploads happen on the main thread. Chunks live in a fixed pool with a hash
+ * index by coordinates; chunks far from every centre are recycled. */
+
+#define CHUNKMAP_MAX_CENTRES 4
 
 enum { CH_EMPTY, CH_GENERATING, CH_READY };
 
@@ -35,8 +37,11 @@ typedef struct ChunkMap {
     const World *world;
     Renderer *renderer;
     int rh, rv;      /* mesh radius in chunks (horizontal, vertical) */
-    int dx, dy, dz;  /* ring buffer size */
-    Chunk *slots;
+    Chunk *pool;     /* iterate pool[0..pool_cap) and check `used` */
+    int pool_cap;
+    int *free_list, nfree;
+    int *index;      /* open addressing: pool index, -1 empty, -2 deleted */
+    int index_cap, index_dead;
     int (*offsets)[3];
     int noffsets;
     ChunkStats stats;
@@ -44,9 +49,11 @@ typedef struct ChunkMap {
 
 void chunkmap_init(ChunkMap *m, const World *w, Renderer *r, int rh, int rv);
 void chunkmap_shutdown(ChunkMap *m);
-/* Collects finished jobs and schedules new ones around pos. */
-void chunkmap_update(ChunkMap *m, vec3 pos);
-void chunkmap_draw(ChunkMap *m);
+/* Collects finished jobs, schedules new ones around the centres and recycles
+ * chunks that are far from all of them. */
+void chunkmap_update(ChunkMap *m, const vec3 *centres, int ncentres);
+/* Draws meshed chunks within the view range of cam (uses the renderer's current view-projection). */
+void chunkmap_draw(ChunkMap *m, vec3 cam);
 /* Loaded chunk or NULL. */
 Chunk *chunkmap_get(ChunkMap *m, int cx, int cy, int cz);
 /* Block at world coordinates; *known is false if the chunk is not generated yet. */

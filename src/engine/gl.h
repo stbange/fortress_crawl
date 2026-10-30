@@ -21,6 +21,7 @@
     X(void, Clear, (GLbitfield)) \
     X(void, ClearColor, (GLfloat, GLfloat, GLfloat, GLfloat)) \
     X(void, Viewport, (GLint, GLint, GLsizei, GLsizei)) \
+    X(void, Scissor, (GLint, GLint, GLsizei, GLsizei)) \
     X(void, Enable, (GLenum)) \
     X(void, Disable, (GLenum)) \
     X(void, CullFace, (GLenum)) \
@@ -92,6 +93,7 @@ FC_GL_FUNCS(FC_GL_DECLARE)
 #define glClear fcgl_Clear
 #define glClearColor fcgl_ClearColor
 #define glViewport fcgl_Viewport
+#define glScissor fcgl_Scissor
 #define glEnable fcgl_Enable
 #define glDisable fcgl_Disable
 #define glCullFace fcgl_CullFace

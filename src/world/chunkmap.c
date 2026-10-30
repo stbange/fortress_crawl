@@ -24,8 +24,40 @@ typedef struct MeshJob {
     int slot;
 } MeshJob;
 
-static int slot_index(const ChunkMap *m, int cx, int cy, int cz) {
-    return floormod(cx, m->dx) + floormod(cy, m->dy) * m->dx + floormod(cz, m->dz) * m->dx * m->dy;
+/* ---------- pool + hash index ---------- */
+
+static u32 chunk_hash(int cx, int cy, int cz) {
+    return (u32)mix64(((u64)(u32)cx << 42) ^ ((u64)(u32)cy << 21) ^ (u64)(u32)cz);
+}
+
+static int index_find(const ChunkMap *m, int cx, int cy, int cz) {
+    u32 mask = (u32)m->index_cap - 1;
+    for (u32 i = chunk_hash(cx, cy, cz) & mask;; i = (i + 1) & mask) {
+        int v = m->index[i];
+        if (v == -1) return -1;
+        if (v >= 0) {
+            const Chunk *c = &m->pool[v];
+            if (c->cx == cx && c->cy == cy && c->cz == cz) return (int)i;
+        }
+    }
+}
+
+static void index_insert(ChunkMap *m, int pool_i) {
+    const Chunk *c = &m->pool[pool_i];
+    u32 mask = (u32)m->index_cap - 1;
+    for (u32 i = chunk_hash(c->cx, c->cy, c->cz) & mask;; i = (i + 1) & mask)
+        if (m->index[i] < 0) {
+            if (m->index[i] == -2) m->index_dead--;
+            m->index[i] = pool_i;
+            return;
+        }
+}
+
+static void index_rebuild(ChunkMap *m) {
+    for (int i = 0; i < m->index_cap; i++) m->index[i] = -1;
+    m->index_dead = 0;
+    for (int i = 0; i < m->pool_cap; i++)
+        if (m->pool[i].used) index_insert(m, i);
 }
 
 static int offset_cmp(const void *a, const void *b) {
@@ -42,9 +74,17 @@ void chunkmap_init(ChunkMap *m, const World *w, Renderer *r, int rh, int rv) {
     m->renderer = r;
     m->rh = rh;
     m->rv = rv;
-    m->dx = m->dz = 2 * (rh + 1) + 3;
-    m->dy = 2 * (rv + 1) + 3;
-    m->slots = calloc((size_t)m->dx * m->dy * m->dz, sizeof(Chunk));
+    /* room for the kept area (generation radius + 1) around every centre */
+    int kh = 2 * (rh + 2) + 1, kv = 2 * (rv + 2) + 1;
+    m->pool_cap = CHUNKMAP_MAX_CENTRES * kh * kh * kv;
+    m->pool = calloc((size_t)m->pool_cap, sizeof(Chunk));
+    m->free_list = malloc(sizeof(int) * (size_t)m->pool_cap);
+    for (int i = 0; i < m->pool_cap; i++) m->free_list[i] = m->pool_cap - 1 - i;
+    m->nfree = m->pool_cap;
+    m->index_cap = 1;
+    while (m->index_cap < m->pool_cap * 2) m->index_cap <<= 1;
+    m->index = malloc(sizeof(int) * (size_t)m->index_cap);
+    for (int i = 0; i < m->index_cap; i++) m->index[i] = -1;
     int gh = rh + 1, gv = rv + 1;
     m->offsets = malloc(sizeof(int[3]) * (size_t)((2 * gh + 1) * (2 * gh + 1) * (2 * gv + 1)));
     for (int y = -gv; y <= gv; y++)
@@ -63,13 +103,14 @@ void chunkmap_init(ChunkMap *m, const World *w, Renderer *r, int rh, int rv) {
 void chunkmap_shutdown(ChunkMap *m) {
     /* wait for outstanding jobs so nothing writes into freed memory */
     while (jobs_in_flight() > 0) jobs_poll(1000);
-    int n = m->dx * m->dy * m->dz;
-    for (int i = 0; i < n; i++) {
-        renderer_free_mesh(&m->slots[i].vao, &m->slots[i].vbo);
-        free(m->slots[i].blocks);
-        free(m->slots[i].light);
+    for (int i = 0; i < m->pool_cap; i++) {
+        renderer_free_mesh(&m->pool[i].vao, &m->pool[i].vbo);
+        free(m->pool[i].blocks);
+        free(m->pool[i].light);
     }
-    free(m->slots);
+    free(m->pool);
+    free(m->free_list);
+    free(m->index);
     free(m->offsets);
     for (int i = 0; i < MAX_SCRATCH; i++) {
         mesh_scratch_free(g_scratch[i]);
@@ -78,9 +119,8 @@ void chunkmap_shutdown(ChunkMap *m) {
 }
 
 Chunk *chunkmap_get(ChunkMap *m, int cx, int cy, int cz) {
-    Chunk *c = &m->slots[slot_index(m, cx, cy, cz)];
-    if (!c->used || c->cx != cx || c->cy != cy || c->cz != cz) return NULL;
-    return c;
+    int i = index_find(m, cx, cy, cz);
+    return i < 0 ? NULL : &m->pool[m->index[i]];
 }
 
 Block chunkmap_block(ChunkMap *m, int wx, int wy, int wz, bool *known) {
@@ -141,6 +181,12 @@ static void mesh_done(Job *j) {
 
 static bool evict(ChunkMap *m, Chunk *c) {
     if (c->pins > 0 || c->state == CH_GENERATING || c->mesh_queued) return false;
+    int slot = index_find(m, c->cx, c->cy, c->cz);
+    if (slot >= 0) {
+        m->index[slot] = -2;
+        m->index_dead++;
+    }
+    m->free_list[m->nfree++] = (int)(c - m->pool);
     if (c->has_mesh) renderer_slot_ref(m->renderer, c->theme_slot, -1);
     renderer_free_mesh(&c->vao, &c->vbo);
     free(c->light);
@@ -152,10 +198,14 @@ static bool evict(ChunkMap *m, Chunk *c) {
     return true;
 }
 
-static void submit_gen(ChunkMap *m, Chunk *c, int cx, int cy, int cz) {
+static bool submit_gen(ChunkMap *m, int cx, int cy, int cz) {
+    if (m->nfree == 0) return false;
+    int pi = m->free_list[--m->nfree];
+    Chunk *c = &m->pool[pi];
     if (!c->blocks) c->blocks = malloc(CHUNK_VOL);
     c->used = true;
     c->cx = cx; c->cy = cy; c->cz = cz;
+    index_insert(m, pi);
     c->state = CH_GENERATING;
     c->has_mesh = c->mesh_queued = false;
     c->pins = 0;
@@ -165,6 +215,7 @@ static void submit_gen(ChunkMap *m, Chunk *c, int cx, int cy, int cz) {
     g->c = c;
     g->w = m->world;
     jobs_submit(&g->base);
+    return true;
 }
 
 static bool submit_mesh(ChunkMap *m, Chunk *c) {
@@ -193,36 +244,52 @@ static bool submit_mesh(ChunkMap *m, Chunk *c) {
     return true;
 }
 
-void chunkmap_update(ChunkMap *m, vec3 pos) {
+static bool near_any(const ChunkMap *m, const int (*pc)[3], int n, int cx, int cy, int cz, int extra) {
+    for (int i = 0; i < n; i++)
+        if (abs(cx - pc[i][0]) <= m->rh + extra && abs(cz - pc[i][2]) <= m->rh + extra && abs(cy - pc[i][1]) <= m->rv + extra)
+            return true;
+    return false;
+}
+
+void chunkmap_update(ChunkMap *m, const vec3 *centres, int ncentres) {
     jobs_poll(64);
-    int pcx = floordiv((int)floorf(pos.x), CHUNK), pcy = floordiv((int)floorf(pos.y), CHUNK),
-        pcz = floordiv((int)floorf(pos.z), CHUNK);
-    int budget = (jobs_worker_count() ? jobs_worker_count() * 3 + 2 : 12) - jobs_in_flight();
-    for (int i = 0; i < m->noffsets && budget > 0; i++) {
-        int ox = m->offsets[i][0], oy = m->offsets[i][1], oz = m->offsets[i][2];
-        int cx = pcx + ox, cy = pcy + oy, cz = pcz + oz;
-        Chunk *c = &m->slots[slot_index(m, cx, cy, cz)];
-        if (c->used && (c->cx != cx || c->cy != cy || c->cz != cz)) {
-            if (!evict(m, c)) continue;
-        }
-        if (!c->used) {
-            submit_gen(m, c, cx, cy, cz);
-            budget--;
-            continue;
-        }
-        bool in_mesh_range = abs(ox) <= m->rh && abs(oz) <= m->rh && abs(oy) <= m->rv;
-        if (in_mesh_range && c->state == CH_READY && !c->has_mesh && !c->mesh_queued) {
-            if (submit_mesh(m, c)) budget--;
-        }
+    int pc[CHUNKMAP_MAX_CENTRES][3];
+    int n = MINI(ncentres, CHUNKMAP_MAX_CENTRES);
+    for (int i = 0; i < n; i++) {
+        pc[i][0] = floordiv((int)floorf(centres[i].x), CHUNK);
+        pc[i][1] = floordiv((int)floorf(centres[i].y), CHUNK);
+        pc[i][2] = floordiv((int)floorf(centres[i].z), CHUNK);
     }
+    /* recycle chunks that no centre needs any more */
+    for (int i = 0; i < m->pool_cap; i++) {
+        Chunk *c = &m->pool[i];
+        if (c->used && !near_any(m, (const int (*)[3])pc, n, c->cx, c->cy, c->cz, 2)) evict(m, c);
+    }
+    if (m->index_dead > m->index_cap / 4) index_rebuild(m);
+
+    /* nearest first, taking turns between the centres so every player's view fills in */
+    int budget = (jobs_worker_count() ? jobs_worker_count() * 3 + 2 : 12) - jobs_in_flight();
+    for (int i = 0; i < m->noffsets && budget > 0; i++)
+        for (int k = 0; k < n && budget > 0; k++) {
+            int ox = m->offsets[i][0], oy = m->offsets[i][1], oz = m->offsets[i][2];
+            int cx = pc[k][0] + ox, cy = pc[k][1] + oy, cz = pc[k][2] + oz;
+            Chunk *c = chunkmap_get(m, cx, cy, cz);
+            if (!c) {
+                if (submit_gen(m, cx, cy, cz)) budget--;
+                continue;
+            }
+            bool in_mesh_range = abs(ox) <= m->rh && abs(oz) <= m->rh && abs(oy) <= m->rv;
+            if (in_mesh_range && c->state == CH_READY && !c->has_mesh && !c->mesh_queued) {
+                if (submit_mesh(m, c)) budget--;
+            }
+        }
     /* stats */
     memset(&m->stats, 0, sizeof m->stats);
-    int n = m->dx * m->dy * m->dz;
-    for (int i = 0; i < n; i++) {
-        if (!m->slots[i].used) continue;
+    for (int i = 0; i < m->pool_cap; i++) {
+        if (!m->pool[i].used) continue;
         m->stats.loaded++;
-        if (m->slots[i].state == CH_READY) m->stats.ready++;
-        if (m->slots[i].has_mesh) m->stats.meshed++;
+        if (m->pool[i].state == CH_READY) m->stats.ready++;
+        if (m->pool[i].has_mesh) m->stats.meshed++;
     }
     m->stats.jobs = jobs_in_flight();
 }
@@ -248,7 +315,7 @@ static bool aabb_visible(const float planes[6][4], float x0, float y0, float z0,
     return true;
 }
 
-void chunkmap_draw(ChunkMap *m) {
+void chunkmap_draw(ChunkMap *m, vec3 cam) {
     const float *a = m->renderer->vp.m;
     float planes[6][4];
     for (int i = 0; i < 3; i++)
@@ -257,12 +324,16 @@ void chunkmap_draw(ChunkMap *m) {
             float sign = s ? -1.0f : 1.0f;
             for (int k = 0; k < 4; k++) p[k] = a[k * 4 + 3] + sign * a[k * 4 + i];
         }
-    int n = m->dx * m->dy * m->dz;
     m->stats.drawn = 0;
-    for (int i = 0; i < n; i++) {
-        Chunk *c = &m->slots[i];
+    /* other players' areas may be loaded too: only draw what this view could see */
+    float range = (float)((m->rh + 1) * CHUNK);
+    for (int i = 0; i < m->pool_cap; i++) {
+        Chunk *c = &m->pool[i];
         if (!c->used || !c->has_mesh || c->nsolid + c->nsprite == 0) continue;
         float x0 = (float)(c->cx * CHUNK), y0 = (float)(c->cy * CHUNK), z0 = (float)(c->cz * CHUNK);
+        if (fabsf(x0 + 16.0f - cam.x) > range || fabsf(z0 + 16.0f - cam.z) > range ||
+            fabsf(y0 + 16.0f - cam.y) > (float)((m->rv + 1) * CHUNK))
+            continue;
         if (!aabb_visible(planes, x0, y0, z0, (float)CHUNK)) continue;
         renderer_draw_chunk(m->renderer, c->vao, c->nsolid, c->nsprite, v3(x0, y0, z0));
         m->stats.drawn++;

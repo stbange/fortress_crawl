@@ -58,11 +58,12 @@ bool explore_get(Game *g, int x, int y, int z) {
     return (c->bits[i >> 3] >> (i & 7)) & 1;
 }
 
-void explore_update(Game *g, float dt) {
-    g->explored.timer -= dt;
-    if (g->explored.timer > 0) return;
-    g->explored.timer = 0.1f;
-    vec3 eye = player_eye(&g->pl);
+/* Each player looks around for themselves; the map they fill is shared. */
+void explore_update(Game *g, PlayerSlot *ps, float dt) {
+    ps->explore_timer -= dt;
+    if (ps->explore_timer > 0) return;
+    ps->explore_timer = 0.1f;
+    vec3 eye = player_eye(&ps->pl);
     static const float PITCH[3] = { -0.45f, 0.0f, 0.35f };
     for (int pi = 0; pi < 3; pi++)
         for (int i = 0; i < 240; i++) {
@@ -86,17 +87,24 @@ void explore_update(Game *g, float dt) {
         }
 }
 
-/* Top-down map of explored cells around the player; north (-Z) is up. */
-void explore_draw_map(Game *g) {
-    Renderer *r = &g->r;
-    int cells = 110, px = 2;
+static void map_arrow(float cx, float cy, float yaw, vec3 c) {
+    for (int k = 0; k < 5; k++) {
+        float d = (float)k * 1.6f;
+        batch2d_rect(cx + cosf(yaw) * d - 1, cy + sinf(yaw) * d - 1, 3, 3, c.x, c.y, c.z, 1.0f);
+    }
+}
+
+/* Top-down map of explored cells around the player, sized to their view; north (-Z) is up. */
+void explore_draw_map(Game *g, PlayerSlot *ps, int w, int h) {
+    int px = 2;
+    int cells = MINI(110, (MINI(w, h) - 30) / px);
     int size = cells * px;
-    float ox = (r->fbo_w - size) * 0.5f, oy = (r->fbo_h - size) * 0.5f + 4;
-    batch2d_begin(r->fbo_w, r->fbo_h);
-    batch2d_rect(0, 0, (float)r->fbo_w, (float)r->fbo_h, 0, 0, 0, 0.55f);
+    float ox = (w - size) * 0.5f, oy = (h - size) * 0.5f + 4;
+    batch2d_begin(w, h);
+    batch2d_rect(0, 0, (float)w, (float)h, 0, 0, 0, 0.55f);
     batch2d_rect(ox - 3, oy - 3, size + 6.0f, size + 6.0f, 0.35f, 0.28f, 0.18f, 1.0f);
     batch2d_rect(ox - 2, oy - 2, size + 4.0f, size + 4.0f, 0.06f, 0.05f, 0.05f, 1.0f);
-    int pxw = (int)floorf(g->pl.pos.x), pyw = (int)floorf(g->pl.pos.y + 0.01f), pzw = (int)floorf(g->pl.pos.z);
+    int pxw = (int)floorf(ps->pl.pos.x), pyw = (int)floorf(ps->pl.pos.y + 0.01f), pzw = (int)floorf(ps->pl.pos.z);
     for (int j = 0; j < cells; j++)
         for (int i = 0; i < cells; i++) {
             int wx = pxw + i - cells / 2, wz = pzw + j - cells / 2;
@@ -123,18 +131,23 @@ void explore_draw_map(Game *g) {
                 break;
             }
         }
-    /* player arrow */
+    /* the other players in their colours, then you */
     float cx = ox + (cells / 2) * px + 1, cy = oy + (cells / 2) * px + 1;
-    for (int k = 0; k < 5; k++) {
-        float d = (float)k * 1.6f;
-        batch2d_rect(cx + cosf(g->pl.yaw) * d - 1, cy + sinf(g->pl.yaw) * d - 1, 3, 3, 1.0f, 0.25f, 0.15f, 1.0f);
+    for (int i = 0; i < MAX_PLAYERS; i++) {
+        PlayerSlot *o = &g->players[i];
+        if (!o->active || o == ps) continue;
+        float mx = cx + (floorf(o->pl.pos.x) - pxw) * px, my = cy + (floorf(o->pl.pos.z) - pzw) * px;
+        mx = clampf(mx, ox, ox + size - 3), my = clampf(my, oy, oy + size - 3);
+        map_arrow(mx, my, o->pl.yaw, o->color);
     }
+    map_arrow(cx, cy, ps->pl.yaw, g->nplayers > 1 ? ps->color : v3(1.0f, 0.25f, 0.15f));
     batch2d_flush();
-    font_begin(r->fbo_w, r->fbo_h);
+    font_begin(w, h);
     font_text((int)ox + size / 2 - 3, (int)oy - 12, "N", 0.9f, 0.8f, 0.6f);
     char buf[160];
-    snprintf(buf, sizeof buf, "MAP - %s", g->place);
+    snprintf(buf, sizeof buf, "MAP - %s", ps->place);
+    if (size < 200) buf[MINI((int)sizeof buf - 1, size / 6)] = 0; /* 6 px per glyph */
     font_text((int)ox, (int)(oy + size + 5), buf, 0.85f, 0.75f, 0.55f);
-    font_text((int)(ox + size - 60), (int)(oy + size + 5), "M: CLOSE", 0.6f, 0.55f, 0.45f);
+    if (size >= 160) font_text((int)(ox + size - 60), (int)(oy + size + 5), ps->pad && !ps->keyboard ? "B: CLOSE" : "M: CLOSE", 0.6f, 0.55f, 0.45f);
     font_end();
 }
