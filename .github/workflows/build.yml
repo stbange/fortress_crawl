@@ -1,0 +1,48 @@
+name: build
+
+on:
+  push:
+    branches: [main, "claude/**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libx11-dev libxext-dev libxi-dev libxfixes-dev libxrandr-dev libxcursor-dev libxss-dev libgl-dev libegl-dev
+      - name: Build
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j
+      - name: World generation tests
+        run: ./build/test_worldgen 1337 && ./build/test_worldgen 42
+
+  web:
+    runs-on: ubuntu-24.04
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 4.0.10
+      - name: Build for the browser
+        run: ./web/build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fortress-crawl-web
+          path: build-web/dist
+      # Deploys to Cloudflare Pages when the repository has these secrets:
+      #   CLOUDFLARE_API_TOKEN  (token with the "Cloudflare Pages: Edit" permission)
+      #   CLOUDFLARE_ACCOUNT_ID
+      - name: Deploy to Cloudflare Pages
+        if: github.event_name != 'pull_request' && env.CLOUDFLARE_API_TOKEN != ''
+        run: |
+          npx --yes wrangler@3 pages project create fortress-crawl --production-branch=main || true
+          npx --yes wrangler@3 pages deploy build-web/dist --project-name=fortress-crawl --branch="${GITHUB_REF_NAME}" --commit-dirty=true

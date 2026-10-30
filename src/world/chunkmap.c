@@ -56,7 +56,7 @@ void chunkmap_init(ChunkMap *m, const World *w, Renderer *r, int rh, int rv) {
                 m->noffsets++;
             }
     qsort(m->offsets, (size_t)m->noffsets, sizeof(int[3]), offset_cmp);
-    int nw = jobs_worker_count();
+    int nw = MAXI(jobs_worker_count(), 1);
     for (int i = 0; i < nw && i < MAX_SCRATCH; i++) g_scratch[i] = mesh_scratch_new();
 }
 
@@ -197,7 +197,7 @@ void chunkmap_update(ChunkMap *m, vec3 pos) {
     jobs_poll(64);
     int pcx = floordiv((int)floorf(pos.x), CHUNK), pcy = floordiv((int)floorf(pos.y), CHUNK),
         pcz = floordiv((int)floorf(pos.z), CHUNK);
-    int budget = jobs_worker_count() * 3 + 2 - jobs_in_flight();
+    int budget = (jobs_worker_count() ? jobs_worker_count() * 3 + 2 : 12) - jobs_in_flight();
     for (int i = 0; i < m->noffsets && budget > 0; i++) {
         int ox = m->offsets[i][0], oy = m->offsets[i][1], oz = m->offsets[i][2];
         int cx = pcx + ox, cy = pcy + oy, cz = pcz + oz;

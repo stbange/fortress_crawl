@@ -38,8 +38,53 @@ cmake --build build -j
 ./build/fortress_crawl
 ```
 
-On Linux, building SDL3 from source needs the usual X11/Wayland and GL development
-packages, for example on Ubuntu: `libx11-dev libxext-dev libgl-dev libegl-dev`.
+On Linux, building SDL3 from source needs the X11 and GL development packages. On
+Ubuntu (also inside WSL):
+
+```bash
+sudo apt install libx11-dev libxext-dev libxi-dev libxfixes-dev libxrandr-dev libxcursor-dev libxss-dev libgl-dev libegl-dev
+```
+
+`libxi-dev` (XInput2) matters: without it SDL3 has no relative mouse mode on X11, and
+CMake prints a warning. If you installed it after a first build, delete `build/` and
+configure again so SDL3 is rebuilt.
+
+### Mouse under WSL (WSLg)
+
+WSLg passes the Windows cursor to Linux as absolute positions and cannot lock it to the
+window. The game detects WSL and stops SDL from re-centring the cursor, because under
+WSLg those re-centring jumps come back as motion in the opposite direction (inverted,
+jittery look). The cursor is then not locked to the window; that is a WSLg limitation.
+If relative mouse mode is missing entirely, the game falls back to grabbing the cursor
+itself. You can override the detection with `--recenter` / `--no-recenter`, and
+F7 / F8 invert the mouse's Y / X axis. For the best experience, build natively on
+Windows or play the web version.
+
+## Web version
+
+The same code builds for the browser with Emscripten (WebGL 2, single-threaded; chunk
+generation runs in time slices between frames):
+
+```bash
+source /path/to/emsdk/emsdk_env.sh     # Emscripten 4.0.10 was used
+./web/build.sh                         # -> build-web/dist: index.html, index.js, index.wasm
+python3 -m http.server -d build-web/dist 8000
+```
+
+Open http://localhost:8000 and click into the page to lock the mouse; Esc releases it.
+
+### Deployment to Cloudflare Pages
+
+`.github/workflows/build.yml` builds the desktop version with tests and the web
+version on every push. If the repository has these two secrets, it also deploys the web
+version to the Cloudflare Pages project `fortress-crawl` (created on first run):
+
+- `CLOUDFLARE_API_TOKEN`: an API token with the *Cloudflare Pages: Edit* permission
+  (Cloudflare dashboard -> My Profile -> API Tokens -> Create Token)
+- `CLOUDFLARE_ACCOUNT_ID`: shown on the dashboard's Workers & Pages overview
+
+Pushes to `main` go to production (`fortress-crawl.pages.dev`); other branches get
+preview URLs.
 
 ## Controls
 
@@ -58,7 +103,9 @@ packages, for example on Ubuntu: `libx11-dev libxext-dev libgl-dev libegl-dev`.
 | F2 | internal resolution 320x180 / 480x270 / 640x360 |
 | F3 / F4 | ordered dithering / PS1-style vertex snapping |
 | F5 / F6 | full-bright (inspect the generator) / player torch |
-| F12 | save `screenshot.bmp` |
+| F7 / F8 | invert mouse Y / X |
+| - / = | mouse sensitivity down / up |
+| F12 | save `screenshot.bmp` (desktop only) |
 | Esc | release the mouse (press again to quit) |
 
 Command line:
@@ -66,6 +113,7 @@ Command line:
 ```
 fortress_crawl [--seed N] [--pos x y z] [--look yaw pitch] [--fly] [--radius n] [--vradius n]
                [--window w h] [--lowres w h] [--debug]
+               [--invert-x] [--invert-y] [--sens s] [--recenter | --no-recenter]
                [--shot file.bmp] [--shot-time seconds] [--demo combat|sword|death|skills|map]
 ```
 

@@ -1,10 +1,19 @@
 #include "engine/shader.h"
 
 #include <SDL3/SDL.h>
+#include <string.h>
 
 static GLuint compile(const char *name, GLenum type, const char *src) {
     GLuint s = glCreateShader(type);
+#ifdef __EMSCRIPTEN__
+    /* Shaders are written for GLSL 3.30 core; GLSL ES 3.00 only needs a different header. */
+    const char *core = "#version 330 core\n";
+    if (strncmp(src, core, strlen(core)) == 0) src += strlen(core);
+    const char *srcs[2] = { "#version 300 es\nprecision highp float;\nprecision highp int;\nprecision highp sampler2D;\n", src };
+    glShaderSource(s, 2, srcs, NULL);
+#else
     glShaderSource(s, 1, &src, NULL);
+#endif
     glCompileShader(s);
     GLint ok = 0;
     glGetShaderiv(s, GL_COMPILE_STATUS, &ok);

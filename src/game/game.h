@@ -108,6 +108,10 @@ typedef struct Options {
     bool hud;
     bool demo; /* screenshot helper: spawn monsters in view and fire once */
     float shot_time; /* seconds after loading to take the screenshot */
+    bool invert_x, invert_y;
+    bool grab; /* capture the mouse even in screenshot mode (input tests) */
+    int recenter; /* 1 force, -1 never, 0 auto (off under WSL) */
+    float sens;
 } Options;
 
 typedef struct Game {
@@ -162,6 +166,8 @@ typedef struct Game {
 /* game.c */
 void game_init(Game *g);
 void game_event(Game *g, const SDL_Event *e);
+/* Mouse look from a motion in window pixels. */
+void game_look(Game *g, float dx, float dy);
 void game_update(Game *g, const PlayerInput *in, float dt);
 void game_render(Game *g);
 int game_solid(void *user, int x, int y, int z);

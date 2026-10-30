@@ -9,7 +9,8 @@ typedef struct Job {
     struct Job *next;
 } Job;
 
-int jobs_init(int threads); /* returns the number of workers started */
+/* Returns the number of workers started. 0 workers: jobs run inside jobs_poll() instead. */
+int jobs_init(int threads);
 void jobs_shutdown(void);
 void jobs_submit(Job *job);
 int jobs_poll(int max_done); /* runs finished jobs' done callbacks, returns how many */

@@ -4,7 +4,11 @@
 /* Minimal OpenGL 3.3 core loader built on SDL_GL_GetProcAddress.
  * SDL_opengl.h provides types and constants; every function we call goes
  * through a pointer named fcgl_<name>, and a macro maps gl<Name> onto it. */
+#ifdef __EMSCRIPTEN__
+#include <GLES3/gl3.h> /* WebGL 2 is OpenGL ES 3.0 */
+#else
 #include <SDL3/SDL_opengl.h>
+#endif
 #include <stdbool.h>
 
 #ifdef _WIN32

@@ -189,9 +189,6 @@ void game_event(Game *g, const SDL_Event *e) {
     } else if (e->type == SDL_EVENT_MOUSE_WHEEL && !g->show_skills) {
         int d = e->wheel.y > 0 ? WPN_COUNT - 1 : 1;
         g->st.weapon = (g->st.weapon + d) % WPN_COUNT;
-    } else if (e->type == SDL_EVENT_MOUSE_MOTION && g->mouse && !g->show_skills && !g->show_map) {
-        g->pl.yaw += e->motion.xrel * 0.0025f;
-        g->pl.pitch = clampf(g->pl.pitch - e->motion.yrel * 0.0025f, -1.55f, 1.55f);
     } else if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat) {
         SDL_Keycode k = e->key.key;
         if (g->show_skills && k != SDLK_TAB && k != SDLK_ESCAPE) { skills_key(g, k); return; }
@@ -211,6 +208,16 @@ void game_event(Game *g, const SDL_Event *e) {
         case SDLK_F4: g->r.set.vertex_snap = !g->r.set.vertex_snap; break;
         case SDLK_F5: g->r.set.fullbright = !g->r.set.fullbright; break;
         case SDLK_F6: g->r.set.torch = !g->r.set.torch; break;
+        case SDLK_F7:
+            g->opt.invert_y = !g->opt.invert_y;
+            game_banner(g, g->opt.invert_y ? "MOUSE Y INVERTED" : "MOUSE Y NORMAL");
+            break;
+        case SDLK_F8:
+            g->opt.invert_x = !g->opt.invert_x;
+            game_banner(g, g->opt.invert_x ? "MOUSE X INVERTED" : "MOUSE X NORMAL");
+            break;
+        case SDLK_MINUS: g->opt.sens = fmaxf(0.2f, g->opt.sens / 1.15f); break;
+        case SDLK_EQUALS: g->opt.sens = fminf(5.0f, g->opt.sens * 1.15f); break;
         case SDLK_F: g->pl.fly = !g->pl.fly; g->pl.vel = v3(0, 0, 0); break;
         case SDLK_T: {
             vec3 d = dir_from_angles(g->pl.yaw, g->pl.pitch);
@@ -223,6 +230,15 @@ void game_event(Game *g, const SDL_Event *e) {
         default: break;
         }
     }
+}
+
+void game_look(Game *g, float dx, float dy) {
+    if (g->show_skills || g->show_map) return;
+    float k = 0.0025f * (g->opt.sens > 0 ? g->opt.sens : 1.0f);
+    if (g->opt.invert_x) dx = -dx;
+    if (g->opt.invert_y) dy = -dy;
+    g->pl.yaw += dx * k;
+    g->pl.pitch = clampf(g->pl.pitch - dy * k, -1.55f, 1.55f);
 }
 
 /* ---------- update ---------- */
@@ -375,7 +391,8 @@ static void draw_hud(Game *g) {
         snprintf(buf, sizeof buf, "FORTRESS CRAWL  seed %llu  %.0f fps", (unsigned long long)g->world.seed, g->fps);
         font_text(4, y, buf, 0.85f, 0.7f, 0.45f); y += FONT_LINE;
         font_text(4, y, g->place, 0.9f, 0.85f, 0.75f); y += FONT_LINE;
-        snprintf(buf, sizeof buf, "pos %.1f %.1f %.1f  chunk %d %d %d", eye.x, eye.y, eye.z, cx, cy, cz);
+        snprintf(buf, sizeof buf, "pos %.1f %.1f %.1f  chunk %d %d %d  yaw %.0f pitch %.0f", eye.x, eye.y, eye.z, cx, cy, cz,
+                 g->pl.yaw * 180.0f / PI_F, g->pl.pitch * 180.0f / PI_F);
         font_text(4, y, buf, 0.7f, 0.7f, 0.7f); y += FONT_LINE;
         if (c && c->state == CH_READY) {
             snprintf(buf, sizeof buf, "danger level %d  %s / %s", c->info.level, STRATA[c->info.stratum].name, FLAVORS[c->info.flavor].name);

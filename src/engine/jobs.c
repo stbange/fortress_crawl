@@ -38,7 +38,7 @@ static int worker_main(void *p) {
 }
 
 int jobs_init(int threads) {
-    if (threads < 1) threads = 1;
+    if (threads < 0) threads = 0;
     if (threads > MAX_WORKERS) threads = MAX_WORKERS;
     g_lock = SDL_CreateMutex();
     g_cond = SDL_CreateCondition();
@@ -70,6 +70,19 @@ void jobs_submit(Job *job) {
 }
 
 int jobs_poll(int max_done) {
+    if (g_nthreads == 0) {
+        /* No worker threads (browser build): run queued jobs here for a slice of the frame. */
+        Uint64 t0 = SDL_GetTicksNS();
+        while (g_pending_head && SDL_GetTicksNS() - t0 < 9000000ULL) {
+            Job *j = g_pending_head;
+            g_pending_head = j->next;
+            if (!g_pending_head) g_pending_tail = NULL;
+            j->run(j, 0);
+            j->next = NULL;
+            if (g_done_tail) g_done_tail->next = j; else g_done_head = j;
+            g_done_tail = j;
+        }
+    }
     int n = 0;
     while (n < max_done) {
         SDL_LockMutex(g_lock);

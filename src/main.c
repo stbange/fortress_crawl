@@ -6,6 +6,9 @@
  * F4 vertex snap, F5 fullbright, F6 torch, F12 screenshot, Esc release mouse (again: quit). */
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
 
 #include "engine/font.h"
 #include "engine/gl.h"
@@ -24,6 +27,7 @@ static bool parse_args(Options *o, int argc, char **argv) {
     o->low_w = 480;
     o->low_h = 270;
     o->hud = false;
+    o->sens = 1.0f;
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i];
         if (!strcmp(a, "--seed") && i + 1 < argc) o->seed = strtoull(argv[++i], NULL, 10);
@@ -42,11 +46,19 @@ static bool parse_args(Options *o, int argc, char **argv) {
         else if (!strcmp(a, "--window") && i + 2 < argc) { o->win_w = atoi(argv[i + 1]); o->win_h = atoi(argv[i + 2]); i += 2; }
         else if (!strcmp(a, "--lowres") && i + 2 < argc) { o->low_w = atoi(argv[i + 1]); o->low_h = atoi(argv[i + 2]); i += 2; }
         else if (!strcmp(a, "--debug")) o->hud = true;
+        else if (!strcmp(a, "--grab")) o->grab = true;
+        else if (!strcmp(a, "--recenter")) o->recenter = 1;
+        else if (!strcmp(a, "--no-recenter")) o->recenter = -1;
+        else if (!strcmp(a, "--invert-x")) o->invert_x = true;
+        else if (!strcmp(a, "--invert-y")) o->invert_y = true;
+        else if (!strcmp(a, "--sens") && i + 1 < argc) o->sens = strtof(argv[++i], NULL);
         else if (!strcmp(a, "--shot-time") && i + 1 < argc) o->shot_time = strtof(argv[++i], NULL);
         else if (!strcmp(a, "--demo") && i + 1 < argc) { o->demo = true; g_demo_kind = argv[++i]; }
         else {
             SDL_Log("usage: fortress_crawl [--seed N] [--pos x y z] [--look yaw pitch] [--fly] [--radius n] [--vradius n]\n"
-                    "                      [--window w h] [--lowres w h] [--debug] [--shot file.bmp [--demo combat|map|skills]]");
+                    "                      [--window w h] [--lowres w h] [--debug] [--invert-x] [--invert-y] [--sens s]\n"
+                    "                      [--recenter | --no-recenter]\n"
+                    "                      [--shot file.bmp] [--shot-time s] [--demo combat|sword|death|skills|map]");
             return false;
         }
     }
@@ -105,34 +117,304 @@ static void demo_setup(Game *g) {
     if (!strcmp(g_demo_kind, "death")) s->hp = 1.0f; /* exercises death and shrine respawn */
 }
 
+/* ---------- mouse capture ----------
+ * Preferred: SDL relative mouse mode. On X11 it needs SDL built with XInput2, and
+ * some setups (WSLg, remote desktops) have none. Then we fall back to confining the
+ * cursor to the window, measuring movement between absolute positions and
+ * re-centring the cursor ourselves. If re-centring does not work either (the next
+ * position is not the centre), we stop trusting warps instead of reading the jump
+ * back as a huge motion in the opposite direction. */
+
+typedef struct App {
+    SDL_Window *win;
+    SDL_GLContext ctx;
+    Game *g;
+    bool running, demo_done;
+    u64 last;
+    float acc, fps_acc, shot_wait;
+    int fps_frames;
+    /* fallback mouse look */
+    bool manual;
+    bool warp_ok, warp_pending;
+    float last_x, last_y;
+    int suspicious; /* motion events that show relative mode is not really active */
+} App;
+
+static void mouse_capture(App *a, bool on);
+
+static void enable_fallback(App *a, const char *why) {
+    SDL_Log("Relative mouse mode is not available (%s). Using the cursor-grab fallback.", why);
+    SDL_Log("On Linux, install libxi-dev (XInput2) before building SDL3 for proper mouse capture.");
+    a->manual = true;
+    a->warp_ok = true;
+    a->warp_pending = false;
+}
+
+static void mouse_capture(App *a, bool on) {
+    Game *g = a->g;
+    if (on == g->mouse) return;
+    if (!on) {
+        if (a->manual) {
+            SDL_SetWindowMouseGrab(a->win, false);
+            SDL_ShowCursor();
+        } else {
+            SDL_SetWindowRelativeMouseMode(a->win, false);
+        }
+        g->mouse = false;
+        g->attack_held = g->alt_held = false;
+        return;
+    }
+    if (!a->manual && SDL_SetWindowRelativeMouseMode(a->win, true)) {
+        g->mouse = true;
+        return;
+    }
+    if (!a->manual) enable_fallback(a, SDL_GetError());
+    SDL_SetWindowMouseGrab(a->win, true);
+    SDL_HideCursor();
+    SDL_GetMouseState(&a->last_x, &a->last_y);
+    g->mouse = true;
+}
+
+/* Turns a motion event into a look delta in pixels; returns false if there is none. */
+static bool mouse_delta(App *a, const SDL_MouseMotionEvent *m, float *dx, float *dy) {
+#ifdef __EMSCRIPTEN__
+    *dx = m->xrel;
+    *dy = m->yrel;
+    return true; /* the browser's pointer lock always delivers real movement */
+#endif
+    if (!a->manual) {
+        /* SDL accepts relative mode even when the platform cannot do it, and then only
+         * delivers zero-delta events (thanks to the warp-motion hint) while the cursor
+         * moves freely. A run of those means: switch to the fallback. */
+        bool moved = m->x != a->last_x || m->y != a->last_y;
+        a->last_x = m->x;
+        a->last_y = m->y;
+        if (m->xrel == 0 && m->yrel == 0) {
+            if (moved && ++a->suspicious >= 6) {
+                SDL_SetWindowRelativeMouseMode(a->win, false);
+                a->g->mouse = false;
+                enable_fallback(a, "no relative motion events");
+                mouse_capture(a, true);
+            }
+            return false;
+        }
+        a->suspicious = 0;
+        *dx = m->xrel;
+        *dy = m->yrel;
+        return true;
+    }
+    int w, h;
+    SDL_GetWindowSize(a->win, &w, &h);
+    float cx = w * 0.5f, cy = h * 0.5f;
+    if (a->warp_pending) {
+        a->warp_pending = false;
+        bool at_centre = fabsf(m->x - cx) < 2.0f && fabsf(m->y - cy) < 2.0f;
+        if (!at_centre) {
+            /* the warp did not happen: never read this jump as movement */
+            a->warp_ok = false;
+            SDL_Log("Cursor warping does not work here; mouse look stops at the window edge.");
+        }
+        a->last_x = m->x;
+        a->last_y = m->y;
+        if (at_centre) return false;
+    }
+    *dx = m->x - a->last_x;
+    *dy = m->y - a->last_y;
+    a->last_x = m->x;
+    a->last_y = m->y;
+    /* re-centre before the cursor reaches the window border */
+    if (a->warp_ok && (m->x < w * 0.25f || m->x > w * 0.75f || m->y < h * 0.25f || m->y > h * 0.75f)) {
+        SDL_WarpMouseInWindow(a->win, cx, cy);
+        a->warp_pending = true;
+    }
+    return true;
+}
+
+/* WSLg forwards the Windows cursor as absolute positions and cannot lock it, so every
+ * time SDL re-centres the hidden cursor, the jump back comes in as motion: the view
+ * moves against the hand. Without re-centring, deltas are right (the cursor just is
+ * not confined). */
+static bool running_under_wsl(void) {
+#ifdef __linux__
+    if (getenv("WSL_DISTRO_NAME") || getenv("WSL_INTEROP")) return true;
+    FILE *f = fopen("/proc/version", "r");
+    if (f) {
+        char buf[256] = { 0 };
+        size_t n = fread(buf, 1, sizeof buf - 1, f);
+        fclose(f);
+        buf[n] = 0;
+        if (strstr(buf, "icrosoft") || strstr(buf, "WSL")) return true;
+    }
+#endif
+    return false;
+}
+
+static void handle_events(App *a) {
+    Game *g = a->g;
+    SDL_Event e;
+    while (SDL_PollEvent(&e)) {
+        if (e.type == SDL_EVENT_QUIT) a->running = false;
+        else if (e.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED || e.type == SDL_EVENT_WINDOW_RESIZED) {
+            int w, h;
+            SDL_GetWindowSizeInPixels(a->win, &w, &h);
+            renderer_resize(&g->r, w, h);
+        }
+        else if (e.type == SDL_EVENT_WINDOW_FOCUS_LOST) mouse_capture(a, false);
+        else if (e.type == SDL_EVENT_MOUSE_MOTION) {
+            float dx, dy;
+            if (g->mouse && mouse_delta(a, &e.motion, &dx, &dy)) game_look(g, dx, dy);
+        } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && !g->mouse) {
+            mouse_capture(a, true); /* the click that captures the mouse does not attack */
+        } else if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE && !e.key.repeat) {
+            if (g->show_skills || g->show_map) g->show_skills = g->show_map = false;
+            else if (g->mouse) mouse_capture(a, false);
+#ifndef __EMSCRIPTEN__
+            else a->running = false;
+#endif
+        } else if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_F12 && !e.key.repeat) {
+#ifndef __EMSCRIPTEN__
+            save_screenshot(g, "screenshot.bmp");
+#endif
+        } else {
+            game_event(g, &e);
+        }
+    }
+#ifdef __EMSCRIPTEN__
+    /* the browser releases pointer lock on its own (Esc, tab switch) */
+    if (g->mouse && !a->manual && !SDL_GetWindowRelativeMouseMode(a->win)) {
+        g->mouse = false;
+        g->attack_held = g->alt_held = false;
+    }
+#endif
+}
+
+static void screenshot_step(App *a, float frame_dt) {
+    Game *g = a->g;
+    if (chunkmap_settled(&g->map, player_eye(&g->pl))) a->shot_wait += frame_dt;
+    if (g->opt.demo && !a->demo_done && a->shot_wait > 0.5f) {
+        g->openness = game_measure_openness(g, player_eye(&g->pl));
+        for (int i = 0; i < 60; i++) game_update_atmosphere(g, 0.5f, player_eye(&g->pl));
+        demo_setup(g);
+        a->demo_done = true;
+    }
+    const char *kind = g_demo_kind ? g_demo_kind : "";
+    bool fight = !strcmp(kind, "combat") || !strcmp(kind, "sword") || !strcmp(kind, "death");
+    if (g->opt.demo && a->demo_done && fight) {
+        g->attack_held = a->shot_wait > 0.9f && a->shot_wait < 0.95f;
+        g->alt_held = false;
+    }
+    float capture = g->opt.shot_time > 0 ? g->opt.shot_time : 1.0f;
+    if (g->opt.demo && fight && g->opt.shot_time <= 0) capture = !strcmp(kind, "sword") ? 1.0f : 1.08f;
+    if (a->shot_wait > capture || (g->time > 120.0f && g->opt.shot_time <= 0)) {
+        if (!g->opt.demo) {
+            g->openness = game_measure_openness(g, player_eye(&g->pl));
+            for (int i = 0; i < 60; i++) game_update_atmosphere(g, 0.5f, player_eye(&g->pl));
+            g->banner_time = 0;
+        }
+        game_render(g);
+        SDL_Log("time %.1f  hp %.0f/%.0f  level %d  kills %d  dead %d  pos %.1f %.1f %.1f  yaw %.1f pitch %.1f", g->time,
+                g->st.hp, g->st.maxhp, g->st.level, g->st.kills, g->st.dead, g->pl.pos.x, g->pl.pos.y, g->pl.pos.z,
+                g->pl.yaw * 180.0f / PI_F, g->pl.pitch * 180.0f / PI_F);
+        save_screenshot(g, g->opt.shot);
+        a->running = false;
+    }
+}
+
+static void frame(void *user) {
+    App *a = user;
+    Game *g = a->g;
+    const float DT = 1.0f / 60.0f;
+    u64 now = SDL_GetTicksNS();
+    float frame_dt = (float)((now - a->last) / 1e9);
+    a->last = now;
+    if (frame_dt > 0.25f) frame_dt = 0.25f;
+    if (g->opt.shot) frame_dt = DT; /* deterministic stepping for screenshots */
+    a->fps_acc += frame_dt;
+    a->fps_frames++;
+    if (a->fps_acc > 0.5f) { g->fps = a->fps_frames / a->fps_acc; a->fps_acc = 0; a->fps_frames = 0; }
+
+    handle_events(a);
+
+    const bool *keys = SDL_GetKeyboardState(NULL);
+    PlayerInput in = { 0 };
+    if (g->mouse && !g->show_skills && !g->show_map) {
+        in.move_z = (keys[SDL_SCANCODE_W] ? 1.0f : 0.0f) - (keys[SDL_SCANCODE_S] ? 1.0f : 0.0f);
+        in.move_x = (keys[SDL_SCANCODE_D] ? 1.0f : 0.0f) - (keys[SDL_SCANCODE_A] ? 1.0f : 0.0f);
+        in.jump = keys[SDL_SCANCODE_SPACE];
+        in.up = keys[SDL_SCANCODE_SPACE];
+        in.crouch = keys[SDL_SCANCODE_LCTRL] || keys[SDL_SCANCODE_C];
+        in.down = in.crouch;
+        in.sprint = keys[SDL_SCANCODE_LSHIFT];
+    }
+    chunkmap_update(&g->map, player_eye(&g->pl));
+    /* do not simulate until the ground under the player exists */
+    bool ground_known = game_solid(g, (int)floorf(g->pl.pos.x), (int)floorf(g->pl.pos.y) - 1, (int)floorf(g->pl.pos.z)) >= 0;
+    a->acc += frame_dt;
+    while (a->acc >= DT) {
+        if (ground_known || g->pl.fly) game_update(g, &in, DT);
+        a->acc -= DT;
+    }
+    g->banner_time -= frame_dt;
+    game_update_atmosphere(g, frame_dt, player_eye(&g->pl));
+    game_render(g);
+    if (g->opt.shot) screenshot_step(a, frame_dt);
+    SDL_GL_SwapWindow(a->win);
+#ifdef __EMSCRIPTEN__
+    if (!a->running) emscripten_cancel_main_loop();
+#endif
+}
+
 int main(int argc, char **argv) {
+    static App app;
+    App *a = &app;
     Game *g = calloc(1, sizeof(Game));
+    a->g = g;
     if (!parse_args(&g->opt, argc, argv)) return 1;
+    SDL_SetHint(SDL_HINT_MOUSE_RELATIVE_WARP_MOTION, "1"); /* lets us detect broken relative mode */
+    bool recenter = g->opt.recenter ? g->opt.recenter > 0 : !running_under_wsl();
+    if (!recenter) {
+        SDL_SetHint(SDL_HINT_MOUSE_RELATIVE_MODE_CENTER, "0");
+        SDL_Log("Mouse: not re-centring the cursor (WSL detected or --no-recenter).");
+    }
+#ifdef __EMSCRIPTEN__
+    SDL_SetHint(SDL_HINT_EMSCRIPTEN_KEYBOARD_ELEMENT, "#canvas");
+#endif
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         SDL_Log("SDL_Init failed: %s", SDL_GetError());
         return 1;
     }
+#ifdef __EMSCRIPTEN__
+    /* WebGL 2 = OpenGL ES 3.0 */
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+#else
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);
+#endif
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-    SDL_Window *win = SDL_CreateWindow("Fortress Crawl", g->opt.win_w, g->opt.win_h, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
-    if (!win) {
+    a->win = SDL_CreateWindow("Fortress Crawl", g->opt.win_w, g->opt.win_h, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
+    if (!a->win) {
         SDL_Log("window failed: %s", SDL_GetError());
         return 1;
     }
-    SDL_GLContext ctx = SDL_GL_CreateContext(win);
-    if (!ctx || !gl_load()) {
-        SDL_Log("OpenGL 3.3 context failed: %s", SDL_GetError());
+    a->ctx = SDL_GL_CreateContext(a->win);
+    if (!a->ctx || !gl_load()) {
+        SDL_Log("OpenGL context failed: %s", SDL_GetError());
         return 1;
     }
     SDL_GL_SetSwapInterval(g->opt.shot ? 0 : 1);
     SDL_Log("GL %s / %s", (const char *)glGetString(GL_VERSION), (const char *)glGetString(GL_RENDERER));
 
+#ifdef __EMSCRIPTEN__
+    jobs_init(0); /* no threads in the browser build: jobs run in time slices on the main thread */
+#else
     int cores = SDL_GetNumLogicalCPUCores();
     jobs_init(cores > 2 ? cores - 1 : 2);
+#endif
     world_init(&g->world, g->opt.seed);
     g->r.set.low_w = g->opt.low_w;
     g->r.set.low_h = g->opt.low_h;
@@ -141,7 +423,7 @@ int main(int argc, char **argv) {
     g->r.set.fov_deg = 72.0f;
     g->res_mode = 1;
     int ww, wh;
-    SDL_GetWindowSizeInPixels(win, &ww, &wh);
+    SDL_GetWindowSizeInPixels(a->win, &ww, &wh);
     if (!renderer_init(&g->r, ww, wh)) return 1;
     font_init();
     chunkmap_init(&g->map, &g->world, &g->r, g->opt.radius, g->opt.vradius);
@@ -154,106 +436,23 @@ int main(int argc, char **argv) {
     g->fog_density = 0.02f;
     game_init(g);
 
-    if (!g->opt.shot) {
-        SDL_SetWindowRelativeMouseMode(win, true);
-        g->mouse = true;
-    }
+#ifndef __EMSCRIPTEN__
+    /* in the browser, pointer lock needs a click first */
+    if (!g->opt.shot || g->opt.grab) mouse_capture(a, true);
+#endif
 
-    u64 last = SDL_GetTicksNS();
-    float acc = 0, fps_acc = 0, shot_wait = 0;
-    int fps_frames = 0;
-    bool running = true, demo_done = false;
-    const float DT = 1.0f / 60.0f;
-    while (running) {
-        u64 now = SDL_GetTicksNS();
-        float frame_dt = (float)((now - last) / 1e9);
-        last = now;
-        if (frame_dt > 0.25f) frame_dt = 0.25f;
-        if (g->opt.shot) frame_dt = DT; /* deterministic stepping for screenshots */
-        fps_acc += frame_dt;
-        fps_frames++;
-        if (fps_acc > 0.5f) { g->fps = fps_frames / fps_acc; fps_acc = 0; fps_frames = 0; }
-
-        SDL_Event e;
-        while (SDL_PollEvent(&e)) {
-            if (e.type == SDL_EVENT_QUIT) running = false;
-            else if (e.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED) renderer_resize(&g->r, e.window.data1, e.window.data2);
-            else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && !g->mouse) {
-                SDL_SetWindowRelativeMouseMode(win, true);
-                g->mouse = true;
-            } else if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE && !e.key.repeat) {
-                if (g->show_skills || g->show_map) { g->show_skills = g->show_map = false; }
-                else if (g->mouse) { SDL_SetWindowRelativeMouseMode(win, false); g->mouse = false; g->attack_held = g->alt_held = false; }
-                else running = false;
-            } else if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_F12 && !e.key.repeat) {
-                save_screenshot(g, "screenshot.bmp");
-            } else {
-                game_event(g, &e);
-            }
-        }
-
-        const bool *keys = SDL_GetKeyboardState(NULL);
-        PlayerInput in = { 0 };
-        if (g->mouse && !g->show_skills && !g->show_map) {
-            in.move_z = (keys[SDL_SCANCODE_W] ? 1.0f : 0.0f) - (keys[SDL_SCANCODE_S] ? 1.0f : 0.0f);
-            in.move_x = (keys[SDL_SCANCODE_D] ? 1.0f : 0.0f) - (keys[SDL_SCANCODE_A] ? 1.0f : 0.0f);
-            in.jump = keys[SDL_SCANCODE_SPACE];
-            in.up = keys[SDL_SCANCODE_SPACE];
-            in.crouch = keys[SDL_SCANCODE_LCTRL] || keys[SDL_SCANCODE_C];
-            in.down = in.crouch;
-            in.sprint = keys[SDL_SCANCODE_LSHIFT];
-        }
-        vec3 eye = player_eye(&g->pl);
-        chunkmap_update(&g->map, eye);
-        /* do not simulate until the ground under the player exists */
-        bool ground_known = game_solid(g, (int)floorf(g->pl.pos.x), (int)floorf(g->pl.pos.y) - 1, (int)floorf(g->pl.pos.z)) >= 0;
-        acc += frame_dt;
-        while (acc >= DT) {
-            if (ground_known || g->pl.fly) game_update(g, &in, DT);
-            acc -= DT;
-        }
-        g->banner_time -= frame_dt;
-        game_update_atmosphere(g, frame_dt, player_eye(&g->pl));
-        game_render(g);
-
-        if (g->opt.shot) {
-            if (chunkmap_settled(&g->map, player_eye(&g->pl))) shot_wait += frame_dt;
-            if (g->opt.demo && !demo_done && shot_wait > 0.5f) {
-                g->openness = game_measure_openness(g, player_eye(&g->pl));
-                for (int i = 0; i < 60; i++) game_update_atmosphere(g, 0.5f, player_eye(&g->pl));
-                demo_setup(g);
-                demo_done = true;
-            }
-            bool fight = !strcmp(g_demo_kind ? g_demo_kind : "", "combat") || !strcmp(g_demo_kind ? g_demo_kind : "", "sword") ||
-                         !strcmp(g_demo_kind ? g_demo_kind : "", "death");
-            if (g->opt.demo && demo_done && fight) {
-                g->attack_held = shot_wait > 0.9f && shot_wait < 0.95f;
-                g->alt_held = false;
-            }
-            float capture = g->opt.shot_time > 0 ? g->opt.shot_time : 1.0f;
-            if (g->opt.demo && fight && g->opt.shot_time <= 0) capture = !strcmp(g_demo_kind, "sword") ? 1.0f : 1.08f;
-            bool ready = shot_wait > capture;
-            if (ready || (g->time > 120.0f && g->opt.shot_time <= 0)) {
-                if (!g->opt.demo) {
-                    g->openness = game_measure_openness(g, player_eye(&g->pl));
-                    for (int i = 0; i < 60; i++) game_update_atmosphere(g, 0.5f, player_eye(&g->pl));
-                    g->banner_time = 0;
-                }
-                game_render(g);
-                SDL_Log("time %.1f  hp %.0f/%.0f  level %d  kills %d  dead %d  pos %.1f %.1f %.1f", g->time, g->st.hp, g->st.maxhp,
-                        g->st.level, g->st.kills, g->st.dead, g->pl.pos.x, g->pl.pos.y, g->pl.pos.z);
-                save_screenshot(g, g->opt.shot);
-                running = false;
-            }
-        }
-        SDL_GL_SwapWindow(win);
-    }
-
+    a->running = true;
+    a->last = SDL_GetTicksNS();
+#ifdef __EMSCRIPTEN__
+    emscripten_set_main_loop_arg(frame, a, 0, true);
+#else
+    while (a->running) frame(a);
     chunkmap_shutdown(&g->map);
     jobs_shutdown();
-    SDL_GL_DestroyContext(ctx);
-    SDL_DestroyWindow(win);
+    SDL_GL_DestroyContext(a->ctx);
+    SDL_DestroyWindow(a->win);
     SDL_Quit();
     free(g);
+#endif
     return 0;
 }

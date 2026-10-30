@@ -1,3 +1,4 @@
 build/
 *.bmp
 *.ppm
+build-web/
