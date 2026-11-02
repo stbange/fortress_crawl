@@ -223,6 +223,16 @@ down), walls, water and light sources.
   torches light your view too.
 - The explored map is shared and shows everyone's position.
 
+### 6.5 Touch controls (web on phones and tablets)
+
+- Floating move stick on the left (sprint when pushed past the ring), drag to look on the
+  right, buttons for attack (hold; dragging from it also aims), alternate attack, jump,
+  crouch and weapon, and SKILL / MAP at the top. Menus are tapped directly.
+- The low-res target takes the screen's aspect ratio on touch screens (no letterbox), the
+  page goes fullscreen/landscape where allowed and asks to rotate in portrait.
+- Touch players get the gamepad aim assist; touch devices stream with radius 2.
+- The controls drive player 1, so a phone plus Bluetooth gamepads also gives split screen.
+
 ## 7. Status
 
 Done:
@@ -233,6 +243,7 @@ Done:
 - First-person controller with automatic crouch and crawl, fly mode.
 - Combat, monsters, shrines, death/respawn, XP and levels, skill tree, map (section 6).
 - Split-screen co-op for up to four players with gamepads (section 6.4).
+- Touch controls for the web version on phones and tablets (section 6.5).
 - Screenshot and demo modes (`--shot`, `--demo combat|sword|death|skills|map|coop`,
   `--shot-time`, `--players n`, `--test-pad` with a scripted virtual gamepad).
 
@@ -245,6 +256,8 @@ Known gaps:
 - No audio yet.
 - Split screen draws the world once per view, so four views cost about four times the GPU
   and draw-call time of one. Gamepad buttons cannot be remapped yet.
+- Touch controls are tested in an emulated phone browser only; feel and real-device speed
+  still need checking (the web build generates chunks on the main thread).
 
 ## 8. Milestones
 

@@ -2,12 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <title>Fortress Crawl</title>
 <style>
   :root { color-scheme: dark; }
-  html, body { margin: 0; height: 100%; background: #07060a; overflow: hidden; }
-  #canvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated; outline: none; cursor: crosshair; }
+  html, body { margin: 0; height: 100%; background: #07060a; overflow: hidden; overscroll-behavior: none; }
+  #canvas { display: block; width: 100vw; height: 100vh; height: 100dvh; image-rendering: pixelated; outline: none; cursor: crosshair;
+            touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
   #overlay {
     position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
     gap: 14px; font: 14px/1.5 ui-monospace, Menlo, Consolas, monospace; color: #d8c49a; text-align: center;
@@ -24,7 +27,7 @@
 <div id="overlay">
   <h1>FORTRESS CRAWL</h1>
   <div id="status">Loading...</div>
-  <div class="keys">WASD move &middot; mouse look &middot; left/right click attack &middot; 1-3 weapons<br>
+  <div class="keys" id="keys">WASD move &middot; mouse look &middot; left/right click attack &middot; 1-3 weapons<br>
     TAB skills &middot; M map &middot; F fly &middot; F1 debug &middot; Esc releases the mouse<br>
     Gamepads: press START to join (split screen, up to 4 players)</div>
   <div class="go" id="go"></div>
@@ -35,14 +38,44 @@
   var goEl = document.getElementById('go');
   var canvas = document.getElementById('canvas');
   var ready = false;
+  // Phones and tablets: on-screen controls instead of pointer lock, a smaller view distance
+  var touch = window.matchMedia('(pointer: coarse)').matches || /[?&]touch\b/.test(location.search);
+  var started = false;
+  if (touch) {
+    document.getElementById('keys').innerHTML =
+      'Left thumb: move (push far to sprint) &middot; right thumb: look<br>' +
+      'Buttons: attack, alternate attack, jump, crouch, weapon &middot; SKILL and MAP at the top<br>' +
+      'Play in landscape. Gamepads work too: press START.';
+  }
   function updateOverlay() {
-    var locked = document.pointerLockElement === canvas;
-    overlay.classList.toggle('hidden', ready && locked);
-    if (ready) { statusEl.textContent = ''; goEl.textContent = 'Click to play'; }
+    var playing = touch ? started : document.pointerLockElement === canvas;
+    overlay.classList.toggle('hidden', ready && playing);
+    if (ready) { statusEl.textContent = ''; goEl.textContent = touch ? 'Tap to play' : 'Click to play'; }
   }
   document.addEventListener('pointerlockchange', updateOverlay);
+  if (touch) {
+    window.addEventListener('touchend', function () {
+      if (!ready || started) return;
+      started = true;
+      updateOverlay();
+      // fullscreen and landscape where the browser allows it (not on iPhones)
+      var el = document.documentElement;
+      var fs = el.requestFullscreen || el.webkitRequestFullscreen;
+      if (fs) {
+        try {
+          var p = fs.call(el, { navigationUI: 'hide' });
+          if (p && p.then) p.then(function () {
+            if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(function () {});
+          }).catch(function () {});
+        } catch (e) {}
+      }
+    }, { capture: true });
+  }
   var Module = {
     canvas: canvas,
+    // extra command line options from the address, e.g. ?args=--debug+--seed+42
+    arguments: (touch ? ['--touch', '--radius', '2'] : []).concat(
+      (new URLSearchParams(location.search).get('args') || '').split(/[ +]/).filter(Boolean)),
     print: function (t) { console.log(t); },
     printErr: function (t) { console.warn(t); },
     setStatus: function (t) { if (t) statusEl.textContent = t; },

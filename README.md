@@ -75,6 +75,25 @@ python3 -m http.server -d build-web/dist 8000
 
 Open http://localhost:8000 and click into the page to lock the mouse; Esc releases it.
 
+### Phones and tablets
+
+On touch screens the web version shows on-screen controls (tap to start; it tries to go
+fullscreen and landscape, which iPhones do not allow, so turn the phone yourself there):
+
+| Touch | Action |
+|-------|--------|
+| Left part of the screen | move stick that appears under your thumb; push it past the ring to sprint |
+| Right part of the screen | drag to look |
+| Big button (weapon name) | attack while held; drag from it to aim at the same time |
+| ALT | alternate attack (dimmed until the weapon's last skill is learned) |
+| JUMP, DUCK, WPN | jump, crouch, next weapon |
+| SKILL, MAP (top right) | skill tree (tap a skill to select it, tap again to learn, X closes) and map (tap to close) |
+
+Bows and staffs get light aim assist on touch. Touch devices use a smaller view distance
+(`--radius 2`) to keep generation smooth. A Bluetooth gamepad also works in mobile browsers.
+To try the touch controls on a desktop, open the page with `?touch`; `?args=...` passes
+command line options, for example `?args=--debug+--seed+42`.
+
 ### GitHub Pages
 
 The workflow also publishes the web version to GitHub Pages on every push to the default
@@ -146,7 +165,7 @@ fortress_crawl [--seed N] [--pos x y z] [--look yaw pitch] [--fly] [--radius n] 
                [--window w h] [--lowres w h] [--debug]
                [--invert-x] [--invert-y] [--sens s] [--recenter | --no-recenter]
                [--shot file.bmp] [--shot-time seconds] [--demo combat|sword|death|skills|map|coop]
-               [--players n] [--test-pad]
+               [--players n] [--test-pad] [--touch]
 ```
 
 `--shot` waits until the view has loaded, saves one frame and exits. It is useful for
@@ -154,7 +173,8 @@ comparing seeds and changes to the generator. `--demo` sets up a scene for that 
 level-8 character facing a monster pack (`combat`, `sword`, `death` with 1 HP, `coop` with
 the other players beside you), or the `skills` or `map` screen. `--players n` starts with n
 characters (gamepads take them over with START). `--test-pad` attaches a virtual gamepad
-that joins, walks, turns and attacks, to test the gamepad path without hardware.
+that joins, walks, turns and attacks, to test the gamepad path without hardware. `--touch`
+shows the touch controls from the start.
 
 Shrines (glowing rune stones) are respawn points: walk up to one to attune it. When you die,
 you return to the last attuned shrine and keep everything.

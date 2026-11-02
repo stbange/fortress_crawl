@@ -73,6 +73,7 @@ add_executable(fortress_crawl
   src/game/monsters.c
   src/game/combat.c
   src/game/explore.c
+  src/game/touch.c
   src/render/renderer.c
   src/render/batch.c
   src/world/chunkmap.c)

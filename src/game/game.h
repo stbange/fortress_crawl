@@ -117,7 +117,22 @@ typedef struct Options {
     float sens;
     int players;   /* start with this many characters (split screen) */
     bool test_pad; /* scripted virtual gamepad that joins and plays (test) */
+    bool touch;    /* show the touch controls from the start */
 } Options;
+
+/* On-screen touch controls for player 1 (phones and tablets). */
+enum { TB_ATTACK, TB_ALT, TB_JUMP, TB_CROUCH, TB_WEAPON, TB_SKILLS, TB_MAP, TB_COUNT };
+#define TOUCH_MAX_FINGERS 10
+
+typedef struct TouchCtl {
+    bool active;       /* a finger has touched the screen: show the controls */
+    bool forced;       /* --touch */
+    struct { SDL_FingerID id; int role; } fingers[TOUCH_MAX_FINGERS]; /* role: TOUCH_* or TB_* */
+    int nfingers;
+    float mx0, my0, mx, my; /* move stick origin and thumb, in low-res pixels */
+    bool moving;
+    bool held[TB_COUNT];
+} TouchCtl;
 
 /* One local player: a separate character with its own input device, view and menus. */
 typedef struct PlayerSlot {
@@ -177,6 +192,7 @@ typedef struct Game {
     int nshrines;
 
     Explored explored;
+    TouchCtl touch;
 
     bool mouse; /* player 1's mouse is captured */
     bool hud;
@@ -230,6 +246,23 @@ float stats_max_hp(const Stats *s);
 const char *combat_weapon_name(int w);
 float stats_max_mana(const Stats *s);
 void stats_refresh(PlayerSlot *ps);
+
+/* Skill tree helpers for other input methods (game.c). */
+enum { NAV_LEFT, NAV_RIGHT, NAV_UP, NAV_DOWN, NAV_BUY };
+void game_skills_nav(PlayerSlot *ps, int nav);
+/* Skill under a point of the skill screen (view coordinates): a skill id, -2 / -3 for the
+ * previous / next branch arrows of the compact layout, or -1. */
+int game_skills_hit(PlayerSlot *ps, int W, int H, float x, float y);
+void game_view_rect(const Game *g, const PlayerSlot *ps, int *x, int *y, int *w, int *h);
+/* Name of the control that opens the skill tree for this player (TAB, Y or SKILLS). */
+const char *game_skills_key(const Game *g, const PlayerSlot *ps);
+
+/* touch.c */
+void touch_event(Game *g, const SDL_Event *e);
+void touch_input(Game *g, PlayerInput *in);
+void touch_draw(Game *g);
+/* Low-res width that fills a touch screen of this aspect (no letterbox). */
+int touch_low_width(Game *g, int win_w, int win_h);
 
 /* explore.c */
 void explore_update(Game *g, PlayerSlot *ps, float dt);

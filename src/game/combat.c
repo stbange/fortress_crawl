@@ -255,7 +255,8 @@ static vec3 aim_dir(Game *g, PlayerSlot *ps, float yaw_off, float pitch_off) {
     vec3 eye = player_eye(&ps->pl);
     vec3 look = dir_from_angles(ps->pl.yaw, ps->pl.pitch);
     vec3 d = dir_from_angles(ps->pl.yaw + yaw_off, ps->pl.pitch + pitch_off);
-    if (!ps->pad || (ps->keyboard && g->mouse)) return d;
+    bool touch = ps->keyboard && g->touch.active;
+    if (!touch && (!ps->pad || (ps->keyboard && g->mouse))) return d;
     float best = cosf(6.0f * PI_F / 180.0f);
     vec3 target = d;
     for (int i = 0; i < MAX_MONSTERS; i++) {
@@ -374,8 +375,9 @@ void combat_update(Game *g, float dt) {
         s->mana = fminf(s->maxmana, s->mana + (3.0f + 0.1f * s->level) * dt);
         if (s->since_hurt > 4.0f) s->hp = fminf(s->maxhp, s->hp + (1.5f + 2.0f * s->ranks[SK_SECOND_WIND]) * dt);
         bool mouse = ps->keyboard && (g->mouse || g->opt.demo);
-        bool attack = (mouse && ps->attack_held) || ps->pad_attack;
-        bool alt = (mouse && ps->alt_held) || ps->pad_alt;
+        bool touch = ps->keyboard && g->touch.active;
+        bool attack = (mouse && ps->attack_held) || ps->pad_attack || (touch && g->touch.held[TB_ATTACK]);
+        bool alt = (mouse && ps->alt_held) || ps->pad_alt || (touch && g->touch.held[TB_ALT]);
         if (attack) try_attack(g, ps, false);
         else if (alt) try_attack(g, ps, true);
     }

@@ -112,7 +112,7 @@ void game_add_xp(Game *g, PlayerSlot *ps, float xp) {
         s->hp = s->maxhp;
         s->mana = s->maxmana;
         char buf[96];
-        snprintf(buf, sizeof buf, "LEVEL %d!  +1 SKILL POINT (%s)", s->level, ps->keyboard ? "TAB" : "Y");
+        snprintf(buf, sizeof buf, "LEVEL %d!  +1 SKILL POINT (%s)", s->level, game_skills_key(g, ps));
         game_banner(ps, buf);
         flash_add(g, player_eye(&ps->pl), v3(1.2f, 1.0f, 0.6f), 10.0f, 0.6f);
     }
@@ -229,9 +229,7 @@ void game_update_atmosphere(Game *g, PlayerSlot *ps, float dt) {
 
 /* ---------- skills menu (keyboard and gamepad) ---------- */
 
-enum { NAV_LEFT, NAV_RIGHT, NAV_UP, NAV_DOWN, NAV_BUY };
-
-static void skills_nav(PlayerSlot *ps, int nav) {
+void game_skills_nav(PlayerSlot *ps, int nav) {
     int b = ps->skill_sel / 4, t = ps->skill_sel % 4;
     switch (nav) {
     case NAV_LEFT: b = (b + BRANCH_COUNT - 1) % BRANCH_COUNT; break;
@@ -329,6 +327,13 @@ static void poll_idle_pads(Game *g) {
 void game_event(Game *g, const SDL_Event *e) {
     if (e->type == SDL_EVENT_GAMEPAD_ADDED) { pad_connected(g, e->gdevice.which); return; }
     if (e->type == SDL_EVENT_GAMEPAD_REMOVED) { pad_disconnected(g, e->gdevice.which); return; }
+    if (e->type == SDL_EVENT_FINGER_DOWN || e->type == SDL_EVENT_FINGER_UP || e->type == SDL_EVENT_FINGER_MOTION ||
+        e->type == SDL_EVENT_FINGER_CANCELED) {
+        touch_event(g, e);
+        return;
+    }
+    /* a real keyboard hides the touch controls again (tablets with keyboards) */
+    if (e->type == SDL_EVENT_KEY_DOWN && !g->touch.forced) g->touch.active = false;
     PlayerSlot *ps = keyboard_player(g);
     if (!ps) return;
     if (e->type == SDL_EVENT_MOUSE_BUTTON_DOWN || e->type == SDL_EVENT_MOUSE_BUTTON_UP) {
@@ -342,11 +347,11 @@ void game_event(Game *g, const SDL_Event *e) {
         SDL_Keycode k = e->key.key;
         if (ps->show_skills && k != SDLK_TAB && k != SDLK_ESCAPE) {
             switch (k) {
-            case SDLK_LEFT: case SDLK_A: skills_nav(ps, NAV_LEFT); break;
-            case SDLK_RIGHT: case SDLK_D: skills_nav(ps, NAV_RIGHT); break;
-            case SDLK_UP: case SDLK_W: skills_nav(ps, NAV_UP); break;
-            case SDLK_DOWN: case SDLK_S: skills_nav(ps, NAV_DOWN); break;
-            case SDLK_RETURN: case SDLK_SPACE: case SDLK_E: skills_nav(ps, NAV_BUY); break;
+            case SDLK_LEFT: case SDLK_A: game_skills_nav(ps, NAV_LEFT); break;
+            case SDLK_RIGHT: case SDLK_D: game_skills_nav(ps, NAV_RIGHT); break;
+            case SDLK_UP: case SDLK_W: game_skills_nav(ps, NAV_UP); break;
+            case SDLK_DOWN: case SDLK_S: game_skills_nav(ps, NAV_DOWN); break;
+            case SDLK_RETURN: case SDLK_SPACE: case SDLK_E: game_skills_nav(ps, NAV_BUY); break;
             default: break;
             }
             return;
@@ -432,12 +437,12 @@ static void read_pad(Game *g, PlayerSlot *ps, PlayerInput *in, float dt) {
         static float nav_cool[MAX_PLAYERS];
         float *cool = &nav_cool[ps->index];
         *cool -= dt;
-        if (PRESSED(SDL_GAMEPAD_BUTTON_DPAD_LEFT) || (lx < -0.6f && *cool <= 0)) { skills_nav(ps, NAV_LEFT); *cool = 0.25f; }
-        if (PRESSED(SDL_GAMEPAD_BUTTON_DPAD_RIGHT) || (lx > 0.6f && *cool <= 0)) { skills_nav(ps, NAV_RIGHT); *cool = 0.25f; }
-        if (PRESSED(SDL_GAMEPAD_BUTTON_DPAD_UP) || (ly < -0.6f && *cool <= 0)) { skills_nav(ps, NAV_UP); *cool = 0.25f; }
-        if (PRESSED(SDL_GAMEPAD_BUTTON_DPAD_DOWN) || (ly > 0.6f && *cool <= 0)) { skills_nav(ps, NAV_DOWN); *cool = 0.25f; }
+        if (PRESSED(SDL_GAMEPAD_BUTTON_DPAD_LEFT) || (lx < -0.6f && *cool <= 0)) { game_skills_nav(ps, NAV_LEFT); *cool = 0.25f; }
+        if (PRESSED(SDL_GAMEPAD_BUTTON_DPAD_RIGHT) || (lx > 0.6f && *cool <= 0)) { game_skills_nav(ps, NAV_RIGHT); *cool = 0.25f; }
+        if (PRESSED(SDL_GAMEPAD_BUTTON_DPAD_UP) || (ly < -0.6f && *cool <= 0)) { game_skills_nav(ps, NAV_UP); *cool = 0.25f; }
+        if (PRESSED(SDL_GAMEPAD_BUTTON_DPAD_DOWN) || (ly > 0.6f && *cool <= 0)) { game_skills_nav(ps, NAV_DOWN); *cool = 0.25f; }
         if (fabsf(lx) < 0.3f && fabsf(ly) < 0.3f) *cool = 0;
-        if (PRESSED(SDL_GAMEPAD_BUTTON_SOUTH)) skills_nav(ps, NAV_BUY);
+        if (PRESSED(SDL_GAMEPAD_BUTTON_SOUTH)) game_skills_nav(ps, NAV_BUY);
         if (PRESSED(SDL_GAMEPAD_BUTTON_EAST) || PRESSED(SDL_GAMEPAD_BUTTON_NORTH)) ps->show_skills = false;
         ps->attack_held = ps->alt_held = ps->pad_attack = ps->pad_alt = false;
         return;
@@ -534,6 +539,7 @@ void game_update(Game *g, const PlayerInput *kb, float dt) {
         memset(&inputs[i], 0, sizeof inputs[i]);
         if (!ps->active) continue;
         if (ps->keyboard && kb) inputs[i] = *kb;
+        if (ps->keyboard) touch_input(g, &inputs[i]);
         if (ps->pad) read_pad(g, ps, &inputs[i], dt);
         if (ps->show_skills || ps->show_map) memset(&inputs[i], 0, sizeof inputs[i]);
         /* menus pause the game only when playing alone */
@@ -563,13 +569,46 @@ static void bar(float x, float y, float w, float h, float frac, float r, float g
     batch2d_rect(x, y, w * clampf(frac, 0, 1), h, r, gg, b, 1.0f);
 }
 
+const char *game_skills_key(const Game *g, const PlayerSlot *ps) {
+    if (ps->keyboard && g->touch.active) return "SKILL";
+    return ps->pad && !(ps->keyboard && g->mouse) ? "Y" : "TAB";
+}
+
+typedef struct SkillLayout { bool compact; int nb, bw, bh, gap, x0, y0; } SkillLayout;
+
+static SkillLayout skills_layout(int W) {
+    SkillLayout l;
+    l.compact = W < 440; /* split screen: one branch at a time */
+    l.nb = l.compact ? 1 : BRANCH_COUNT;
+    l.bw = l.compact ? MINI(150, W - 40) : 104;
+    l.bh = l.compact ? 22 : 34;
+    l.gap = l.compact ? 5 : 8;
+    int total_w = l.nb * l.bw + (l.nb - 1) * l.gap;
+    l.x0 = (W - total_w) / 2;
+    l.y0 = l.compact ? 30 : 44;
+    return l;
+}
+
+int game_skills_hit(PlayerSlot *ps, int W, int H, float x, float y) {
+    SkillLayout l = skills_layout(W);
+    if (l.compact && y >= l.y0 - 16 && y < l.y0) return x < W / 2 ? -2 : -3;
+    for (int bi = 0; bi < l.nb; bi++)
+        for (int t = 0; t < 4; t++) {
+            float bx = (float)(l.x0 + bi * (l.bw + l.gap)), by = (float)(l.y0 + t * (l.bh + l.gap));
+            /* a little slack around each box for fingers */
+            if (x >= bx - 3 && x < bx + l.bw + 3 && y >= by - 3 && y < by + l.bh + 3)
+                return skill_id(l.compact ? ps->skill_sel / 4 : bi, t);
+        }
+    (void)H;
+    return -1;
+}
+
 static void draw_skills(Game *g, PlayerSlot *ps, int W, int H) {
     Stats *s = &ps->st;
-    bool compact = W < 440; /* split screen: one branch at a time */
-    int nb = compact ? 1 : BRANCH_COUNT;
-    int bw = compact ? MINI(150, W - 40) : 104, bh = compact ? 22 : 34, gap = compact ? 5 : 8;
-    int total_w = nb * bw + (nb - 1) * gap;
-    int x0 = (W - total_w) / 2, y0 = compact ? 30 : 44;
+    SkillLayout l = skills_layout(W);
+    bool compact = l.compact;
+    int nb = l.nb, bw = l.bw, bh = l.bh, gap = l.gap, x0 = l.x0, y0 = l.y0;
+    bool touch = ps->keyboard && g->touch.active;
     int sel_branch = ps->skill_sel / 4;
     batch2d_begin(W, H);
     batch2d_rect(0, 0, (float)W, (float)H, 0.02f, 0.01f, 0.01f, 0.8f);
@@ -623,12 +662,14 @@ static void draw_skills(Game *g, PlayerSlot *ps, int W, int H) {
             while (pos < len && sd->desc[pos] == ' ') pos++;
             row++;
         }
-        const char *help = ps->keyboard && !ps->pad ? "ENTER LEARN  TAB CLOSE" : "A LEARN  B CLOSE";
+        const char *help = touch ? "TAP AGAIN TO LEARN" : ps->keyboard && !ps->pad ? "ENTER LEARN  TAB CLOSE" : "A LEARN  B CLOSE";
         font_text((W - font_text_width(help)) / 2, H - 10, help, 0.55f, 0.5f, 0.45f);
     } else {
         snprintf(buf, sizeof buf, "%s: %s", sd->name, sd->desc);
         font_text((W - font_text_width(buf)) / 2, ty, buf, 0.9f, 0.85f, 0.75f);
-        const char *help = ps->keyboard && !ps->pad ? "ARROWS/WASD SELECT  ENTER LEARN  TAB CLOSE" : "D-PAD SELECT  A LEARN  B CLOSE";
+        const char *help = touch ? "TAP A SKILL TO SELECT IT, TAP AGAIN TO LEARN"
+                           : ps->keyboard && !ps->pad ? "ARROWS/WASD SELECT  ENTER LEARN  TAB CLOSE"
+                                                      : "D-PAD SELECT  A LEARN  B CLOSE";
         font_text((W - font_text_width(help)) / 2, ty + 14, help, 0.55f, 0.5f, 0.45f);
         snprintf(buf, sizeof buf, "HEALTH %.0f  MANA %.0f  SPEED +%d%%  KILLS %d", s->maxhp, s->maxmana, s->ranks[SK_FLEET_FOOT] * 12,
                  s->kills);
@@ -641,6 +682,7 @@ static void draw_hud(Game *g, PlayerSlot *ps, int W, int H) {
     Stats *s = &ps->st;
     vec3 eye = player_eye(&ps->pl);
     bool small = W < 400;
+    bool touch = ps->keyboard && g->touch.active;
     float bw = small ? fminf(80.0f, W * 0.35f) : 110.0f;
     batch2d_begin(W, H);
     if (s->hurt > 0) batch2d_rect(0, 0, (float)W, (float)H, 0.6f, 0.0f, 0.0f, s->hurt * 0.35f);
@@ -665,7 +707,10 @@ static void draw_hud(Game *g, PlayerSlot *ps, int W, int H) {
     font_text((int)bw + 12, H - 26, buf, ps->color.x, ps->color.y, ps->color.z);
     snprintf(buf, sizeof buf, "%.0f", s->hp);
     font_text((int)bw + 12, H - 17, buf, 0.85f, 0.4f, 0.35f);
-    if (small) {
+    if (touch) {
+        /* the lower right belongs to the buttons */
+        font_text(6, H - 36, combat_weapon_name(s->weapon), 1.0f, 0.85f, 0.6f);
+    } else if (small) {
         const char *wn = combat_weapon_name(s->weapon);
         font_text(W - font_text_width(wn) - 5, H - 14, wn, 1.0f, 0.85f, 0.6f);
     } else {
@@ -676,9 +721,8 @@ static void draw_hud(Game *g, PlayerSlot *ps, int W, int H) {
         }
     }
     if (s->points > 0) {
-        snprintf(buf, sizeof buf, small ? "%d PT - %s" : "%d SKILL POINT%s - %s", s->points,
-                 small ? (ps->pad ? "Y" : "TAB") : (s->points == 1 ? "" : "S"), ps->pad ? "Y" : "TAB");
-        if (small) snprintf(buf, sizeof buf, "%d PT (%s)", s->points, ps->pad ? "Y" : "TAB");
+        if (small) snprintf(buf, sizeof buf, "%d PT (%s)", s->points, game_skills_key(g, ps));
+        else snprintf(buf, sizeof buf, "%d SKILL POINT%s - %s", s->points, s->points == 1 ? "" : "S", game_skills_key(g, ps));
         font_text((W - font_text_width(buf)) / 2, H - 36, buf, 1.0f, 0.85f, 0.4f);
     }
     if (ps->banner_time > 0) {
@@ -714,7 +758,7 @@ static void draw_hud(Game *g, PlayerSlot *ps, int W, int H) {
         static const char *STANCES[3] = { "standing", "crouching", "crawling" };
         snprintf(buf, sizeof buf, "%s  %s  open %.0fm  %dx%d", ps->pl.fly ? "FLY" : "WALK", STANCES[ps->pl.stance], ps->openness, W, H);
         font_text(4, y, buf, 0.6f, 0.6f, 0.6f); y += FONT_LINE;
-        if (!small) font_text(4, y, "LMB/RMB ATTACK  1-3 WEAPON  TAB SKILLS  M MAP  F FLY  T AHEAD  F1-F6", 0.5f, 0.45f, 0.4f);
+        if (!small && !touch) font_text(4, y, "LMB/RMB ATTACK  1-3 WEAPON  TAB SKILLS  M MAP  F FLY  T AHEAD  F1-F6", 0.5f, 0.45f, 0.4f);
     }
     font_end();
 }
@@ -727,6 +771,12 @@ static void view_rect(const Game *g, int slot_order, int n, int *x, int *y, int 
     *w = W / 2; *h = H / 2;
     *x = (slot_order % 2) * (W / 2);
     *y = (slot_order / 2) * (H / 2);
+}
+
+void game_view_rect(const Game *g, const PlayerSlot *ps, int *x, int *y, int *w, int *h) {
+    int order = 0;
+    for (int i = 0; i < ps->index; i++) order += g->players[i].active;
+    view_rect(g, order, g->nplayers, x, y, w, h);
 }
 
 static void render_view(Game *g, PlayerSlot *ps, int vx, int vy, int vw, int vh) {
@@ -798,5 +848,6 @@ void game_render(Game *g) {
         }
         font_end();
     }
+    touch_draw(g);
     renderer_present(&g->r, g->time);
 }

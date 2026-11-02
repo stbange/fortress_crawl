@@ -57,12 +57,13 @@ static bool parse_args(Options *o, int argc, char **argv) {
         else if (!strcmp(a, "--demo") && i + 1 < argc) { o->demo = true; g_demo_kind = argv[++i]; }
         else if (!strcmp(a, "--players") && i + 1 < argc) o->players = atoi(argv[++i]);
         else if (!strcmp(a, "--test-pad")) o->test_pad = true;
+        else if (!strcmp(a, "--touch")) o->touch = true;
         else {
             SDL_Log("usage: fortress_crawl [--seed N] [--pos x y z] [--look yaw pitch] [--fly] [--radius n] [--vradius n]\n"
                     "                      [--window w h] [--lowres w h] [--debug] [--invert-x] [--invert-y] [--sens s]\n"
                     "                      [--recenter | --no-recenter]\n"
                     "                      [--shot file.bmp] [--shot-time s] [--demo combat|sword|death|skills|map|coop]\n"
-                    "                      [--players n] [--test-pad]");
+                    "                      [--players n] [--test-pad] [--touch]");
             return false;
         }
     }
@@ -156,6 +157,7 @@ typedef struct App {
     float last_x, last_y;
     int suspicious; /* motion events that show relative mode is not really active */
     SDL_Joystick *vpad; /* --test-pad */
+    int touch_low_w;    /* low-res width before the touch controls widened it */
 } App;
 
 static void mouse_capture(App *a, bool on);
@@ -281,7 +283,10 @@ static void handle_events(App *a) {
         else if (e.type == SDL_EVENT_MOUSE_MOTION) {
             float dx, dy;
             if (g->mouse && mouse_delta(a, &e.motion, &dx, &dy)) game_look(g, dx, dy);
+        } else if ((e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) && e.button.which == SDL_TOUCH_MOUSEID) {
+            /* mouse events made up from touches: the touch controls handle those */
         } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && !g->mouse) {
+            if (!g->touch.forced) g->touch.active = false; /* a real mouse: back to mouse controls */
             mouse_capture(a, true); /* the click that captures the mouse does not attack */
         } else if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE && !e.key.repeat) {
             PlayerSlot *p1 = &g->players[0];
@@ -390,6 +395,14 @@ static void frame(void *user) {
     vec3 centres[MAX_PLAYERS];
     int ncentres = game_centres(g, centres);
     chunkmap_update(&g->map, centres, ncentres);
+    /* touch screens get no letterbox: the low-res target takes the screen's aspect */
+    if (g->touch.active) {
+        if (!a->touch_low_w) a->touch_low_w = g->r.set.low_w; /* to restore when touch ends */
+        g->r.set.low_w = touch_low_width(g, g->r.win_w, g->r.win_h);
+    } else if (a->touch_low_w) {
+        g->r.set.low_w = a->touch_low_w;
+        a->touch_low_w = 0;
+    }
     a->acc += frame_dt;
     while (a->acc >= DT) {
         game_update(g, &in, DT);
@@ -411,6 +424,7 @@ int main(int argc, char **argv) {
     Game *g = calloc(1, sizeof(Game));
     a->g = g;
     if (!parse_args(&g->opt, argc, argv)) return 1;
+    SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0"); /* touches drive the on-screen controls */
     SDL_SetHint(SDL_HINT_MOUSE_RELATIVE_WARP_MOTION, "1"); /* lets us detect broken relative mode */
     bool recenter = g->opt.recenter ? g->opt.recenter > 0 : !running_under_wsl();
     if (!recenter) {
@@ -473,6 +487,7 @@ int main(int argc, char **argv) {
     game_init(g, start, g->opt.yaw);
     g->players[0].pl.pitch = g->opt.pitch;
     g->players[0].pl.fly = g->opt.fly;
+    g->touch.active = g->touch.forced = g->opt.touch;
     /* --players n: extra characters without a device yet (a pad takes one over with START) */
     for (int i = 1; i < g->opt.players && i < MAX_PLAYERS; i++) {
         PlayerSlot *ps = game_add_player(g);

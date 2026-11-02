@@ -148,6 +148,6 @@ void explore_draw_map(Game *g, PlayerSlot *ps, int w, int h) {
     snprintf(buf, sizeof buf, "MAP - %s", ps->place);
     if (size < 200) buf[MINI((int)sizeof buf - 1, size / 6)] = 0; /* 6 px per glyph */
     font_text((int)ox, (int)(oy + size + 5), buf, 0.85f, 0.75f, 0.55f);
-    if (size >= 160) font_text((int)(ox + size - 60), (int)(oy + size + 5), ps->pad && !ps->keyboard ? "B: CLOSE" : "M: CLOSE", 0.6f, 0.55f, 0.45f);
+    if (size >= 160) font_text((int)(ox + size - 60), (int)(oy + size + 5), ps->keyboard && g->touch.active ? "TAP: CLOSE" : ps->pad && !ps->keyboard ? "B: CLOSE" : "M: CLOSE", 0.6f, 0.55f, 0.45f);
     font_end();
 }
