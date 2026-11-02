@@ -36,10 +36,13 @@ jobs:
         run: ./web/build.sh
       - uses: actions/upload-artifact@v4
         with:
-          name: fortress-crawl-web
+          name: fortress-crawl-web-${{ github.run_attempt }}
           path: build-web/dist
+      # one artifact per attempt: re-running a run would otherwise leave two
+      # "github-pages" artifacts in it, which deploy-pages refuses
       - uses: actions/upload-pages-artifact@v3
         with:
+          name: github-pages-${{ github.run_attempt }}
           path: build-web/dist
       # Deploys to Cloudflare Pages when the repository has these secrets:
       #   CLOUDFLARE_API_TOKEN  (token with the "Cloudflare Pages: Edit" permission)
@@ -75,5 +78,7 @@ jobs:
       - id: deploy
         if: steps.configure.outcome == 'success'
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}
       - if: steps.configure.outcome != 'success'
         run: echo "::warning::GitHub Pages is not enabled. Set Settings -> Pages -> Source to 'GitHub Actions' and re-run this job."
