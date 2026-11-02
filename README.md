@@ -150,6 +150,16 @@ Flare and Recall. You start with Flame Bolt and Heal; scrolls teach new spells o
 known one's rank (up to 5). The stronger forms only drop deeper in. The Focus skill makes all
 spells stronger and cheaper.
 
+**Saving:** each world (seed) has its own save with every character that played in it
+(level, XP, skills, inventory, gold, potions, relics, spells, position and shrine), the chests
+and relics already taken, and the explored map near you. The game saves every 30 seconds,
+when you attune a shrine, when you quit, and in the browser when the tab is hidden or closed.
+The browser keeps it in `localStorage` (a few KB per world); the desktop version writes files
+to the user data folder (`~/.local/share/fortress-crawl/` on Linux,
+`%APPDATA%\fortress-crawl\` on Windows). The start screen suggests the world you played
+last and shows what is saved; *New characters* (press twice) deletes the save of that world.
+`--fresh` starts without loading.
+
 ## Controls
 
 | Key | Action |
@@ -208,7 +218,7 @@ fortress_crawl [--seed N] [--pos x y z] [--look yaw pitch] [--fly] [--radius n] 
                [--invert-x] [--invert-y] [--sens s] [--recenter | --no-recenter]
                [--shot file.bmp] [--shot-time seconds]
                [--demo combat|sword|death|skills|map|coop|menu|inventory|spells|loot|magic|bestiary]
-               [--players n] [--test-pad] [--touch]
+               [--players n] [--test-pad] [--touch] [--fresh] [--persist]
 ```
 
 `--shot` waits until the view has loaded, saves one frame and exits. It is useful for

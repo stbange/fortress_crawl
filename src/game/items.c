@@ -131,6 +131,9 @@ static u64 *looted_slot(Game *g, u64 key) {
 
 bool looted_has(Game *g, u64 key) { return g->looted_cap && *looted_slot(g, key) == key; }
 
+static void looted_add(Game *g, u64 key);
+void looted_mark(Game *g, u64 key) { looted_add(g, key); }
+
 static void looted_add(Game *g, u64 key) {
     if ((g->looted_count + 1) * 2 > g->looted_cap) {
         int old_cap = g->looted_cap;

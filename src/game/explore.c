@@ -51,6 +51,11 @@ static void mark(Game *g, int x, int y, int z) {
     c->bits[i >> 3] |= (u8)(1 << (i & 7));
 }
 
+void explore_import(Game *g, int cx, int cy, int cz, const u8 *bits) {
+    ExploredChunk *c = echunk(g, cx, cy, cz, true);
+    for (int k = 0; k < CHUNK_VOL / 8; k++) c->bits[k] |= bits[k];
+}
+
 bool explore_get(Game *g, int x, int y, int z) {
     ExploredChunk *c = echunk(g, floordiv(x, CHUNK), floordiv(y, CHUNK), floordiv(z, CHUNK), false);
     if (!c) return false;

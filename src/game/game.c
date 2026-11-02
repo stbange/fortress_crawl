@@ -96,6 +96,7 @@ PlayerSlot *game_add_player(Game *g) {
         }
         player_init(&ps->pl, pos, yaw);
         stats_init(ps);
+        save_apply_player(g, ps); /* a character saved in this world comes back */
         ps->fog = v3(0.04f, 0.05f, 0.07f);
         ps->fog_density = 0.02f;
         g->nplayers++;
@@ -548,7 +549,8 @@ static void update_shrines(Game *g, PlayerSlot *ps) {
             s->respawn_yaw = ps->pl.yaw;
             s->hp = s->maxhp;
             s->mana = s->maxmana;
-            game_banner(ps, "SHRINE ATTUNED - YOU WILL RETURN HERE");
+            game_banner(ps, g->opt.shot ? "SHRINE ATTUNED - YOU WILL RETURN HERE" : "SHRINE ATTUNED - GAME SAVED");
+            g->autosave_timer = 1e9f; /* save right away */
             particles_burst(g, g->shrines[i], v3(1.0f, 0.85f, 0.45f), 30, 4.0f, 0.06f, true);
             flash_add(g, g->shrines[i], v3(1.3f, 1.1f, 0.6f), 10.0f, 0.8f);
         }
@@ -613,6 +615,13 @@ void game_update(Game *g, const PlayerInput *kb, float dt) {
     for (int i = 0; i < MAX_PLAYERS; i++)
         if (g->players[i].active) explore_update(g, &g->players[i], dt);
     g->time += dt;
+    g->play_time += dt;
+    /* autosave (not in screenshot and test runs) */
+    g->autosave_timer += dt;
+    if (!g->opt.shot && g->autosave_timer > 30.0f) {
+        g->autosave_timer = 0;
+        game_save(g);
+    }
 }
 
 /* ---------- drawing ---------- */

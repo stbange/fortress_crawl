@@ -8,7 +8,7 @@
  * Keyboard: type, Backspace, Up/Down, Enter. Gamepad: D-pad, A start, Y random.
  * Touch / mouse: tap the rows, plus an on-screen keypad on touch screens. */
 
-enum { ROW_SEED, ROW_RANDOM, ROW_START, ROW_COUNT };
+enum { ROW_SEED, ROW_RANDOM, ROW_START, ROW_FORGET, ROW_COUNT };
 enum { KEY_DEL = 10, KEY_RANDOM = 11, KEY_COUNT = 12 };
 
 static void random_seed(StartMenu *m) {
@@ -18,7 +18,8 @@ static void random_seed(StartMenu *m) {
 
 void menu_init(StartMenu *m) {
     memset(m, 0, sizeof *m);
-    random_seed(m);
+    /* the world played last comes first, so continuing is just Enter */
+    if (!save_last_seed(m->text, sizeof m->text)) random_seed(m);
     m->fresh = true;
     m->row = ROW_START;
 }
@@ -52,7 +53,21 @@ static void backspace(StartMenu *m) {
 
 static void activate(StartMenu *m, int row) {
     if (row == ROW_RANDOM) { random_seed(m); m->fresh = true; m->row = ROW_RANDOM; }
-    else if (m->text[0]) m->done = true;
+    else if (row == ROW_FORGET) {
+        if (!m->has_save) return;
+        if (!m->confirm_forget) { m->confirm_forget = true; return; }
+        save_delete(menu_seed(m->text));
+        m->peeked[0] = 0; /* look again */
+        m->peeked[1] = 1;
+    } else if (m->text[0]) m->done = true;
+}
+
+/* What is saved for the seed in the field (looked up when the text changes). */
+static void refresh_save_info(StartMenu *m) {
+    if (!strcmp(m->peeked, m->text)) return;
+    snprintf(m->peeked, sizeof m->peeked, "%s", m->text);
+    m->confirm_forget = false;
+    m->has_save = m->text[0] && save_peek(menu_seed(m->text), &m->save);
 }
 
 /* Layout in low-res pixels. */
@@ -164,6 +179,7 @@ static void frame_rect(float x, float y, float w, float h, float r, float g, flo
 
 void menu_draw(StartMenu *m, Game *g, float dt) {
     m->t += dt;
+    refresh_save_info(m);
     Renderer *r = &g->r;
     renderer_frame_begin(r);
     int W = r->fbo_w, H = r->fbo_h;
@@ -216,8 +232,18 @@ void menu_draw(StartMenu *m, Game *g, float dt) {
     row_rect(W, ROW_RANDOM, &x, &y, &w, &h);
     font_text((int)(x + (w - font_text_width("NEW RANDOM SEED")) / 2), (int)y + 5, "NEW RANDOM SEED", 0.85f, 0.78f, 0.6f);
     row_rect(W, ROW_START, &x, &y, &w, &h);
-    const char *go = "ENTER THE FORTRESS";
+    const char *go = m->has_save ? "CONTINUE" : "ENTER THE FORTRESS";
     font_text((int)(x + (w - font_text_width(go)) / 2), (int)y + 5, go, 1.0f, 0.8f, 0.4f);
+    row_rect(W, ROW_FORGET, &x, &y, &w, &h);
+    const char *fg = !m->has_save ? "NO SAVE FOR THIS WORLD" : m->confirm_forget ? "AGAIN: DELETE THE SAVE" : "NEW CHARACTERS";
+    float fk = m->has_save ? (m->confirm_forget ? 1.0f : 0.75f) : 0.35f;
+    font_text((int)(x + (w - font_text_width(fg)) / 2), (int)y + 5, fg, fk, fk * (m->confirm_forget ? 0.4f : 0.85f), fk * 0.6f);
+    if (m->has_save) {
+        int mins = (int)(m->save.play_time / 60.0f);
+        snprintf(buf, sizeof buf, "SAVED: LEVEL %d  -  %d GOLD  -  %d KILLS  -  %dH %02dM", m->save.level, m->save.gold, m->save.kills,
+                 mins / 60, mins % 60);
+        font_text((W - font_text_width(buf)) / 2, 60, buf, 0.55f, 0.85f, 0.5f);
+    }
     if (g->touch.active) {
         for (int k = 0; k < KEY_COUNT; k++) {
             key_rect(W, H, k, &x, &y, &w, &h);

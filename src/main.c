@@ -9,6 +9,7 @@
 #include <SDL3/SDL_main.h>
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
+#include <emscripten/html5.h>
 #endif
 
 #include "engine/font.h"
@@ -63,12 +64,14 @@ static bool parse_args(Options *o, int argc, char **argv) {
         else if (!strcmp(a, "--players") && i + 1 < argc) o->players = atoi(argv[++i]);
         else if (!strcmp(a, "--test-pad")) o->test_pad = true;
         else if (!strcmp(a, "--touch")) o->touch = true;
+        else if (!strcmp(a, "--fresh")) o->fresh = true;
+        else if (!strcmp(a, "--persist")) o->persist = true;
         else {
             SDL_Log("usage: fortress_crawl [--seed N] [--pos x y z] [--look yaw pitch] [--fly] [--radius n] [--vradius n]\n"
                     "                      [--window w h] [--lowres w h] [--debug] [--invert-x] [--invert-y] [--sens s]\n"
                     "                      [--recenter | --no-recenter]\n"
                     "                      [--shot file.bmp] [--shot-time s] [--demo combat|sword|death|skills|map|coop|menu|inventory|spells|loot|magic]\n"
-                    "                      [--players n] [--test-pad] [--touch]");
+                    "                      [--players n] [--test-pad] [--touch] [--fresh] [--persist]");
             return false;
         }
     }
@@ -458,6 +461,8 @@ static void start_world(App *a) {
     SDL_Log("World seed: %s (%llu)", g->opt.seed_text, (unsigned long long)g->opt.seed);
     world_init(&g->world, g->opt.seed);
     chunkmap_init(&g->map, &g->world, &g->r, g->opt.radius, g->opt.vradius);
+    /* the saved characters of this world (screenshot and test runs start fresh) */
+    if ((!g->opt.shot || g->opt.persist) && !g->opt.fresh) game_load(g);
     vec3 start = g->opt.has_pos ? g->opt.pos : v3(-70.5f, 6.0f, 0.5f);
     bool touch = g->touch.active;
     game_init(g, start, g->opt.yaw);
@@ -471,6 +476,7 @@ static void start_world(App *a) {
         if (ps) { ps->pl.pitch = g->opt.pitch; ps->pl.fly = g->opt.fly; }
     }
     a->in_menu = false;
+    g->world_started = true;
 #ifndef __EMSCRIPTEN__
     /* in the browser, pointer lock needs a click first */
     if ((!g->opt.shot || g->opt.grab) && !g->touch.active) mouse_capture(a, true);
@@ -569,6 +575,19 @@ static void frame(void *user) {
 #endif
 }
 
+#ifdef __EMSCRIPTEN__
+/* The browser may close or freeze the tab at any time: save when it is hidden or left. */
+static App *g_app;
+static EM_BOOL on_visibility(int type, const EmscriptenVisibilityChangeEvent *e, void *user) {
+    if (e->hidden && g_app && !g_app->in_menu && !g_app->g->opt.shot) game_save(g_app->g);
+    return 0;
+}
+static const char *on_unload(int type, const void *reserved, void *user) {
+    if (g_app && !g_app->in_menu && !g_app->g->opt.shot) game_save(g_app->g);
+    return NULL;
+}
+#endif
+
 int main(int argc, char **argv) {
     static App app;
     App *a = &app;
@@ -656,9 +675,16 @@ int main(int argc, char **argv) {
     a->running = true;
     a->last = SDL_GetTicksNS();
 #ifdef __EMSCRIPTEN__
+    g_app = a;
+    emscripten_set_visibilitychange_callback(NULL, 0, on_visibility);
+    emscripten_set_beforeunload_callback(NULL, on_unload);
     emscripten_set_main_loop_arg(frame, a, 0, true);
 #else
     while (a->running) frame(a);
+    if (!a->in_menu && (!g->opt.shot || g->opt.persist)) {
+        bool ok = game_save(g);
+        SDL_Log("%s the world %s", ok ? "Saved" : "Could not save", g->opt.seed_text);
+    }
     if (!a->in_menu) chunkmap_shutdown(&g->map);
     jobs_shutdown();
     SDL_GL_DestroyContext(a->ctx);

@@ -137,6 +137,8 @@ typedef struct Options {
     int players;   /* start with this many characters (split screen) */
     bool test_pad; /* scripted virtual gamepad that joins and plays (test) */
     bool touch;    /* show the touch controls from the start */
+    bool fresh;    /* ignore the save (new characters) */
+    bool persist;  /* load and save even in screenshot runs (tests) */
 } Options;
 
 /* On-screen touch controls for player 1 (phones and tablets). */
@@ -153,10 +155,28 @@ typedef struct TouchCtl {
     bool held[TB_COUNT];
 } TouchCtl;
 
+/* A character from the save, waiting for its slot (save.c). */
+typedef struct SavedPlayer {
+    bool valid;
+    Stats st;
+    Player pl;
+} SavedPlayer;
+
+/* What the start screen shows about a world's save. */
+typedef struct SaveInfo {
+    u64 seed;
+    char seed_text[24];
+    int level, gold, kills;
+    float play_time;
+} SaveInfo;
+
 /* Start screen with the seed choice (menu.c). */
 typedef struct StartMenu {
     char text[24];
     int row, rolls;
+    char peeked[24];  /* the text the save info below belongs to */
+    bool has_save, confirm_forget;
+    SaveInfo save;
     bool fresh; /* the suggested seed is replaced by typing */
     bool done;
     float t;
@@ -230,6 +250,9 @@ typedef struct Game {
 
     Explored explored;
     TouchCtl touch;
+    SavedPlayer saved[MAX_PLAYERS];
+    bool world_started;
+    float play_time, autosave_timer;
 
     bool mouse; /* player 1's mouse is captured */
     bool hud;
@@ -306,6 +329,16 @@ void menu_draw(StartMenu *m, Game *g, float dt);
 u64 menu_seed(const char *text);
 /* Gives an idle gamepad to player 1. */
 void game_give_pad_to_p1(Game *g, SDL_JoystickID id);
+
+/* save.c */
+bool game_save(Game *g);
+bool game_load(Game *g);
+bool save_peek(u64 seed, SaveInfo *info);
+void save_delete(u64 seed);
+bool save_last_seed(char *out, int n);
+void save_apply_player(Game *g, PlayerSlot *ps);
+void looted_mark(Game *g, u64 key);
+void explore_import(Game *g, int cx, int cy, int cz, const u8 *bits);
 
 /* touch.c */
 void touch_to_low(Game *g, float nx, float ny, float *x, float *y);

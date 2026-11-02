@@ -258,6 +258,16 @@ down), walls, water and light sources.
   skill, the spell's rank (up to 5) and damage relics. Scroll drops respect a tier per form,
   so meteors, storms and auras only appear deeper in.
 
+### 6.7 Saving (v0.5)
+
+One save per world, keyed by the seed: all characters (stats, skills, inventory, spells,
+relics, position, shrine), the taken chests and relics, and up to about 1.2 MB of explored
+map (nearest chunks first, stored as a byte mask plus the non-zero bytes). A small versioned
+binary format with counted arrays, so later versions can read older saves. Browser:
+`localStorage`, base64; desktop: a file in SDL's preference path, written via a temporary
+file and a rename. Autosave every 30 s, on shrine attunement, on quit and when the browser
+tab is hidden or closed.
+
 ## 7. Status
 
 Done:
@@ -280,7 +290,8 @@ Known gaps:
   beyond colour.
 - No summoners or bosses yet.
 - Lava and water are still harmless.
-- No saving yet: the explored map, cleared chunks and the character are lost on exit.
+- Saves do not keep killed monsters, dropped loot lying around or spell effects; a world
+  you return to is repopulated.
 - A few chunks still contain an opening that is only reachable from outside the chunk.
 - No audio yet.
 - Split screen draws the world once per view, so four views cost about four times the GPU

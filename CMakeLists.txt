@@ -77,6 +77,7 @@ add_executable(fortress_crawl
   src/game/menu.c
   src/game/items.c
   src/game/spells.c
+  src/game/save.c
   src/render/renderer.c
   src/render/batch.c
   src/world/chunkmap.c)
