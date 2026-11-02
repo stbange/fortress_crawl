@@ -1,4 +1,4 @@
-# Fortress Crawl: Development Plan (v0.4)
+# Fortress Crawl: Development Plan (v0.5)
 
 An endless, procedurally generated 3D dungeon crawler written in C with SDL3 and OpenGL 3.3.
 The player starts in front of a giant castle built into a mountain. The gate is
@@ -6,8 +6,10 @@ The player starts in front of a giant castle built into a mountain. The gate is
 get from the gate, the harder it gets.
 
 v0.3 added the combat milestone: Hexen-style combat, a classless skill tree, monsters, shrines
-and a map of explored cells. v0.4 adds local split-screen co-op for up to four players with
-gamepads (section 6.4).
+and a map of explored cells. v0.4 added local split-screen co-op for up to four players with
+gamepads (section 6.4) and touch controls (6.5). v0.5 adds a start screen with the seed choice,
+denser monsters with three new kinds, loot, weapons, relics, an inventory and 94 spells
+(section 6.6).
 
 ---
 
@@ -233,6 +235,29 @@ down), walls, water and light sources.
 - Touch players get the gamepad aim assist; touch devices stream with radius 2.
 - The controls drive player 1, so a phone plus Bluetooth gamepads also gives split screen.
 
+### 6.6 Seeds, monsters, loot and spells (v0.5)
+
+- **Start screen:** the world is only generated after the player picks a seed (a number, or
+  a word that is hashed). Keyboard typing, a gamepad (D-pad steps through neighbouring
+  seeds), or a touch keypad; `--seed` / `?seed=` skip it.
+- **Monsters:** 75% of the early chunks and 80% of the deeper ones hold a pack of 3 to 10
+  (scaling with danger), structures often a second pack; the cap is now 320. New kinds:
+  skeleton archers (keep their distance, shoot), slimes (hop, split in two when killed) and
+  bats (fast swarms). Elements leave status effects: burning, chill (slower), poison, stun.
+- **Loot:** drops of gold, potions, scrolls and weapons (elites drop much more), chests in
+  about a third of the chunks, relics in one in twelve. Taken chests and relics are
+  remembered for the session. Pickups and placed loot vanish when nobody is near and come
+  back with their chunk.
+- **Weapons:** 12 bases in the three classes, each with its own damage, speed, reach, arc,
+  knockback, projectile speed, piercing or mana cost. Rarity (common to epic) adds damage
+  and up to two affixes; the elemental affixes add that element's effect to every hit.
+  Item level follows the danger level where it dropped.
+- **Inventory:** three equipped weapons (one per class), an 18-slot bag, potions, gold and
+  the relic collection in a tabbed character menu (items, spells, skills).
+- **Spells:** 8 elements x 11 forms + 6 utility spells. Damage grows with level, the Focus
+  skill, the spell's rank (up to 5) and damage relics. Scroll drops respect a tier per form,
+  so meteors, storms and auras only appear deeper in.
+
 ## 7. Status
 
 Done:
@@ -244,12 +269,16 @@ Done:
 - Combat, monsters, shrines, death/respawn, XP and levels, skill tree, map (section 6).
 - Split-screen co-op for up to four players with gamepads (section 6.4).
 - Touch controls for the web version on phones and tablets (section 6.5).
-- Screenshot and demo modes (`--shot`, `--demo combat|sword|death|skills|map|coop`,
-  `--shot-time`, `--players n`, `--test-pad` with a scripted virtual gamepad).
+- Start screen with seed choice; loot, weapons, relics, inventory, spells; more monsters (6.6).
+- Screenshot and demo modes (`--shot`, `--demo combat|sword|death|skills|map|coop|menu|
+  inventory|spells|loot|magic|bestiary`, `--shot-time`, `--players n`, `--test-pad` with a
+  scripted virtual gamepad).
 
 Known gaps:
-- No loot yet. Weapons only improve through skills and levels.
-- Monsters only melee and shoot; there are no ranged brutes, summoners or bosses yet.
+- Gold has no use yet besides scrapping value (a shrine shop would fit).
+- No armour, rings or amulets yet; spells have no visual for every element/form pairing
+  beyond colour.
+- No summoners or bosses yet.
 - Lava and water are still harmless.
 - No saving yet: the explored map, cleared chunks and the character are lost on exit.
 - A few chunks still contain an opening that is only reachable from outside the chunk.
@@ -270,7 +299,7 @@ Known gaps:
 | M4  | World gen v1 (portals, levels, stairwells, castle entrance) | done |
 | M5  | World gen v2 (strata x flavors, megastructures) | first version done |
 | M6  | Combat and monsters (coloured primitives, AI, melee/magic/bow) | first version done |
-| M7  | Progression and loot (XP, skill tree, affixes, inventory, map screen) | XP, skill tree and map done; loot next |
+| M7  | Progression and loot (XP, skill tree, affixes, inventory, map screen) | first version done |
 | M8  | Traps and easy mechanical puzzles, vaults | |
 | M9  | Character creation (gameplay), shrines, save/load per world | shrines done |
 | M10 | Atmosphere: audio, particles, polish | |

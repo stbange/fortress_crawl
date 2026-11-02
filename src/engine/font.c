@@ -111,12 +111,28 @@ static void push(float px, float py, float u, float v, float r, float g, float b
     g_nverts++;
 }
 
-static void glyph(int x, int y, int c, float r, float g, float b) {
+static void glyph_scaled(int x, int y, int c, int k, float r, float g, float b) {
     if (g_nverts + 6 > 6 * MAX_CHARS) return;
     float u0 = (float)(c * CELL_W) / (64 * CELL_W), u1 = (float)(c * CELL_W + CELL_W) / (64 * CELL_W);
-    float x0 = (float)x, y0 = (float)y, x1 = (float)(x + CELL_W), y1 = (float)(y + CELL_H);
+    float x0 = (float)x, y0 = (float)y, x1 = (float)(x + CELL_W * k), y1 = (float)(y + CELL_H * k);
     push(x0, y0, u0, 0, r, g, b); push(x1, y0, u1, 0, r, g, b); push(x1, y1, u1, 1, r, g, b);
     push(x0, y0, u0, 0, r, g, b); push(x1, y1, u1, 1, r, g, b); push(x0, y1, u0, 1, r, g, b);
+}
+
+static void glyph(int x, int y, int c, float r, float g, float b) { glyph_scaled(x, y, c, 1, r, g, b); }
+
+void font_text_scaled(int x, int y, const char *s, int k, float r, float g, float b) {
+    for (int pass = 0; pass < 2; pass++) {
+        int cx = x + (pass == 0) * k, cy = y + (pass == 0) * k;
+        for (const char *p = s; *p; p++) {
+            int ch = (unsigned char)*p;
+            if (ch >= 'a' && ch <= 'z') ch -= 32;
+            if (ch < 32 || ch > 95) ch = '?';
+            if (pass == 0) glyph_scaled(cx, cy, ch - 32, k, 0, 0, 0);
+            else glyph_scaled(cx, cy, ch - 32, k, r, g, b);
+            cx += CELL_W * k;
+        }
+    }
 }
 
 void font_text(int x, int y, const char *s, float r, float g, float b) {

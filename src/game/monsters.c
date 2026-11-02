@@ -11,19 +11,22 @@ const MonsterDef MONSTERS[MON_TYPE_COUNT] = {
     { "Brute", 0.55f, 2.0f, 90, 16, 2.8f, 1.5f, 1.6f, 30, false, { 0.85f, 0.2f, 0.15f } },
     { "Wisp", 0.35f, 0.9f, 30, 9, 3.4f, 0.0f, 2.2f, 18, true, { 0.3f, 0.55f, 1.0f } },
     { "Horned", 0.45f, 1.2f, 45, 13, 3.6f, 1.2f, 1.4f, 22, false, { 0.5f, 0.85f, 0.3f } },
+    { "Skeleton", 0.3f, 1.7f, 32, 8, 3.2f, 0.0f, 1.6f, 16, false, { 0.85f, 0.82f, 0.7f } },
+    { "Slime", 0.45f, 0.8f, 40, 7, 2.6f, 0.9f, 1.1f, 12, false, { 0.35f, 0.8f, 0.55f } },
+    { "Bat", 0.22f, 0.4f, 10, 4, 6.5f, 0.8f, 0.8f, 5, true, { 0.45f, 0.3f, 0.4f } },
 };
 
-/* family weights per stratum: crawler, brute, wisp, horned */
+/* family weights per stratum: crawler, brute, wisp, horned, skeleton, slime, bat */
 static const float FAMILY[ST_COUNT][MON_TYPE_COUNT] = {
-    [ST_CORE] = { 2, 2, 3, 2 }, [ST_INFERNO] = { 3, 2, 2, 3 }, [ST_LIMBO] = { 3, 1, 3, 1 },
-    [ST_ROOTS] = { 4, 1, 2, 1 }, [ST_MINES] = { 3, 2, 1, 3 }, [ST_DUNGEON] = { 4, 2, 2, 1 },
-    [ST_CASTLE] = { 2, 3, 2, 2 }, [ST_SPIRES] = { 1, 2, 4, 2 }, [ST_CLOUDS] = { 1, 1, 5, 1 },
-    [ST_HEAVEN] = { 1, 2, 4, 1 }, [ST_ASTRAL] = { 1, 1, 5, 2 },
+    [ST_CORE] = { 2, 2, 3, 2, 1, 2, 1 }, [ST_INFERNO] = { 3, 2, 2, 3, 2, 1, 2 }, [ST_LIMBO] = { 3, 1, 3, 1, 3, 1, 2 },
+    [ST_ROOTS] = { 4, 1, 2, 1, 1, 3, 2 }, [ST_MINES] = { 3, 2, 1, 3, 2, 2, 3 }, [ST_DUNGEON] = { 4, 2, 2, 1, 3, 2, 2 },
+    [ST_CASTLE] = { 2, 3, 2, 2, 3, 1, 2 }, [ST_SPIRES] = { 1, 2, 4, 2, 2, 1, 3 }, [ST_CLOUDS] = { 1, 1, 5, 1, 1, 1, 3 },
+    [ST_HEAVEN] = { 1, 2, 4, 1, 1, 1, 2 }, [ST_ASTRAL] = { 1, 1, 5, 2, 1, 2, 2 },
 };
 
 /* ---------- spawned-chunk set ---------- */
 
-static u64 chunk_key(int cx, int cy, int cz) {
+u64 chunk_spawn_key(int cx, int cy, int cz) {
     return (((u64)(u32)cx & 0x1FFFFF) << 42) | (((u64)(u32)cy & 0x1FFFFF) << 21) | ((u64)(u32)cz & 0x1FFFFF) | (1ULL << 63);
 }
 
@@ -66,6 +69,8 @@ static void spawned_add(Game *g, u64 k) {
     }
 }
 
+void chunk_forget(Game *g, u64 chunk_key) { spawned_remove(g, chunk_key); }
+
 /* ---------- spawning ---------- */
 
 void monster_spawn(Game *g, int type, vec3 pos, int level, bool elite, vec3 tint, u64 key) {
@@ -92,6 +97,7 @@ void monster_spawn(Game *g, int type, vec3 pos, int level, bool elite, vec3 tint
     m->chunk_key = key;
     m->target = 0;
     m->last_hitter = -1;
+    m->level = (float)level;
     m->yaw = (float)((key + (u64)g->mons_anim_seed * 97) % 628) * 0.01f;
     m->anim = (float)((key + (u64)g->mons_anim_seed * 31) % 100) * 0.1f;
 }
@@ -105,7 +111,7 @@ static bool standable_cell(Game *g, int x, int y, int z, int headroom) {
 
 static void spawn_chunk(Game *g, Chunk *c) {
     const ChunkInfo *ci = &c->info;
-    u64 key = chunk_key(c->cx, c->cy, c->cz);
+    u64 key = chunk_spawn_key(c->cx, c->cy, c->cz);
     spawned_add(g, key);
     /* shrines */
     for (int i = 0; i < CHUNK_VOL && g->nshrines < MAX_SHRINES; i++)
@@ -118,14 +124,17 @@ static void spawn_chunk(Game *g, Chunk *c) {
         }
     if (ci->arch == ARCH_EXTERIOR) return;
 
+    loot_place_in_chunk(g, c);
     Rng r = rng_make(ci->seed ^ 0x5EED);
     int level = ci->level;
-    /* about half the chunks hold a pack; packs grow with danger */
+    /* most chunks hold a pack, structures two; packs grow with danger */
     int n = 0;
-    if (level <= 1) n = rng_chance(&r, 0.5f) ? 1 : 0;
-    else if (rng_chance(&r, ci->has_struct ? 0.9f : 0.5f)) n = MINI(6, 2 + (int)(level * 0.08f + rng_float(&r) * 2.0f));
+    if (level <= 1) n = rng_chance(&r, 0.75f) ? rng_range(&r, 1, 3) : 0;
+    else if (rng_chance(&r, ci->has_struct ? 1.0f : 0.8f)) n = MINI(10, 3 + (int)(level * 0.1f + rng_float(&r) * 3.0f));
+    if (level > 1 && ci->has_struct && rng_chance(&r, 0.6f)) n += 3 + (int)(rng_float(&r) * 3.0f);
     const float *w = FAMILY[ci->stratum];
     int main_type = level <= 1 ? MON_CRAWLER : pick_weighted(rng_float(&r), w, MON_TYPE_COUNT);
+    if (main_type == MON_BAT) n += 3; /* bats come in swarms */
     ThemeInfo ti;
     theme_info(ci->theme, &ti);
     vec3 tint = v3(ti.mat[B_ACCENT].r / 255.0f, ti.mat[B_ACCENT].g / 255.0f, ti.mat[B_ACCENT].b / 255.0f);
@@ -190,7 +199,7 @@ void monsters_spawn_for_chunks(Game *g) {
             if (d < 20.0f && c->info.arch != ARCH_EXTERIOR) too_close = true;
         }
         if (!in_range || too_close) continue;
-        u64 key = chunk_key(c->cx, c->cy, c->cz);
+        u64 key = chunk_spawn_key(c->cx, c->cy, c->cz);
         if (spawned_has(g, key)) continue;
         spawn_chunk(g, c);
     }
@@ -343,6 +352,26 @@ void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int 
         particles_burst(g, c, m->color, 18, 5.0f, 0.12f, false);
         particles_burst(g, c, v3_scale(m->color, 0.4f), 10, 4.0f, 0.08f, false);
         if (m->elite) flash_add(g, c, v3(1.0f, 0.6f, 0.3f), 8.0f, 0.4f);
+        loot_drop(g, m->pos, m->level, m->elite, 0.0f);
+        if (m->type == MON_SLIME && m->scale > 0.75f) {
+            /* a big slime splits in two small ones */
+            for (int k = 0; k < 2; k++) {
+                vec3 p = v3_add(m->pos, v3(k ? 0.4f : -0.4f, 0.1f, 0));
+                monster_spawn(g, MON_SLIME, p, (int)m->level, false, m->color, m->chunk_key);
+                for (int j = MAX_MONSTERS - 1; j >= 0; j--) {
+                    Monster *o = &g->mons[j];
+                    if (o->alive && o->type == MON_SLIME && v3_len(v3_sub(o->pos, p)) < 0.01f) {
+                        o->scale = 0.6f;
+                        o->maxhp = o->hp = m->maxhp * 0.35f;
+                        o->xp = m->xp * 0.3f;
+                        o->awake = true;
+                        o->state = MS_CHASE;
+                        o->vel = v3(k ? 3.0f : -3.0f, 4.0f, 0);
+                        break;
+                    }
+                }
+            }
+        }
         /* the killer gets the full XP, everyone else nearby half of it */
         int killer = m->last_hitter;
         for (int i = 0; i < MAX_PLAYERS; i++) {
@@ -364,9 +393,12 @@ static void enemy_fire(Game *g, Monster *m, vec3 target) {
         if (p->alive) continue;
         memset(p, 0, sizeof *p);
         p->alive = true;
-        p->kind = PJ_ENEMY_FIRE;
-        p->pos = monster_centre(m);
-        p->vel = v3_scale(v3_norm(v3_sub(target, p->pos)), 11.0f);
+        bool arrow = m->type == MON_SKELETON;
+        p->kind = arrow ? PJ_ENEMY_ARROW : PJ_ENEMY_FIRE;
+        p->element = EL_NONE;
+        p->owner = -1;
+        p->pos = v3_add(monster_centre(m), v3(0, arrow ? 0.4f : 0.0f, 0));
+        p->vel = v3_scale(v3_norm(v3_sub(target, p->pos)), arrow ? 20.0f : 11.0f);
         p->dmg = m->dmg;
         p->life = 4.0f;
         p->last_hit = -1;
@@ -450,6 +482,21 @@ void monsters_update(Game *g, float dt) {
         if (game_solid(g, (int)floorf(m->pos.x), (int)floorf(m->pos.y) - 1, (int)floorf(m->pos.z)) < 0) continue;
         m->flash = fmaxf(0.0f, m->flash - dt);
         m->cooldown -= dt;
+        /* burning and poison tick; frost slows */
+        float dot = 0.0f;
+        if (m->burn_t > 0) { m->burn_t -= dt; dot += m->burn_dps * dt; }
+        if (m->poison_t > 0) { m->poison_t -= dt; dot += m->poison_dps * dt; }
+        if (m->slow_t > 0) m->slow_t -= dt;
+        if (dot > 0) {
+            m->hp -= dot;
+            if (((int)(m->anim * 10.0f)) % 4 == 0)
+                particles_burst(g, c, m->burn_t > 0 ? element_color(EL_FIRE) : element_color(EL_POISON), 1, 1.0f, 0.04f, true);
+            if (m->hp <= 0) {
+                m->hp = 0.01f;
+                monster_damage(g, m, 1.0f, m->pos, 0.0f, m->last_hitter);
+                continue;
+            }
+        }
         m->anim += dt * (1.0f + v3_len(m->vel));
         float hdist = sqrtf((feet.x - m->pos.x) * (feet.x - m->pos.x) + (feet.z - m->pos.z) * (feet.z - m->pos.z));
         float dy = feet.y - m->pos.y;
@@ -466,7 +513,7 @@ void monsters_update(Game *g, float dt) {
             m->state = MS_IDLE;
         }
         vec3 want = v3(0, 0, 0);
-        float speed = d->speed * (m->elite ? 1.1f : 1.0f);
+        float speed = d->speed * (m->elite ? 1.1f : 1.0f) * (m->slow_t > 0 ? 0.45f : 1.0f);
         vec3 hdir = v3_norm(v3(feet.x - m->pos.x, 0, feet.z - m->pos.z));
         if (m->awake) {
             switch (m->state) {
@@ -497,7 +544,31 @@ void monsters_update(Game *g, float dt) {
             default: {
                 m->state = MS_CHASE;
                 bool moved = false;
-                if (m->type == MON_WISP) {
+                if (m->type == MON_SKELETON) {
+                    /* archer: keeps its distance and shoots */
+                    if (los && dist < 24.0f && m->cooldown <= 0) {
+                        enemy_fire(g, m, v3_add(eye, v3(0, -0.2f, 0)));
+                        m->cooldown = d->attack_time;
+                    }
+                    if (los && dist < 16.0f) {
+                        vec3 side = v3(-hdir.z, 0, hdir.x);
+                        if (hdist < 6.0f) want = v3_scale(hdir, -speed);
+                        else want = v3_scale(side, speed * 0.6f * sinf(m->anim * 0.4f));
+                        moved = true;
+                    }
+                } else if (m->type == MON_BAT && los && dist < 14.0f) {
+                    /* flutters straight at your face */
+                    vec3 dir3 = v3_norm(to);
+                    vec3 side = v3(-dir3.z, 0, dir3.x);
+                    want = v3_add(v3_scale(dir3, speed), v3_scale(side, 2.5f * sinf(m->anim * 2.0f)));
+                    want.y = (eye.y - 0.4f - c.y) * 3.0f + sinf(m->anim * 3.0f);
+                    if (dist < 1.4f && m->cooldown <= 0) {
+                        game_hurt_player(g, tp, m->dmg, c);
+                        m->cooldown = d->attack_time;
+                        m->vel = v3_scale(dir3, -5.0f); /* bounce off */
+                    }
+                    moved = true;
+                } else if (m->type == MON_WISP) {
                     if (los && dist < 18.0f && m->cooldown <= 0) {
                         enemy_fire(g, m, eye);
                         m->cooldown = d->attack_time;
@@ -536,7 +607,10 @@ void monsters_update(Game *g, float dt) {
                         if (d->flies) want.y = (target.y + 1.2f - m->pos.y) * 2.0f;
                     } else if (los) want = v3_scale(hdir, speed);
                 }
-                if (v3_len(want) > 0.1f) m->yaw = atan2f(want.z, want.x);
+                if (m->type == MON_SKELETON && los) m->yaw = atan2f(hdir.z, hdir.x);
+                else if (v3_len(want) > 0.1f) m->yaw = atan2f(want.z, want.x);
+                /* slimes move in hops */
+                if (m->type == MON_SLIME && m->on_ground && v3_len(want) > 0.5f && fmodf(m->anim, 1.3f) < 0.05f) m->vel.y = 4.5f;
                 break;
             }
             }
@@ -642,6 +716,50 @@ void monsters_draw(Game *g, vec3 eye) {
                 }
             break;
         }
+        case MON_SKELETON: {
+            /* thin bones, a skull and a bow */
+            float sw = sinf(m->anim * 5.0f) * 0.25f;
+            for (int k = -1; k <= 1; k += 2) {
+                vec3 leg = v3_add(v3_add(p, v3_scale(r, 0.1f * k * s)), v3_add(v3(0, 0.42f * s, 0), v3_scale(f, sw * k * 0.3f)));
+                batch3d_box(leg, v3(0.05f * s, 0.42f * s, 0.05f * s), y, col, false);
+            }
+            vec3 torso = v3_add(p, v3(0, 1.1f * s + bob, 0));
+            batch3d_box(torso, v3(0.12f * s, 0.26f * s, 0.2f * s), y, dark, false);
+            for (int k = -1; k <= 1; k += 2) batch3d_box(v3_add(torso, v3(0, 0.08f * k * s, 0)), v3(0.13f * s, 0.02f * s, 0.21f * s), y, col, false);
+            vec3 head = v3_add(torso, v3(0, 0.42f * s, 0));
+            batch3d_box(head, v3(0.13f * s, 0.14f * s, 0.12f * s), y, col, false);
+            for (int k = -1; k <= 1; k += 2)
+                batch3d_box(v3_add(v3_add(head, v3_scale(f, 0.13f * s)), v3_scale(r, 0.05f * k * s)), v3(0.025f * s, 0.025f * s, 0.025f * s), y, eyes, true);
+            vec3 bow = v3_add(torso, v3_add(v3_scale(f, 0.35f * s), v3_scale(r, 0.15f * s)));
+            batch3d_box(bow, v3(0.02f * s, 0.38f * s, 0.02f * s), y, v3(0.45f * light.x, 0.3f * light.y, 0.15f * light.z), false);
+            break;
+        }
+        case MON_SLIME: {
+            float squash = 1.0f + 0.15f * sinf(m->anim * 4.0f);
+            vec3 body = v3_add(p, v3(0, 0.3f * s / squash, 0));
+            batch3d_box(body, v3(0.42f * s * squash, 0.3f * s / squash, 0.42f * s * squash), y, col, false);
+            batch3d_box(v3_add(body, v3(0, 0.05f * s, 0)), v3(0.2f * s, 0.12f * s, 0.2f * s), y, v3_scale(col, 1.3f), true);
+            for (int k = -1; k <= 1; k += 2)
+                batch3d_box(v3_add(v3_add(body, v3_scale(f, 0.43f * s)), v3_add(v3_scale(r, 0.12f * k * s), v3(0, 0.1f * s, 0))),
+                            v3(0.04f * s, 0.04f * s, 0.04f * s), y, eyes, true);
+            break;
+        }
+        case MON_BAT: {
+            float flap = sinf(m->anim * 18.0f);
+            vec3 body = v3_add(p, v3(0, 0.2f * s, 0));
+            batch3d_box(body, v3(0.12f * s, 0.1f * s, 0.1f * s), y, col, false);
+            for (int k = -1; k <= 1; k += 2) {
+                vec3 wing = v3_add(body, v3_add(v3_scale(r, 0.28f * k * s), v3(0, flap * 0.12f * s, 0)));
+                batch3d_obox(wing, v3_scale(r, 0.2f * s), v3(0, 0.02f * s, 0), v3_scale(f, 0.12f * s), dark, false);
+                batch3d_box(v3_add(v3_add(body, v3_scale(f, 0.11f * s)), v3_scale(r, 0.04f * k * s)), v3(0.02f * s, 0.02f * s, 0.02f * s), y, eyes, true);
+            }
+            break;
+        }
+        }
+        /* status: a tint of the element on top */
+        if (m->burn_t > 0 || m->slow_t > 0 || m->poison_t > 0) {
+            vec3 sc = m->burn_t > 0 ? element_color(EL_FIRE) : m->slow_t > 0 ? element_color(EL_FROST) : element_color(EL_POISON);
+            batch3d_octa(v3_add(p, v3(0, d->h * s + 0.12f, 0)), 0.05f, 0.06f, m->anim * 3.0f, sc, true);
         }
         if (m->elite) {
             /* a burning crown marks elites */

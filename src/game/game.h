@@ -4,6 +4,7 @@
 #include <SDL3/SDL.h>
 
 #include "core/fmath.h"
+#include "game/items.h"
 #include "game/physics.h"
 #include "game/player.h"
 #include "game/skills.h"
@@ -11,9 +12,9 @@
 #include "world/chunkmap.h"
 #include "world/layout.h"
 
-#define MAX_MONSTERS 160
-#define MAX_PROJECTILES 256
-#define MAX_PARTICLES 1600
+#define MAX_MONSTERS 320
+#define MAX_PROJECTILES 512
+#define MAX_PARTICLES 2400
 #define MAX_FLASHES 16
 #define MAX_SHRINES 128
 #define MAX_PLAYERS 4
@@ -24,10 +25,10 @@
 #define FLOW_W (2 * FLOW_R)
 #define FLOW_Y (2 * FLOW_H)
 
-enum { MON_CRAWLER, MON_BRUTE, MON_WISP, MON_HORNED, MON_TYPE_COUNT };
+enum { MON_CRAWLER, MON_BRUTE, MON_WISP, MON_HORNED, MON_SKELETON, MON_SLIME, MON_BAT, MON_TYPE_COUNT };
 enum { MS_IDLE, MS_CHASE, MS_WINDUP, MS_CHARGE, MS_STUN };
 enum { WPN_SWORD, WPN_BOW, WPN_STAFF, WPN_COUNT };
-enum { PJ_ARROW, PJ_BOLT, PJ_NOVA, PJ_ENEMY_FIRE };
+enum { PJ_ARROW, PJ_BOLT, PJ_NOVA, PJ_ENEMY_FIRE, PJ_SPELL, PJ_ENEMY_ARROW };
 
 typedef struct MonsterDef {
     const char *name;
@@ -48,6 +49,9 @@ typedef struct Monster {
     u64 chunk_key;
     int target;      /* player slot being chased */
     int last_hitter; /* player slot that hit it last (gets the kill), -1 none */
+    /* status effects from elements */
+    float burn_t, burn_dps, poison_t, poison_dps, slow_t;
+    float level;     /* danger level it was made for (loot quality) */
 } Monster;
 
 typedef struct Projectile {
@@ -59,6 +63,9 @@ typedef struct Projectile {
     bool explode, chain;
     int last_hit;
     int owner; /* player slot that fired it, -1 for monsters */
+    u8 element; /* EL_* effect on hit, EL_NONE for none */
+    u8 form;    /* SF_* for spells */
+    float radius, tick, age;
 } Projectile;
 
 typedef struct Particle {
@@ -85,6 +92,16 @@ typedef struct Stats {
     float dead_t;
     vec3 respawn;
     float respawn_yaw;
+    /* items */
+    Item equipped[WPN_COUNT];
+    Item bag[BAG_SIZE];
+    int gold, potions_hp, potions_mp;
+    u8 relics[RELIC_COUNT]; /* how many of each */
+    /* spells */
+    u8 spell_rank[SPELL_COUNT];
+    int spell;      /* selected spell */
+    float spell_cd;
+    float ward, ward_t, haste_t;
 } Stats;
 
 /* Cells the player has seen, one bit per cell, per chunk. */
@@ -100,6 +117,8 @@ typedef struct Explored {
 
 typedef struct Options {
     u64 seed;
+    bool has_seed;      /* given on the command line: no start screen */
+    char seed_text[24]; /* what the player typed (numbers or words) */
     bool has_pos;
     vec3 pos;
     float yaw, pitch;
@@ -121,7 +140,7 @@ typedef struct Options {
 } Options;
 
 /* On-screen touch controls for player 1 (phones and tablets). */
-enum { TB_ATTACK, TB_ALT, TB_JUMP, TB_CROUCH, TB_WEAPON, TB_SKILLS, TB_MAP, TB_COUNT };
+enum { TB_ATTACK, TB_ALT, TB_JUMP, TB_CROUCH, TB_WEAPON, TB_SPELL, TB_NEXT_SPELL, TB_SKILLS, TB_MAP, TB_POTION, TB_COUNT };
 #define TOUCH_MAX_FINGERS 10
 
 typedef struct TouchCtl {
@@ -133,6 +152,16 @@ typedef struct TouchCtl {
     bool moving;
     bool held[TB_COUNT];
 } TouchCtl;
+
+/* Start screen with the seed choice (menu.c). */
+typedef struct StartMenu {
+    char text[24];
+    int row, rolls;
+    bool fresh; /* the suggested seed is replaced by typing */
+    bool done;
+    float t;
+    SDL_JoystickID pad; /* the gamepad that used the menu becomes player 1's */
+} StartMenu;
 
 /* One local player: a separate character with its own input device, view and menus. */
 typedef struct PlayerSlot {
@@ -149,8 +178,11 @@ typedef struct PlayerSlot {
     bool sprint_toggle;
     bool attack_held, alt_held; /* mouse buttons (player 1) */
     bool pad_attack, pad_alt;   /* gamepad triggers */
+    bool spell_held, pad_spell; /* cast key (Q) / gamepad X */
     /* ui */
-    bool show_map, show_skills;
+    bool show_map, show_skills; /* show_skills: the character menu */
+    int menu_tab, inv_sel, book_sel;
+    float potion_cd;
     int skill_sel;
     char banner[128];
     float banner_time;
@@ -183,6 +215,11 @@ typedef struct Game {
     Particle parts[MAX_PARTICLES];
     int nparts;
     Flash flashes[MAX_FLASHES];
+    Pickup pickups[MAX_PICKUPS];
+    Effect effects[MAX_EFFECTS];
+    /* chests and relics already taken (keys) */
+    u64 *looted;
+    int looted_cap, looted_count;
 
     /* chunks whose monsters and shrines have been placed */
     u64 *spawned;
@@ -232,6 +269,9 @@ void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int 
 void monster_spawn(Game *g, int type, vec3 pos, int level, bool elite, vec3 tint, u64 key);
 Monster *monster_nearest(Game *g, vec3 p, float max_dist, const Monster *exclude);
 void flow_update(Game *g, PlayerSlot *ps, float dt);
+/* Forget that a chunk was populated: monsters and loot are placed again on return. */
+void chunk_forget(Game *g, u64 chunk_key);
+u64 chunk_spawn_key(int cx, int cy, int cz);
 /* Other players as figures in the world, seen from viewer's view. */
 void players_draw(Game *g, const PlayerSlot *viewer);
 
@@ -248,21 +288,72 @@ float stats_max_mana(const Stats *s);
 void stats_refresh(PlayerSlot *ps);
 
 /* Skill tree helpers for other input methods (game.c). */
-enum { NAV_LEFT, NAV_RIGHT, NAV_UP, NAV_DOWN, NAV_BUY };
+enum { NAV_LEFT, NAV_RIGHT, NAV_UP, NAV_DOWN, NAV_BUY, NAV_DROP };
 void game_skills_nav(PlayerSlot *ps, int nav);
 /* Skill under a point of the skill screen (view coordinates): a skill id, -2 / -3 for the
  * previous / next branch arrows of the compact layout, or -1. */
 int game_skills_hit(PlayerSlot *ps, int W, int H, float x, float y);
 void game_view_rect(const Game *g, const PlayerSlot *ps, int *x, int *y, int *w, int *h);
+void game_menu_tap(Game *g, PlayerSlot *ps, int W, int H, float x, float y);
 /* Name of the control that opens the skill tree for this player (TAB, Y or SKILLS). */
 const char *game_skills_key(const Game *g, const PlayerSlot *ps);
 
+/* menu.c */
+void menu_init(StartMenu *m);
+void menu_event(StartMenu *m, Game *g, const SDL_Event *e);
+void menu_draw(StartMenu *m, Game *g, float dt);
+/* Seed from the text: numbers as they are, words hashed (case-insensitive). */
+u64 menu_seed(const char *text);
+/* Gives an idle gamepad to player 1. */
+void game_give_pad_to_p1(Game *g, SDL_JoystickID id);
+
 /* touch.c */
+void touch_to_low(Game *g, float nx, float ny, float *x, float *y);
 void touch_event(Game *g, const SDL_Event *e);
 void touch_input(Game *g, PlayerInput *in);
 void touch_draw(Game *g);
 /* Low-res width that fills a touch screen of this aspect (no letterbox). */
 int touch_low_width(Game *g, int win_w, int win_h);
+
+/* Character menu tabs. */
+enum { TAB_INVENTORY, TAB_SPELLS, TAB_SKILLS, TAB_COUNT };
+
+/* spells.c */
+void spells_give_start(Stats *s);
+/* Casts the selected spell; returns false if it could not (mana, cooldown). */
+bool spell_cast(Game *g, PlayerSlot *ps);
+void spell_next(PlayerSlot *ps, int dir);
+void spells_update(Game *g, float dt);
+void spells_draw_world(Game *g);
+void spell_projectile_hit(Game *g, Projectile *p, Monster *m);
+void spell_collect_lights(Game *g, vec3 eye, SceneParams *sp);
+/* Damage with an element: the hit plus its effect (burn, chill, shock...). */
+void element_hit(Game *g, Monster *m, int element, float dmg, vec3 from, float knock, int attacker);
+/* Learn a spell or raise its rank; returns the new rank. */
+int spell_learn(PlayerSlot *ps, int id);
+
+/* items.c */
+void items_give_start(Stats *s);
+void pickups_update(Game *g, float dt);
+void pickups_draw(Game *g, vec3 eye);
+void pickup_spawn(Game *g, int kind, vec3 pos, int amount, const Item *item, u64 key, u64 chunk_key);
+void loot_drop(Game *g, vec3 pos, float level, bool elite, float luck);
+void loot_place_in_chunk(Game *g, Chunk *c);
+void pickups_despawn_chunk(Game *g, u64 chunk_key);
+bool looted_has(Game *g, u64 key);
+void inventory_tap(Game *g, PlayerSlot *ps, int cell);
+void spellbook_tap(Game *g, PlayerSlot *ps, int id);
+Item item_roll(u64 seed, float level, int min_rarity);
+const WeaponBase *equipped_base(const Stats *s, int wclass);
+void drink_potion(Game *g, PlayerSlot *ps, bool mana);
+void inventory_draw(Game *g, PlayerSlot *ps, int W, int H, int top);
+void spellbook_draw(Game *g, PlayerSlot *ps, int W, int H, int top);
+/* Menu input for the inventory and spell tabs. */
+void inventory_nav(Game *g, PlayerSlot *ps, int nav);
+void spellbook_nav(Game *g, PlayerSlot *ps, int nav);
+int inventory_hit(PlayerSlot *ps, int W, int H, int top, float x, float y);
+int spellbook_hit(PlayerSlot *ps, int W, int H, int top, float x, float y);
+float relic_bonus(const Stats *s, int bonus);
 
 /* explore.c */
 void explore_update(Game *g, PlayerSlot *ps, float dt);

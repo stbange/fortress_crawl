@@ -15,7 +15,9 @@ enum { TOUCH_NONE = -1, TOUCH_MOVE = 100, TOUCH_LOOK = 101 };
 
 #define STICK_R 30.0f
 
-static const char *BUTTON_LABELS[TB_COUNT] = { "HIT", "ALT", "JUMP", "DUCK", "WPN", "SKILL", "MAP" };
+static const char *BUTTON_LABELS[TB_COUNT] = { "HIT", "ALT", "JUMP", "DUCK", "WPN", "CAST", ">", "MENU", "MAP", "POT" };
+
+static bool top_button(int b) { return b == TB_SKILLS || b == TB_MAP || b == TB_POTION; }
 
 /* Button centre and radius in low-res pixels; the top buttons are rounded boxes of r x r/2. */
 static void button_pos(int W, int H, int b, float *x, float *y, float *r) {
@@ -25,7 +27,10 @@ static void button_pos(int W, int H, int b, float *x, float *y, float *r) {
     case TB_JUMP: *x = W - 106.0f; *y = H - 82.0f; *r = 16.0f; break;
     case TB_CROUCH: *x = W - 70.0f; *y = H - 116.0f; *r = 14.0f; break;
     case TB_WEAPON: *x = W - 26.0f; *y = H - 118.0f; *r = 14.0f; break;
+    case TB_SPELL: *x = W - 156.0f; *y = H - 46.0f; *r = 18.0f; break;
+    case TB_NEXT_SPELL: *x = W - 160.0f; *y = H - 84.0f; *r = 11.0f; break;
     case TB_SKILLS: *x = W - 74.0f; *y = 14.0f; *r = 18.0f; break;
+    case TB_POTION: *x = W - 120.0f; *y = 14.0f; *r = 18.0f; break;
     default: *x = W - 28.0f; *y = 14.0f; *r = 18.0f; break; /* TB_MAP */
     }
 }
@@ -33,13 +38,13 @@ static void button_pos(int W, int H, int b, float *x, float *y, float *r) {
 static bool button_hit(int W, int H, int b, float px, float py) {
     float x, y, r;
     button_pos(W, H, b, &x, &y, &r);
-    if (b == TB_SKILLS || b == TB_MAP) return fabsf(px - x) < r + 2 && fabsf(py - y) < r * 0.5f + 6;
+    if (top_button(b)) return fabsf(px - x) < r + 2 && fabsf(py - y) < r * 0.5f + 6;
     float slack = r + 4.0f; /* fingers are big */
     return (px - x) * (px - x) + (py - y) * (py - y) < slack * slack;
 }
 
 /* Window position (normalized 0..1) to low-res pixels, undoing the letterbox. */
-static void to_low(Game *g, float nx, float ny, float *x, float *y) {
+void touch_to_low(Game *g, float nx, float ny, float *x, float *y) {
     Renderer *r = &g->r;
     float sx = (float)r->win_w / r->fbo_w, sy = (float)r->win_h / r->fbo_h;
     float s = sx < sy ? sx : sy;
@@ -84,11 +89,7 @@ static void menu_tap(Game *g, PlayerSlot *ps, float x, float y) {
     if (x > W - 40 && y < 26) { ps->show_skills = false; return; }
     int vx, vy, vw, vh;
     game_view_rect(g, ps, &vx, &vy, &vw, &vh);
-    int hit = game_skills_hit(ps, vw, vh, x - vx, y - vy);
-    if (hit == -2) game_skills_nav(ps, NAV_LEFT);
-    else if (hit == -3) game_skills_nav(ps, NAV_RIGHT);
-    else if (hit >= 0 && hit == ps->skill_sel) game_skills_nav(ps, NAV_BUY);
-    else if (hit >= 0) ps->skill_sel = hit;
+    game_menu_tap(g, ps, vw, vh, x - vx, y - vy);
 }
 
 void touch_event(Game *g, const SDL_Event *e) {
@@ -96,7 +97,7 @@ void touch_event(Game *g, const SDL_Event *e) {
     t->active = true;
     const SDL_TouchFingerEvent *f = &e->tfinger;
     float x, y;
-    to_low(g, f->x, f->y, &x, &y);
+    touch_to_low(g, f->x, f->y, &x, &y);
     int W = g->r.fbo_w, H = g->r.fbo_h;
     PlayerSlot *ps = &g->players[0];
     int i = finger_find(t, f->fingerID);
@@ -113,6 +114,8 @@ void touch_event(Game *g, const SDL_Event *e) {
             if (role == TB_WEAPON) ps->st.weapon = (ps->st.weapon + 1) % WPN_COUNT;
             else if (role == TB_SKILLS) { ps->show_skills = true; ps->show_map = false; role = TOUCH_NONE; }
             else if (role == TB_MAP) { ps->show_map = true; ps->show_skills = false; role = TOUCH_NONE; }
+            else if (role == TB_NEXT_SPELL) spell_next(ps, 1);
+            else if (role == TB_POTION) { drink_potion(g, ps, ps->st.hp >= ps->st.maxhp * 0.9f); role = TOUCH_NONE; }
             if (role == TOUCH_NONE && !ps->show_skills && !ps->show_map) {
                 if (x < W * 0.45f && !role_taken(t, TOUCH_MOVE)) {
                     role = TOUCH_MOVE;
@@ -243,7 +246,10 @@ void touch_draw(Game *g) {
             static const int NEED[WPN_COUNT] = { SK_WHIRLWIND, SK_ARROW_STORM, SK_NOVA };
             if (!ps->st.ranks[NEED[ps->st.weapon]]) a *= 0.45f;
         }
-        if (b == TB_SKILLS || b == TB_MAP) {
+        if (b == TB_SPELL) {
+            c = ps->st.spell >= 0 && spell_is_attack(ps->st.spell) ? element_color(spell_element(ps->st.spell)) : v3(0.95f, 0.9f, 0.7f);
+        }
+        if (top_button(b)) {
             batch2d_rect(x - rr, y - rr * 0.5f, rr * 2, rr, c.x * 0.4f, c.y * 0.4f, c.z * 0.4f, 0.5f);
             batch2d_rect(x - rr, y - rr * 0.5f, rr * 2, 1, c.x, c.y, c.z, a);
             continue;

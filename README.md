@@ -6,8 +6,9 @@ generated on the fly, without end, in every direction including up and down. The
 get from the gate, the more dangerous it gets.
 
 This is an early prototype. It has **world generation, lighting, the retro renderer,
-Hexen-style combat against primitive monsters, a classless skill tree, shrines, an
-explored-cells map and split-screen co-op for up to four players**. There is no loot, saving or audio yet. See [`docs/PLAN.md`](docs/PLAN.md)
+Hexen-style combat against seven kinds of primitive monsters, 12 weapon types with rarities
+and affixes, 94 spells, loot, chests and relics, an inventory, a classless skill tree,
+shrines, an explored-cells map and split-screen co-op for up to four players**. There is no loot, saving or audio yet. See [`docs/PLAN.md`](docs/PLAN.md)
 for the full plan.
 
 ## Screenshots (prototype, seed 1337)
@@ -28,6 +29,12 @@ for the full plan.
 | Classless skill tree (TAB) | Map of explored cells (M) |
 | ![Two players](docs/screenshots/coop2.png) | ![Three players](docs/screenshots/coop3.png) |
 | Split screen with two players | Three players and the roster |
+| ![Start screen](docs/screenshots/start.png) | ![Bestiary](docs/screenshots/bestiary.png) |
+| Choose your world's seed | Crawler, brute, wisp, horned, skeleton, slime, bat |
+| ![Inventory](docs/screenshots/inventory.png) | ![Spellbook](docs/screenshots/spellbook.png) |
+| Inventory (I) | Spellbook (B): 8 elements x 11 forms + 6 utility spells |
+| ![Loot](docs/screenshots/loot.png) | ![Spells](docs/screenshots/spells_cast.png) |
+| A chest, a weapon, a scroll, a relic, gold and potions | Firestorm, Fireball and Chain Lightning at a pack |
 
 ## Build
 
@@ -87,12 +94,13 @@ fullscreen and landscape, which iPhones do not allow, so turn the phone yourself
 | Big button (weapon name) | attack while held; drag from it to aim at the same time |
 | ALT | alternate attack (dimmed until the weapon's last skill is learned) |
 | JUMP, DUCK, WPN | jump, crouch, next weapon |
-| SKILL, MAP (top right) | skill tree (tap a skill to select it, tap again to learn, X closes) and map (tap to close) |
+| CAST, > | cast the selected spell (hold for breath spells), next spell |
+| POT, MENU, MAP (top right) | drink a potion; character menu (tap tabs and items, tap again to equip, use or learn, X closes); map (tap to close) |
 
 Bows and staffs get light aim assist on touch. Touch devices use a smaller view distance
 (`--radius 2`) to keep generation smooth. A Bluetooth gamepad also works in mobile browsers.
-To try the touch controls on a desktop, open the page with `?touch`; `?args=...` passes
-command line options, for example `?args=--debug+--seed+42`.
+To try the touch controls on a desktop, open the page with `?touch`; `?seed=dragon` skips the
+start screen, and `?args=...` passes command line options, for example `?args=--debug+--seed+42`.
 
 ### GitHub Pages
 
@@ -115,14 +123,45 @@ version to the Cloudflare Pages project `fortress-crawl` (created on first run):
 Pushes to `main` go to production (`fortress-crawl.pages.dev`); other branches get
 preview URLs.
 
+## Playing
+
+The game starts with the **start screen**: type a seed (a number or any word; the same seed
+always makes the same world) or roll a random one, and enter the fortress. `--seed` on the
+command line skips it.
+
+**Monsters** come in packs in most chunks, two packs in structures, and bats in swarms.
+Skeletons shoot arrows from a distance, slimes split in two, wisps throw fire, horned beasts
+charge, brutes hit hard. Elites (with a burning crown) are tougher and drop better loot.
+
+**Loot:** monsters drop gold, health and mana potions, spell scrolls and weapons. About a
+third of the chunks hold a chest (walk into it); some hide a **relic**, a collectible that
+permanently adds health, damage, mana or speed. There are 12 kinds; duplicates stack.
+Weapons come in 12 types in three classes: blades (dagger, sword, axe, mace, spear,
+greatsword), bows (shortbow, longbow, crossbow) and staves (wand, staff, scepter). Each has
+its own speed, reach, arc or projectile, a rarity (common, magic, rare, epic) and up to two
+affixes such as *Burning*, *Frozen*, *Crackling*, *Venomous*, *Vampiric*, *Swift*, *Keen*
+or *Heavy*. Deeper finds are stronger. Spare weapons can be scrapped for gold.
+
+**Spells:** every spell is an element (fire burns, frost slows, lightning arcs, poison
+lingers, arcane pierces, holy heals you, shadow steals life, earth stuns and knocks back)
+combined with a form: bolt, barrage, nova, chain, breath, orb, trap rune, halo of orbiting
+orbs, storm, meteor and aura. That makes 88 attack spells, plus Heal, Blink, Ward, Haste,
+Flare and Recall. You start with Flame Bolt and Heal; scrolls teach new spells or raise a
+known one's rank (up to 5). The stronger forms only drop deeper in. The Focus skill makes all
+spells stronger and cheaper.
+
 ## Controls
 
 | Key | Action |
 |-----|--------|
 | WASD / mouse | move / look |
 | Left / right mouse button | attack / alternate attack (unlocked by skills) |
-| 1, 2, 3 or mouse wheel | sword, bow, staff |
-| TAB | skill tree (arrows or WASD to select, Enter to learn) |
+| 1, 2, 3 or mouse wheel | blade, bow, staff |
+| Q (or middle mouse button) | cast the selected spell (hold for breath spells) |
+| R / Shift+R | next / previous known spell |
+| H / J | drink a health / mana potion |
+| TAB, I, B | character menu: last tab, inventory, spellbook (Q/E or [ ] switch tabs) |
+| in the menu | arrows or WASD select, Enter equips / uses / learns / makes a spell active, Del or X scraps a weapon |
 | M | map of the cells you have seen |
 | Space, Shift, Ctrl | jump, sprint, crouch (you duck and crawl automatically in low tunnels) |
 | F | fly / noclip (Space up, Ctrl down, Shift fast) |
@@ -150,9 +189,12 @@ If a pad disconnects, its character waits until a pad presses START again.
 | Left stick / right stick | move / look |
 | RT / LT | attack / alternate attack (bows and staffs get a little aim assist) |
 | LB / RB | previous / next weapon |
+| X | cast the selected spell |
+| D-pad left / right | previous / next spell |
+| D-pad up / down | health / mana potion |
 | A, B | jump, crouch |
 | Left stick click | sprint (until you stop) |
-| Y | skill tree (D-pad or stick to select, A to learn, B to close) |
+| Y | character menu (LB/RB tabs, D-pad or stick to select, A to equip/use/learn, X to scrap, B to close) |
 | BACK | map (B to close) |
 
 Menus only pause the game when you play alone. Kills give the killer full XP and everyone
@@ -164,14 +206,17 @@ Command line:
 fortress_crawl [--seed N] [--pos x y z] [--look yaw pitch] [--fly] [--radius n] [--vradius n]
                [--window w h] [--lowres w h] [--debug]
                [--invert-x] [--invert-y] [--sens s] [--recenter | --no-recenter]
-               [--shot file.bmp] [--shot-time seconds] [--demo combat|sword|death|skills|map|coop]
+               [--shot file.bmp] [--shot-time seconds]
+               [--demo combat|sword|death|skills|map|coop|menu|inventory|spells|loot|magic|bestiary]
                [--players n] [--test-pad] [--touch]
 ```
 
 `--shot` waits until the view has loaded, saves one frame and exits. It is useful for
 comparing seeds and changes to the generator. `--demo` sets up a scene for that frame: a
 level-8 character facing a monster pack (`combat`, `sword`, `death` with 1 HP, `coop` with
-the other players beside you), or the `skills` or `map` screen. `--players n` starts with n
+the other players beside you, `magic` casting three spells), a character with some loot in
+the `inventory` or `spells` screen, `loot` on the floor, one monster of each kind
+(`bestiary`), the start screen (`menu`), or the `skills` or `map` screen. `--players n` starts with n
 characters (gamepads take them over with START). `--test-pad` attaches a virtual gamepad
 that joins, walks, turns and attacks, to test the gamepad path without hardware. `--touch`
 shows the touch controls from the start.

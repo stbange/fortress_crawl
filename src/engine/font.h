@@ -5,6 +5,8 @@
 void font_init(void);
 void font_begin(int target_w, int target_h);
 void font_text(int x, int y, const char *s, float r, float g, float b);
+/* Same, with every font pixel drawn as k x k pixels (titles). */
+void font_text_scaled(int x, int y, const char *s, int k, float r, float g, float b);
 void font_end(void);
 int font_text_width(const char *s);
 #define FONT_LINE 9
