@@ -75,6 +75,14 @@ python3 -m http.server -d build-web/dist 8000
 
 Open http://localhost:8000 and click into the page to lock the mouse; Esc releases it.
 
+### GitHub Pages
+
+The workflow also publishes the web version to GitHub Pages on every push to the default
+branch: **https://stbange.github.io/fortress_crawl/**. This needs Pages to be switched to
+GitHub Actions once (repository Settings -> Pages -> Build and deployment -> Source:
+*GitHub Actions*). The workflow tries to do that itself; if it is not allowed to, the `pages`
+job only prints a warning until the setting is changed.
+
 ### Deployment to Cloudflare Pages
 
 `.github/workflows/build.yml` builds the desktop version with tests and the web
