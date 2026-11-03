@@ -35,6 +35,7 @@ static const struct { const char *name, *desc; float mana, cooldown; int tier; }
     [SU_HASTE] = { "Haste", "faster moves and attacks for 10 s", 20, 15.0f, 2 },
     [SU_FLARE] = { "Flare", "a lasting light where you aim", 8, 1.0f, 0 },
     [SU_RECALL] = { "Recall", "back to your shrine", 30, 30.0f, 2 },
+    [SU_THREAD] = { "Golden Thread", "a fading thread leads to your target; again: next mission", 6, 1.5f, 0 },
 };
 
 vec3 element_color(int e) {
@@ -85,6 +86,7 @@ int spell_learn(PlayerSlot *ps, int id) {
 void spells_give_start(Stats *s) {
     s->spell_rank[spell_attack_id(EL_FIRE, SF_BOLT)] = 1;
     s->spell_rank[SPELL_ATTACK_COUNT + SU_HEAL] = 1;
+    s->spell_rank[SPELL_ATTACK_COUNT + SU_THREAD] = 1;
     s->spell = spell_attack_id(EL_FIRE, SF_BOLT);
 }
 
@@ -322,6 +324,10 @@ static bool cast_utility(Game *g, PlayerSlot *ps, int u, int rank) {
         Effect *e = effect_new(g, EF_FLARE, EL_HOLY, ps->index, aim_point(g, ps, 30.0f, false), 40.0f + 10.0f * rank, 0, 12.0f);
         return e != NULL;
     }
+    case SU_THREAD:
+        if (!story_cast_thread(g, ps)) return false;
+        particles_burst(g, eye, v3(1.0f, 0.8f, 0.35f), 12, 2.0f, 0.04f, true);
+        return true;
     case SU_RECALL:
         particles_burst(g, eye, v3(0.9f, 0.8f, 0.5f), 20, 3.0f, 0.05f, true);
         ps->pl.pos = s->respawn;
@@ -333,9 +339,10 @@ static bool cast_utility(Game *g, PlayerSlot *ps, int u, int rank) {
     return false;
 }
 
-bool spell_cast(Game *g, PlayerSlot *ps) {
+bool spell_cast(Game *g, PlayerSlot *ps) { return spell_cast_id(g, ps, ps->st.spell); }
+
+bool spell_cast_id(Game *g, PlayerSlot *ps, int id) {
     Stats *s = &ps->st;
-    int id = s->spell;
     if (s->dead || s->spell_cd > 0 || id < 0 || id >= SPELL_COUNT || !s->spell_rank[id]) return false;
     SpellInfo si;
     spell_info(id, &si);

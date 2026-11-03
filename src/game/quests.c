@@ -713,3 +713,290 @@ void story_draw_tab(Game *g, PlayerSlot *ps, int W, int H, int top) {
     }
     font_end();
 }
+
+/* ---------- the golden thread ----------
+ * A spell that searches a walkable route through the loaded part of the dungeon toward the
+ * current target (weighted A*: steps up, drops, stairs and crawlspaces), and lays a fading
+ * golden line along it. If the target lies beyond what is loaded, the thread leads to the
+ * reachable spot closest to it; follow it and cast again. */
+
+#define PF_NODES 160000
+#define PF_EXPAND 70000
+#define PF_HASH (1 << 18)
+
+typedef struct PathFinder {
+    Game *g;
+    Chunk *c; /* last chunk looked at (most lookups hit it) */
+    int ccx, ccy, ccz;
+    bool have;
+    int *hx, *hy, *hz, *parent, *table;
+    float *gcost;
+    u8 *closed;
+    int n;
+    struct HeapItem { float f; int node; } *heap;
+    int nheap;
+} PathFinder;
+
+static int pf_solid(PathFinder *p, int x, int y, int z) {
+    int cx = floordiv(x, CHUNK), cy = floordiv(y, CHUNK), cz = floordiv(z, CHUNK);
+    if (!p->have || cx != p->ccx || cy != p->ccy || cz != p->ccz) {
+        p->ccx = cx; p->ccy = cy; p->ccz = cz;
+        p->have = true;
+        p->c = chunkmap_get(&p->g->map, cx, cy, cz);
+        if (p->c && p->c->state != CH_READY) p->c = NULL;
+    }
+    if (!p->c) return -1;
+    return block_solid(p->c->blocks[cidx(floormod(x, CHUNK), floormod(y, CHUNK), floormod(z, CHUNK))]) ? 1 : 0;
+}
+
+static bool pf_free(PathFinder *p, int x, int y, int z) { return pf_solid(p, x, y, z) == 0; }
+static bool pf_stand(PathFinder *p, int x, int y, int z) { return pf_solid(p, x, y - 1, z) == 1 && pf_free(p, x, y, z); }
+
+static int pf_node(PathFinder *p, int x, int y, int z, bool create) {
+    u32 h = (u32)(((u64)(u32)x * 73856093u) ^ ((u64)(u32)y * 19349663u) ^ ((u64)(u32)z * 83492791u)) & (PF_HASH - 1);
+    for (;; h = (h + 1) & (PF_HASH - 1)) {
+        int i = p->table[h] - 1;
+        if (i < 0) break;
+        if (p->hx[i] == x && p->hy[i] == y && p->hz[i] == z) return i;
+    }
+    if (!create || p->n >= PF_NODES) return -1;
+    int i = p->n++;
+    p->hx[i] = x; p->hy[i] = y; p->hz[i] = z;
+    p->gcost[i] = 1e30f;
+    p->parent[i] = -1;
+    p->closed[i] = 0;
+    p->table[h] = i + 1;
+    return i;
+}
+
+static void heap_push(PathFinder *p, float f, int node) {
+    if (p->nheap >= PF_NODES * 2) return;
+    int i = p->nheap++;
+    while (i > 0) {
+        int up = (i - 1) / 2;
+        if (p->heap[up].f <= f) break;
+        p->heap[i] = p->heap[up];
+        i = up;
+    }
+    p->heap[i].f = f;
+    p->heap[i].node = node;
+}
+
+static int heap_pop(PathFinder *p) {
+    int top = p->heap[0].node;
+    struct HeapItem last = p->heap[--p->nheap];
+    int i = 0;
+    for (;;) {
+        int c = 2 * i + 1;
+        if (c >= p->nheap) break;
+        if (c + 1 < p->nheap && p->heap[c + 1].f < p->heap[c].f) c++;
+        if (p->heap[c].f >= last.f) break;
+        p->heap[i] = p->heap[c];
+        i = c;
+    }
+    if (p->nheap) p->heap[i] = last;
+    return top;
+}
+
+/* Where a walker standing at (x,y,z) ends up stepping towards (dx,dz): level, one up, or
+ * dropping up to six cells. Returns false if blocked. */
+static bool pf_step(PathFinder *p, int x, int y, int z, int dx, int dz, int *ny) {
+    int nx = x + dx, nz = z + dz;
+    if (dx && dz && (!pf_free(p, x + dx, y, z) || !pf_free(p, x, y, z + dz))) return false; /* no corner cutting */
+    if (pf_stand(p, nx, y, nz)) { *ny = y; return true; }
+    if (pf_free(p, x, y + 1, z) && pf_stand(p, nx, y + 1, nz)) { *ny = y + 1; return true; }
+    if (!pf_free(p, nx, y, nz)) return false;
+    for (int k = 1; k <= 6; k++) {
+        int s = pf_solid(p, nx, y - k, nz);
+        if (s < 0) return false;
+        if (s == 1) { *ny = y - k + 1; return true; }
+    }
+    return false;
+}
+
+static float dist3(float ax, float ay, float az, vec3 b) {
+    float dx = ax - b.x, dy = ay - b.y, dz = az - b.z;
+    return sqrtf(dx * dx + dy * dy + dz * dz);
+}
+
+/* Finds a route from feet position `from` towards `goal`. Fills the thread with points and
+ * returns 2 if it reaches the goal, 1 if it stops at the closest reachable spot, 0 if none. */
+static int thread_path(Game *g, vec3 from, vec3 goal, Thread *th) {
+    PathFinder p = { 0 };
+    p.g = g;
+    p.hx = malloc(sizeof(int) * PF_NODES * 4);
+    p.hy = p.hx + PF_NODES;
+    p.hz = p.hy + PF_NODES;
+    p.parent = p.hz + PF_NODES;
+    p.table = calloc(PF_HASH, sizeof(int));
+    p.gcost = malloc(sizeof(float) * PF_NODES);
+    p.closed = malloc(PF_NODES);
+    p.heap = malloc(sizeof(*p.heap) * PF_NODES * 2);
+    int sx = (int)floorf(from.x), sy = (int)floorf(from.y + 0.01f), sz = (int)floorf(from.z);
+    for (int k = 0; k < 6 && !pf_stand(&p, sx, sy, sz); k++) sy--;
+    int result = 0;
+    th->n = 0;
+    if (pf_stand(&p, sx, sy, sz)) {
+        int start = pf_node(&p, sx, sy, sz, true);
+        p.gcost[start] = 0;
+        heap_push(&p, dist3(sx + 0.5f, sy + 1.0f, sz + 0.5f, goal) * 1.3f, start);
+        int best = start, expanded = 0;
+        float best_h = 1e30f;
+        static const int DX[8] = { 1, -1, 0, 0, 1, 1, -1, -1 }, DZ[8] = { 0, 0, 1, -1, 1, -1, 1, -1 };
+        while (p.nheap && expanded < PF_EXPAND) {
+            int u = heap_pop(&p);
+            if (p.closed[u]) continue;
+            p.closed[u] = 1;
+            expanded++;
+            int ux = p.hx[u], uy = p.hy[u], uz = p.hz[u];
+            float h = dist3(ux + 0.5f, uy + 1.0f, uz + 0.5f, goal);
+            if (h < best_h) { best_h = h; best = u; }
+            if (h < 2.5f) { result = 2; break; }
+            for (int d = 0; d < 8; d++) {
+                int ny;
+                if (!pf_step(&p, ux, uy, uz, DX[d], DZ[d], &ny)) continue;
+                int v = pf_node(&p, ux + DX[d], ny, uz + DZ[d], true);
+                if (v < 0 || p.closed[v]) continue;
+                float cost = p.gcost[u] + (d < 4 ? 1.0f : 1.414f) + 0.3f * (float)abs(ny - uy);
+                if (cost >= p.gcost[v]) continue;
+                p.gcost[v] = cost;
+                p.parent[v] = u;
+                heap_push(&p, cost + dist3(ux + DX[d] + 0.5f, ny + 1.0f, uz + DZ[d] + 0.5f, goal) * 1.3f, v);
+            }
+        }
+        if (!result) result = best != start ? 1 : 0;
+        /* cells from the goal end back to the start, then reversed into points */
+        static vec3 cells[THREAD_MAX * 4];
+        int nc = 0;
+        for (int i = best; i >= 0 && nc < THREAD_MAX * 4; i = p.parent[i])
+            cells[nc++] = v3(p.hx[i] + 0.5f, p.hy[i] + 1.05f, p.hz[i] + 0.5f);
+        /* keep the start end if the route is longer than a thread can be */
+        int from_i = nc - 1, to_i = MAXI(0, nc - THREAD_MAX / 2);
+        static vec3 raw[THREAD_MAX];
+        int nr = 0;
+        for (int i = from_i; i >= to_i; i--) raw[nr++] = cells[i];
+        /* Chaikin corner cutting once: softer turns */
+        if (nr >= 3) {
+            th->pts[th->n++] = raw[0];
+            for (int i = 0; i + 1 < nr && th->n + 2 < THREAD_MAX; i++) {
+                th->pts[th->n++] = v3_lerp(raw[i], raw[i + 1], 0.25f);
+                th->pts[th->n++] = v3_lerp(raw[i], raw[i + 1], 0.75f);
+            }
+            th->pts[th->n++] = raw[nr - 1];
+        } else {
+            for (int i = 0; i < nr; i++) th->pts[th->n++] = raw[i];
+        }
+        if (result == 1 && best_h < 14.0f) result = 2; /* right next to the place: close enough */
+    }
+    free(p.hx);
+    free(p.table);
+    free(p.gcost);
+    free(p.closed);
+    free(p.heap);
+    th->t = 0;
+    th->life = 22.0f;
+    th->reached = result == 2;
+    return th->n >= 2 ? result : 0;
+}
+
+/* The goals the thread can lead to: the chapter target, then the missions. */
+static int thread_goals(Game *g, PlayerSlot *ps, vec3 *goal, char names[][STORY_NAME], int max) {
+    int n = 0;
+    if (ps->st.motive) {
+        ensure_target(g, ps);
+        Monster *m = find_named(g, ps->target.key);
+        goal[n] = m ? v3_add(m->pos, v3(0, 0.5f, 0)) : chunk_centre(ps->target.cx, ps->target.cy, ps->target.cz);
+        snprintf(names[n], STORY_NAME, "%s", ps->target.name);
+        n++;
+    }
+    for (int i = 0; i < ps->st.nmissions && n < max; i++) {
+        Mission *mi = &ps->st.missions[i];
+        goal[n] = chunk_centre(mi->tx, mi->ty, mi->tz);
+        if (mi->type == MI_BOUNTY) {
+            Monster *m = find_named(g, mi->key);
+            if (m) goal[n] = v3_add(m->pos, v3(0, 0.5f, 0));
+        } else {
+            for (int k = 0; k < MAX_PICKUPS; k++)
+                if (g->pickups[k].alive && g->pickups[k].key == mi->key) goal[n] = g->pickups[k].pos;
+        }
+        mission_title(g, mi, names[n], STORY_NAME);
+        n++;
+    }
+    return n;
+}
+
+bool story_cast_thread(Game *g, PlayerSlot *ps) {
+    vec3 goal[1 + MAX_MISSIONS];
+    char names[1 + MAX_MISSIONS][STORY_NAME];
+    int n = thread_goals(g, ps, goal, names, 1 + MAX_MISSIONS);
+    if (!n) {
+        game_banner(ps, "THE THREAD HAS NOTHING TO FOLLOW");
+        return false;
+    }
+    /* casting again soon after follows the next goal */
+    ps->thread_goal = g->time - ps->thread_cast_time < 8.0f ? (ps->thread_goal + 1) % n : 0;
+    ps->thread_cast_time = g->time;
+    int i = ps->thread_goal;
+    int r = thread_path(g, ps->pl.pos, goal[i], &ps->thread);
+    char buf[128];
+    if (r == 0) snprintf(buf, sizeof buf, "THE THREAD FINDS NO WAY FROM HERE");
+    else if (r == 2) snprintf(buf, sizeof buf, "THE THREAD LEADS TO %s", names[i]);
+    else snprintf(buf, sizeof buf, "TOWARDS %s - FOLLOW THE THREAD, CAST AGAIN", names[i]);
+    upper(buf);
+    game_banner(ps, buf);
+    return r != 0;
+}
+
+void story_update_threads(Game *g, float dt) {
+    for (int i = 0; i < MAX_PLAYERS; i++)
+        if (g->players[i].active && g->players[i].thread.n) {
+            Thread *th = &g->players[i].thread;
+            th->t += dt;
+            if (th->t > th->life) th->n = 0;
+        }
+}
+
+/* The thread: thin golden segments, a bright pulse running along it toward the goal, and
+ * a slow dissolve at the end of its life. */
+void story_draw_threads(Game *g, vec3 eye) {
+    for (int k = 0; k < MAX_PLAYERS; k++) {
+        Thread *th = &g->players[k].thread;
+        if (!g->players[k].active || th->n < 2) continue;
+        float fade = 1.0f - th->t / th->life;
+        float head = fmodf(th->t * 14.0f, (float)th->n + 40.0f);
+        for (int i = 0; i + 1 < th->n; i++) {
+            vec3 a = th->pts[i], b = th->pts[i + 1];
+            float de = v3_len(v3_sub(v3_scale(v3_add(a, b), 0.5f), eye));
+            if (de > 70.0f || de < 1.5f) continue; /* not through the camera */
+            /* dissolve: segments drop out in a random order during the last third */
+            float keep = hash_unit(mix64((u64)i * 0x9E3779B97F4A7C15ULL + (u64)k));
+            if (keep > fade * 3.0f) continue;
+            float pulse = fmaxf(0.0f, 1.0f - fabsf((float)i - head) / 5.0f);
+            float shimmer = 0.75f + 0.25f * sinf(g->time * 6.0f + i * 0.7f);
+            float br = (0.55f + 0.45f * fminf(1.0f, fade * 2.0f)) * shimmer + pulse * 1.2f;
+            vec3 col = v3(1.0f * br, 0.78f * br, 0.32f * br + pulse * 0.3f);
+            vec3 d = v3_scale(v3_sub(b, a), 0.5f);
+            vec3 up = fabsf(d.y) > 0.9f * v3_len(d) ? v3(1, 0, 0) : v3(0, 1, 0);
+            float w = 0.018f + pulse * 0.02f;
+            vec3 sx = v3_scale(v3_norm(v3_cross(d, up)), w), sy = v3_scale(v3_norm(v3_cross(sx, d)), w);
+            batch3d_obox(v3_add(a, d), sx, sy, d, col, true);
+            if (i % 6 == 0) batch3d_octa(a, 0.04f, 0.05f, g->time * 2.0f + i, v3_scale(col, 1.2f), true);
+        }
+    }
+}
+
+void story_thread_lights(Game *g, vec3 eye, SceneParams *sp) {
+    for (int k = 0; k < MAX_PLAYERS && sp->ndl < MAX_DLIGHTS; k++) {
+        Thread *th = &g->players[k].thread;
+        if (!g->players[k].active || th->n < 2) continue;
+        int head = (int)fmodf(th->t * 14.0f, (float)th->n + 40.0f);
+        if (head >= th->n) continue;
+        vec3 p = th->pts[head];
+        if (v3_len(v3_sub(p, eye)) > 45.0f) continue;
+        float fade = 1.0f - th->t / th->life;
+        sp->dl_pos[sp->ndl] = p;
+        sp->dl_col[sp->ndl] = v3(0.9f * fade, 0.7f * fade, 0.3f * fade);
+        sp->dl_rad[sp->ndl] = 6.0f;
+        sp->ndl++;
+    }
+}

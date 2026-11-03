@@ -8,7 +8,7 @@ get from the gate, the harder it gets.
 v0.3 added the combat milestone: Hexen-style combat, a classless skill tree, monsters, shrines
 and a map of explored cells. v0.4 added local split-screen co-op for up to four players with
 gamepads (section 6.4) and touch controls (6.5). v0.5 adds a start screen with the seed choice,
-denser monsters with three new kinds, loot, weapons, relics, an inventory and 94 spells
+denser monsters with three new kinds, loot, weapons, relics, an inventory and 95 spells
 (section 6.6) and saving (6.7). v0.6 adds generated stories: motives, an endless metaplot of
 named enemies, domains, inscriptions, notes and bounty boards (6.8, details in
 [STORY.md](STORY.md)).
@@ -256,7 +256,7 @@ down), walls, water and light sources.
   Item level follows the danger level where it dropped.
 - **Inventory:** three equipped weapons (one per class), an 18-slot bag, potions, gold and
   the relic collection in a tabbed character menu (items, spells, skills).
-- **Spells:** 8 elements x 11 forms + 6 utility spells. Damage grows with level, the Focus
+- **Spells:** 8 elements x 11 forms + 7 utility spells. Damage grows with level, the Focus
   skill, the spell's rank (up to 5) and damage relics. Scroll drops respect a tier per form,
   so meteors, storms and auras only appear deeper in.
 

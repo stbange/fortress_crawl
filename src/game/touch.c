@@ -15,9 +15,9 @@ enum { TOUCH_NONE = -1, TOUCH_MOVE = 100, TOUCH_LOOK = 101 };
 
 #define STICK_R 30.0f
 
-static const char *BUTTON_LABELS[TB_COUNT] = { "HIT", "ALT", "JUMP", "DUCK", "WPN", "CAST", ">", "MENU", "MAP", "POT" };
+static const char *BUTTON_LABELS[TB_COUNT] = { "HIT", "ALT", "JUMP", "DUCK", "WPN", "CAST", ">", "MENU", "MAP", "POT", "PATH" };
 
-static bool top_button(int b) { return b == TB_SKILLS || b == TB_MAP || b == TB_POTION; }
+static bool top_button(int b) { return b == TB_SKILLS || b == TB_MAP || b == TB_POTION || b == TB_THREAD; }
 
 /* Button centre and radius in low-res pixels; the top buttons are rounded boxes of r x r/2. */
 static void button_pos(int W, int H, int b, float *x, float *y, float *r) {
@@ -31,6 +31,7 @@ static void button_pos(int W, int H, int b, float *x, float *y, float *r) {
     case TB_NEXT_SPELL: *x = W - 160.0f; *y = H - 84.0f; *r = 11.0f; break;
     case TB_SKILLS: *x = W - 74.0f; *y = 14.0f; *r = 18.0f; break;
     case TB_POTION: *x = W - 120.0f; *y = 14.0f; *r = 18.0f; break;
+    case TB_THREAD: *x = W - 166.0f; *y = 14.0f; *r = 18.0f; break;
     default: *x = W - 28.0f; *y = 14.0f; *r = 18.0f; break; /* TB_MAP */
     }
 }
@@ -120,6 +121,7 @@ void touch_event(Game *g, const SDL_Event *e) {
             else if (role == TB_MAP) { ps->show_map = true; ps->show_skills = false; role = TOUCH_NONE; }
             else if (role == TB_NEXT_SPELL) spell_next(ps, 1);
             else if (role == TB_POTION) { drink_potion(g, ps, ps->st.hp >= ps->st.maxhp * 0.9f); role = TOUCH_NONE; }
+            else if (role == TB_THREAD) { spell_cast_id(g, ps, SPELL_ATTACK_COUNT + SU_THREAD); role = TOUCH_NONE; }
             if (role == TOUCH_NONE && !ps->show_skills && !ps->show_map) {
                 if (x < W * 0.45f && !role_taken(t, TOUCH_MOVE)) {
                     role = TOUCH_MOVE;

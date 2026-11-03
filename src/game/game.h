@@ -170,10 +170,11 @@ typedef struct Options {
     bool fresh;    /* ignore the save (new characters) */
     bool persist;  /* load and save even in screenshot runs (tests) */
     bool auto_motive; /* screenshot runs: pick a motive without asking */
+    int demo_chapter; /* --chapter n: story demos start at chapter n */
 } Options;
 
 /* On-screen touch controls for player 1 (phones and tablets). */
-enum { TB_ATTACK, TB_ALT, TB_JUMP, TB_CROUCH, TB_WEAPON, TB_SPELL, TB_NEXT_SPELL, TB_SKILLS, TB_MAP, TB_POTION, TB_COUNT };
+enum { TB_ATTACK, TB_ALT, TB_JUMP, TB_CROUCH, TB_WEAPON, TB_SPELL, TB_NEXT_SPELL, TB_SKILLS, TB_MAP, TB_POTION, TB_THREAD, TB_COUNT };
 #define TOUCH_MAX_FINGERS 10
 
 typedef struct TouchCtl {
@@ -214,6 +215,15 @@ typedef struct StartMenu {
     SDL_JoystickID pad; /* the gamepad that used the menu becomes player 1's */
 } StartMenu;
 
+/* The golden thread spell: a fading line along a route to a target (quests.c). */
+#define THREAD_MAX 600
+typedef struct Thread {
+    vec3 pts[THREAD_MAX];
+    int n;
+    float t, life;
+    bool reached;
+} Thread;
+
 /* One local player: a separate character with its own input device, view and menus. */
 typedef struct PlayerSlot {
     bool active;
@@ -247,6 +257,9 @@ typedef struct PlayerSlot {
     int domain_cx, domain_cy, domain_cz;
     char domain_name[STORY_NAME];
     int motive_sel, story_scroll;
+    Thread thread;
+    int thread_goal;
+    float thread_cast_time;
     int skill_sel;
     char banner[128];
     float banner_time;
@@ -418,11 +431,17 @@ bool story_collect_quest(Game *g, PlayerSlot *ps, Pickup *p);
 void story_spawn_lord(Game *g, Chunk *c);
 void lore_add(Game *g, int kind, int a, int b, int c);
 Monster *story_spawn_named_at(Game *g, const Named *n, vec3 pos);
+bool story_cast_thread(Game *g, PlayerSlot *ps);
+void story_update_threads(Game *g, float dt);
+void story_draw_threads(Game *g, vec3 eye);
+void story_thread_lights(Game *g, vec3 eye, SceneParams *sp);
 
 /* spells.c */
 void spells_give_start(Stats *s);
 /* Casts the selected spell; returns false if it could not (mana, cooldown). */
 bool spell_cast(Game *g, PlayerSlot *ps);
+/* Casts a given known spell (the golden thread has its own key). */
+bool spell_cast_id(Game *g, PlayerSlot *ps, int id);
 void spell_next(PlayerSlot *ps, int dir);
 void spells_update(Game *g, float dt);
 void spells_draw_world(Game *g);

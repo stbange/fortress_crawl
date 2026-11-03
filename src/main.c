@@ -66,6 +66,7 @@ static bool parse_args(Options *o, int argc, char **argv) {
         else if (!strcmp(a, "--touch")) o->touch = true;
         else if (!strcmp(a, "--fresh")) o->fresh = true;
         else if (!strcmp(a, "--persist")) o->persist = true;
+        else if (!strcmp(a, "--chapter") && i + 1 < argc) o->demo_chapter = atoi(argv[++i]) - 1;
         else {
             SDL_Log("usage: fortress_crawl [--seed N] [--pos x y z] [--look yaw pitch] [--fly] [--radius n] [--vradius n]\n"
                     "                      [--window w h] [--lowres w h] [--debug] [--invert-x] [--invert-y] [--sens s]\n"
@@ -152,6 +153,19 @@ static void demo_setup(Game *g) {
             pickup_spawn(g, PK_CHEST, v3_add(p1->pl.pos, v3(0.8f, 0.0f, 0.5f)), 8, NULL, 92, 0);
         }
         for (int i = 0; i < MAX_MONSTERS; i++) g->mons[i].alive = false;
+        return;
+    }
+    if (!strcmp(g_demo_kind, "thread")) {
+        /* the golden thread to the first chapter target, from wherever --pos put us */
+        s->motive = MOTIVE_REVENGE + 1;
+        s->chapter = g->opt.demo_chapter;
+        p1->pl.fly = false;
+        u64 t0 = SDL_GetTicksNS();
+        bool ok = story_cast_thread(g, p1);
+        Named t;
+        story_chapter_target(&g->world, s->chapter, &t);
+        SDL_Log("thread: %s, %d points, reached %d, %.1f ms; target %s at chunk %d %d %d; banner \"%s\"", ok ? "ok" : "none",
+                p1->thread.n, p1->thread.reached, (SDL_GetTicksNS() - t0) / 1e6, t.name, t.cx, t.cy, t.cz, p1->banner);
         return;
     }
     if (!strcmp(g_demo_kind, "story") || !strcmp(g_demo_kind, "read") || !strcmp(g_demo_kind, "named")) {

@@ -498,6 +498,7 @@ void combat_collect_lights(Game *g, PlayerSlot *viewer, SceneParams *sp) {
             sp->dl_rad[sp->ndl] = p->kind == PJ_NOVA ? 4.0f : 7.0f;
             sp->ndl++;
         }
+    story_thread_lights(g, eye, sp);
     spell_collect_lights(g, eye, sp);
 }
 

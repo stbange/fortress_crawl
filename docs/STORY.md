@@ -100,6 +100,12 @@ someone already killed says so.
   30 M BELOW", at the top of the view.
 - **Name plates:** named enemies in view show their name and health.
 - **Map:** the chapter target (red) and missions (gold), on the edge when off the map.
+- **Golden Thread** (a spell everyone has; G, right stick click, PATH on touch): a weighted A*
+  search over the walkable cells of the loaded chunks (level moves, one-cell steps up, drops
+  of up to six cells, crawlspaces, no corner cutting) toward the target, laid out as a thin
+  golden line with a light pulse running along it toward the goal; it dissolves after about
+  20 seconds. If the target is beyond the loaded area, the line ends at the reachable spot
+  closest to it. Casting again within eight seconds switches to the next mission.
 - **STORY tab** (L, or the menu): motive, chapter, arc, target, the hook, missions with
   directions, and everything read so far ("What the dead say"), newest first.
 

@@ -411,6 +411,7 @@ void game_event(Game *g, const SDL_Event *e) {
         case SDLK_Q: ps->spell_held = true; break;
         case SDLK_R: spell_next(ps, (SDL_GetModState() & SDL_KMOD_SHIFT) ? -1 : 1); break;
         case SDLK_H: drink_potion(g, ps, false); break;
+        case SDLK_G: spell_cast_id(g, ps, SPELL_ATTACK_COUNT + SU_THREAD); break;
         case SDLK_J: drink_potion(g, ps, true); break;
         case SDLK_M: ps->show_map = !ps->show_map; ps->show_skills = false; break;
         case SDLK_1: ps->st.weapon = WPN_SWORD; break;
@@ -531,6 +532,7 @@ static void read_pad(Game *g, PlayerSlot *ps, PlayerInput *in, float dt) {
     if (PRESSED(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER)) ps->st.weapon = (ps->st.weapon + 1) % WPN_COUNT;
     if (PRESSED(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER)) ps->st.weapon = (ps->st.weapon + WPN_COUNT - 1) % WPN_COUNT;
     if (PRESSED(SDL_GAMEPAD_BUTTON_LEFT_STICK)) ps->sprint_toggle = !ps->sprint_toggle;
+    if (PRESSED(SDL_GAMEPAD_BUTTON_RIGHT_STICK)) spell_cast_id(g, ps, SPELL_ATTACK_COUNT + SU_THREAD);
     if (fabsf(lx) < 0.1f && fabsf(ly) < 0.1f) ps->sprint_toggle = false;
 
     if (fabsf(lx) + fabsf(ly) > 0) { in->move_x = lx; in->move_z = -ly; }
@@ -635,6 +637,7 @@ void game_update(Game *g, const PlayerInput *kb, float dt) {
     for (int i = 0; i < MAX_PLAYERS; i++)
         if (g->players[i].active) explore_update(g, &g->players[i], dt);
     story_update(g, dt);
+    story_update_threads(g, dt);
     g->time += dt;
     g->play_time += dt;
     /* autosave (not in screenshot and test runs) */
@@ -984,6 +987,7 @@ static void render_view(Game *g, PlayerSlot *ps, int vx, int vy, int vw, int vh)
     combat_draw_world(g, eye);
     pickups_draw(g, eye);
     spells_draw_world(g);
+    story_draw_threads(g, eye);
     batch3d_flush(&g->r.vp, &fog);
 
     /* the weapon in view gets its own depth range */

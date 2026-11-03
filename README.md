@@ -7,7 +7,7 @@ get from the gate, the more dangerous it gets.
 
 This is an early prototype. It has **world generation, lighting, the retro renderer,
 Hexen-style combat against seven kinds of primitive monsters, 12 weapon types with rarities
-and affixes, 94 spells, loot, chests and relics, an inventory, a classless skill tree,
+and affixes, 95 spells, loot, chests and relics, an inventory, a classless skill tree,
 shrines, an explored-cells map, split-screen co-op for up to four players, saving, and
 generated stories: a motive per character, an endless metaplot of named enemies, inscriptions,
 notes of the dead and bounty boards**. There is no audio yet. See [`docs/PLAN.md`](docs/PLAN.md)
@@ -34,13 +34,15 @@ for the full plan and [`docs/STORY.md`](docs/STORY.md) for how the stories work.
 | ![Start screen](docs/screenshots/start.png) | ![Bestiary](docs/screenshots/bestiary.png) |
 | Choose your world's seed | Crawler, brute, wisp, horned, skeleton, slime, bat |
 | ![Inventory](docs/screenshots/inventory.png) | ![Spellbook](docs/screenshots/spellbook.png) |
-| Inventory (I) | Spellbook (B): 8 elements x 11 forms + 6 utility spells |
+| Inventory (I) | Spellbook (B): 8 elements x 11 forms + 7 utility spells |
 | ![Loot](docs/screenshots/loot.png) | ![Spells](docs/screenshots/spells_cast.png) |
 | A chest, a weapon, a scroll, a relic, gold and potions | Firestorm, Fireball and Chain Lightning at a pack |
 | ![Motive](docs/screenshots/story_motive.png) | ![Story](docs/screenshots/story_story.png) |
 | Every character picks a motive | The STORY tab (L): chapter, target, missions, lore |
 | ![Reading](docs/screenshots/story_read.png) | ![Named enemy](docs/screenshots/story_named.png) |
 | An inscription and the tracker | A chapter target with its name plate |
+| ![Golden thread](docs/screenshots/golden_thread.png) | |
+| The Golden Thread leading to the next target (G) | |
 
 ## Build
 
@@ -101,7 +103,7 @@ fullscreen and landscape, which iPhones do not allow, so turn the phone yourself
 | ALT | alternate attack (dimmed until the weapon's last skill is learned) |
 | JUMP, DUCK, WPN | jump, crouch, next weapon |
 | CAST, > | cast the selected spell (hold for breath spells), next spell |
-| POT, MENU, MAP (top right) | drink a potion; character menu (tap tabs and items, tap again to equip, use or learn, X closes); map (tap to close) |
+| PATH, POT, MENU, MAP (top right) | Golden Thread to your target; drink a potion; character menu (tap tabs and items, tap again to equip, use or learn, X closes); map (tap to close) |
 
 Bows and staffs get light aim assist on touch. Touch devices use a smaller view distance
 (`--radius 2`) to keep generation smooth. A Bluetooth gamepad also works in mobile browsers.
@@ -152,7 +154,8 @@ or *Heavy*. Deeper finds are stronger. Spare weapons can be scrapped for gold.
 lingers, arcane pierces, holy heals you, shadow steals life, earth stuns and knocks back)
 combined with a form: bolt, barrage, nova, chain, breath, orb, trap rune, halo of orbiting
 orbs, storm, meteor and aura. That makes 88 attack spells, plus Heal, Blink, Ward, Haste,
-Flare and Recall. You start with Flame Bolt and Heal; scrolls teach new spells or raise a
+Flare, Recall and the Golden Thread. You start with Flame Bolt, Heal and the Golden Thread;
+scrolls teach new spells or raise a
 known one's rank (up to 5). The stronger forms only drop deeper in. The Focus skill makes all
 spells stronger and cheaper.
 
@@ -160,7 +163,10 @@ spells stronger and cheaper.
 world's endless metaplot into chapters: a named captain, then the general above it, then the
 Power they serve, each farther from the gate; every kill reveals more of what the fortress
 hides and points to the next. The tracker at the top shows the current target and where it is;
-the map marks it in red. On the way, the dungeon talks: inscriptions, the notes of dead
+the map marks it in red. The **Golden Thread** (G, right stick click, PATH on touch) lays a
+fading golden line along a walkable route to the target; cast it again within a few seconds
+to follow your next mission instead. It only knows the part of the dungeon that is loaded, so
+for far targets it leads as close as it can: follow it and cast again. On the way, the dungeon talks: inscriptions, the notes of dead
 adventurers (some ask you to take something home) and bounty boards on domain lords. Standing
 next to one shows its text; everything read goes into the STORY tab. Each region (domain) has
 a name, a ruling faction, a past and a lord; entering one shows a banner. See
@@ -186,6 +192,7 @@ last and shows what is saved; *New characters* (press twice) deletes the save of
 | Q (or middle mouse button) | cast the selected spell (hold for breath spells) |
 | R / Shift+R | next / previous known spell |
 | H / J | drink a health / mana potion |
+| G | Golden Thread: a fading line to your story target (again: next mission) |
 | TAB, I, B, L | character menu: last tab, inventory, spellbook, story (Q/E or [ ] switch tabs) |
 | in the menu | arrows or WASD select, Enter equips / uses / learns / makes a spell active, Del or X scraps a weapon |
 | M | map of the cells you have seen |
@@ -216,6 +223,7 @@ If a pad disconnects, its character waits until a pad presses START again.
 | RT / LT | attack / alternate attack (bows and staffs get a little aim assist) |
 | LB / RB | previous / next weapon |
 | X | cast the selected spell |
+| Right stick click | Golden Thread to the story target (again: next mission) |
 | D-pad left / right | previous / next spell |
 | D-pad up / down | health / mana potion |
 | A, B | jump, crouch |
