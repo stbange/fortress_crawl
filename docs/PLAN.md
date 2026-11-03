@@ -1,4 +1,4 @@
-# Fortress Crawl: Development Plan (v0.5)
+# Fortress Crawl: Development Plan (v0.6)
 
 An endless, procedurally generated 3D dungeon crawler written in C with SDL3 and OpenGL 3.3.
 The player starts in front of a giant castle built into a mountain. The gate is
@@ -9,7 +9,9 @@ v0.3 added the combat milestone: Hexen-style combat, a classless skill tree, mon
 and a map of explored cells. v0.4 added local split-screen co-op for up to four players with
 gamepads (section 6.4) and touch controls (6.5). v0.5 adds a start screen with the seed choice,
 denser monsters with three new kinds, loot, weapons, relics, an inventory and 94 spells
-(section 6.6).
+(section 6.6) and saving (6.7). v0.6 adds generated stories: motives, an endless metaplot of
+named enemies, domains, inscriptions, notes and bounty boards (6.8, details in
+[STORY.md](STORY.md)).
 
 ---
 
@@ -268,6 +270,17 @@ binary format with counted arrays, so later versions can read older saves. Brows
 file and a rename. Autosave every 30 s, on shrine attunement, on quit and when the browser
 tab is hidden or closed.
 
+### 6.8 Stories (v0.6, steps S1 and S2)
+
+Stories are pure functions of seed and position like the blocks (`src/world/story.c`), so
+they cost nothing to keep and any place can refer to any other. World myth per seed; arcs of
+three chapters (captain, general, Power) leading farther out in one direction each, with the
+Power's death pointing to the next arc; domains with factions, states, eras and lords; traces
+(inscriptions, dead adventurers' notes, bounty boards) about once per three chunks. Each
+character picks a motive that frames the chapters and decides the reward. Missions (bounty,
+retrieve) come from traces, not people. Full design and the next steps (camps and people,
+consequences, choices): [STORY.md](STORY.md).
+
 ## 7. Status
 
 Done:
@@ -280,15 +293,17 @@ Done:
 - Split-screen co-op for up to four players with gamepads (section 6.4).
 - Touch controls for the web version on phones and tablets (section 6.5).
 - Start screen with seed choice; loot, weapons, relics, inventory, spells; more monsters (6.6).
+- Saving per world (6.7).
+- Stories S1 + S2: motives, metaplot chapters, named enemies, domains, traces, missions (6.8).
 - Screenshot and demo modes (`--shot`, `--demo combat|sword|death|skills|map|coop|menu|
-  inventory|spells|loot|magic|bestiary`, `--shot-time`, `--players n`, `--test-pad` with a
-  scripted virtual gamepad).
+  inventory|spells|loot|magic|bestiary|motive|story|read|named|storytest`, `--shot-time`,
+  `--players n`, `--test-pad` with a scripted virtual gamepad).
 
 Known gaps:
 - Gold has no use yet besides scrapping value (a shrine shop would fit).
 - No armour, rings or amulets yet; spells have no visual for every element/form pairing
   beyond colour.
-- No summoners or bosses yet.
+- No summoners yet; named enemies are scaled-up monsters with a name, not bosses with their own attacks.
 - Lava and water are still harmless.
 - Saves do not keep killed monsters, dropped loot lying around or spell effects; a world
   you return to is repopulated.
@@ -315,6 +330,8 @@ Known gaps:
 | M9  | Character creation (gameplay), shrines, save/load per world | shrines done |
 | M10 | Atmosphere: audio, particles, polish | |
 | M11 | Local split-screen co-op (up to 4, gamepads) | first version done |
+| M12 | Stories: S1 information, S2 motives, chapters, missions | done |
+| M13 | Stories: S3 camps and people, S4 consequences, S5 choices | |
 
 ---
 

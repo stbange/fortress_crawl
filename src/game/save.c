@@ -11,7 +11,7 @@
  * user's preference folder. The world itself never needs saving: the seed rebuilds it. */
 
 #define SAVE_MAGIC 0x56534346u /* "FCSV" */
-#define SAVE_VERSION 1
+#define SAVE_VERSION 2 /* 2: story (motive, chapter, missions, lore) */
 #define EXPLORED_BUDGET (1200 * 1024)
 
 /* ---------- storage backends ---------- */
@@ -138,6 +138,18 @@ static void write_player(Buf *b, const Stats *s, const Player *pl) {
     wbytes(b, s->relics, RELIC_COUNT);
     wbytes(b, s->spell_rank, SPELL_COUNT);
     w32(b, (u32)s->spell);
+    /* v2: story */
+    w8(b, s->motive);
+    w32(b, (u32)s->chapter);
+    w8(b, (u8)s->nmissions);
+    for (int i = 0; i < s->nmissions; i++) {
+        const Mission *m = &s->missions[i];
+        w8(b, m->type);
+        w64(b, m->key);
+        w32(b, (u32)m->tx); w32(b, (u32)m->ty); w32(b, (u32)m->tz);
+        w32(b, (u32)m->sx); w32(b, (u32)m->sy); w32(b, (u32)m->sz);
+        w32(b, (u32)m->reward);
+    }
 }
 
 /* Explored cells: per chunk a 512-byte mask of the non-zero bytes, then those bytes. */
@@ -199,6 +211,11 @@ bool game_save(Game *g) {
     w32(&b, (u32)g->looted_count);
     for (int i = 0; i < g->looted_cap; i++)
         if (g->looted[i]) w64(&b, g->looted[i]);
+    w32(&b, (u32)g->nlore);
+    for (int i = 0; i < g->nlore; i++) {
+        w8(&b, g->lore[i].kind);
+        w32(&b, (u32)g->lore[i].a); w32(&b, (u32)g->lore[i].b); w32(&b, (u32)g->lore[i].c);
+    }
     write_explored(&b, g);
     char key[64];
     save_key(g->opt.seed, key, sizeof key);
@@ -210,7 +227,7 @@ bool game_save(Game *g) {
 
 /* ---------- reading ---------- */
 
-typedef struct Rd { const u8 *d; int n, at; bool bad; } Rd;
+typedef struct Rd { const u8 *d; int n, at; bool bad; int ver; } Rd;
 
 static bool take(Rd *r, void *out, int n) {
     if (r->bad || r->at + n > r->n) { r->bad = true; memset(out, 0, (size_t)n); return false; }
@@ -263,6 +280,22 @@ static void read_player(Rd *r, SavedPlayer *sp) {
     rbytes(r, s->relics, RELIC_COUNT);
     rbytes(r, s->spell_rank, SPELL_COUNT);
     s->spell = (int)r32(r);
+    if (r->ver >= 2) {
+        s->motive = r8(r);
+        s->chapter = (int)r32(r);
+        int nm = r8(r);
+        for (int i = 0; i < nm; i++) {
+            Mission m = { 0 };
+            m.type = r8(r);
+            m.key = r64(r);
+            m.tx = (int)r32(r); m.ty = (int)r32(r); m.tz = (int)r32(r);
+            m.sx = (int)r32(r); m.sy = (int)r32(r); m.sz = (int)r32(r);
+            m.reward = (int)r32(r);
+            if (s->nmissions < MAX_MISSIONS && (m.type == MI_BOUNTY || m.type == MI_RETRIEVE)) s->missions[s->nmissions++] = m;
+        }
+        if (s->motive > MOTIVE_COUNT) s->motive = 0;
+        if (s->chapter < 0 || s->chapter > 10000) s->chapter = 0;
+    }
     /* sanity: a save from a broken build must not crash the game */
     if (s->level < 1 || s->level > 999) s->level = 1;
     if (s->weapon < 0 || s->weapon >= WPN_COUNT) s->weapon = 0;
@@ -280,7 +313,9 @@ static void read_player(Rd *r, SavedPlayer *sp) {
 }
 
 static bool read_header(Rd *r, SaveInfo *info) {
-    if (r32(r) != SAVE_MAGIC || r32(r) != SAVE_VERSION) return false;
+    if (r32(r) != SAVE_MAGIC) return false;
+    r->ver = (int)r32(r);
+    if (r->ver < 1 || r->ver > SAVE_VERSION) return false; /* older saves load, newer ones do not */
     info->seed = r64(r);
     take(r, info->seed_text, sizeof info->seed_text);
     info->seed_text[sizeof info->seed_text - 1] = 0;
@@ -315,6 +350,14 @@ bool game_load(Game *g) {
         if (r8(&r)) read_player(&r, &g->saved[i]);
     u32 nl = r32(&r);
     for (u32 i = 0; i < nl && !r.bad; i++) looted_mark(g, r64(&r));
+    if (r.ver >= 2) {
+        u32 nlo = r32(&r);
+        for (u32 i = 0; i < nlo && !r.bad; i++) {
+            u8 kind = r8(&r);
+            int a = (int)r32(&r), b = (int)r32(&r), c = (int)r32(&r);
+            if (!r.bad && (kind == LORE_TRACE || kind == LORE_REVEAL)) lore_add(g, kind, a, b, c);
+        }
+    }
     u32 nc = r32(&r);
     for (u32 i = 0; i < nc && !r.bad; i++) {
         int cx = (int)r32(&r), cy = (int)r32(&r), cz = (int)r32(&r);

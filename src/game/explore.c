@@ -145,12 +145,13 @@ void explore_draw_map(Game *g, PlayerSlot *ps, int w, int h) {
         mx = clampf(mx, ox, ox + size - 3), my = clampf(my, oy, oy + size - 3);
         map_arrow(mx, my, o->pl.yaw, o->color);
     }
+    story_map_markers(g, ps, cx, cy, pxw, pyw, pzw, px, ox, oy, ox + size, oy + size);
     map_arrow(cx, cy, ps->pl.yaw, g->nplayers > 1 ? ps->color : v3(1.0f, 0.25f, 0.15f));
     batch2d_flush();
     font_begin(w, h);
     font_text((int)ox + size / 2 - 3, (int)oy - 12, "N", 0.9f, 0.8f, 0.6f);
     char buf[160];
-    snprintf(buf, sizeof buf, "MAP - %s", ps->place);
+    snprintf(buf, sizeof buf, "MAP - %s", ps->domain_name[0] ? ps->domain_name : ps->place);
     if (size < 200) buf[MINI((int)sizeof buf - 1, size / 6)] = 0; /* 6 px per glyph */
     font_text((int)ox, (int)(oy + size + 5), buf, 0.85f, 0.75f, 0.55f);
     if (size >= 160) font_text((int)(ox + size - 60), (int)(oy + size + 5), ps->keyboard && g->touch.active ? "TAP: CLOSE" : ps->pad && !ps->keyboard ? "B: CLOSE" : "M: CLOSE", 0.6f, 0.55f, 0.45f);

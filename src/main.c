@@ -70,7 +70,8 @@ static bool parse_args(Options *o, int argc, char **argv) {
             SDL_Log("usage: fortress_crawl [--seed N] [--pos x y z] [--look yaw pitch] [--fly] [--radius n] [--vradius n]\n"
                     "                      [--window w h] [--lowres w h] [--debug] [--invert-x] [--invert-y] [--sens s]\n"
                     "                      [--recenter | --no-recenter]\n"
-                    "                      [--shot file.bmp] [--shot-time s] [--demo combat|sword|death|skills|map|coop|menu|inventory|spells|loot|magic]\n"
+                    "                      [--shot file.bmp] [--shot-time s] [--demo combat|sword|death|skills|map|coop|menu|inventory|spells|loot|magic|bestiary\n"
+                    "                      |motive|story|read|named]\n"
                     "                      [--players n] [--test-pad] [--touch] [--fresh] [--persist]");
             return false;
         }
@@ -151,6 +152,50 @@ static void demo_setup(Game *g) {
             pickup_spawn(g, PK_CHEST, v3_add(p1->pl.pos, v3(0.8f, 0.0f, 0.5f)), 8, NULL, 92, 0);
         }
         for (int i = 0; i < MAX_MONSTERS; i++) g->mons[i].alive = false;
+        return;
+    }
+    if (!strcmp(g_demo_kind, "story") || !strcmp(g_demo_kind, "read") || !strcmp(g_demo_kind, "named")) {
+        /* a revenge story in its second chapter, with some lore read and two missions */
+        s->motive = MOTIVE_REVENGE + 1;
+        s->chapter = 1;
+        lore_add(g, LORE_REVEAL, 0, 0, 0);
+        int found_bounty = 0, found_retrieve = 0, nread = 0;
+        for (int cz = -5; cz <= 5; cz++)
+            for (int cx = -5; cx <= 5; cx++) {
+                Trace t;
+                if (!story_trace(&g->world, cx, 0, cz, &t)) continue;
+                if (nread < 6) { lore_add(g, LORE_TRACE, cx, 0, cz); nread++; }
+                Mission mi = { 0 };
+                mi.sx = cx; mi.sy = 0; mi.sz = cz;
+                if (t.kind == TR_BOUNTY && !found_bounty) {
+                    Named l;
+                    int gold;
+                    story_bounty(&g->world, cx, 0, cz, &l, &gold);
+                    mi.type = MI_BOUNTY; mi.key = l.key; mi.tx = l.cx; mi.ty = l.cy; mi.tz = l.cz; mi.reward = gold;
+                    s->missions[s->nmissions++] = mi;
+                    found_bounty = 1;
+                } else if (t.kind == TR_CORPSE && t.mission && !found_retrieve) {
+                    Retrieve rt;
+                    story_retrieve(&g->world, cx, 0, cz, &rt);
+                    mi.type = MI_RETRIEVE; mi.key = rt.key; mi.tx = rt.cx; mi.ty = rt.cy; mi.tz = rt.cz; mi.reward = 60;
+                    s->missions[s->nmissions++] = mi;
+                    found_retrieve = 1;
+                }
+                if (!strcmp(g_demo_kind, "read") && t.kind == TR_STELE && !p1->reading[0]) {
+                    story_trace_text(&g->world, cx, 0, cz, p1->reading, sizeof p1->reading);
+                    p1->reading_t = 100.0f;
+                    p1->reading_key = 1;
+                }
+            }
+        if (!strcmp(g_demo_kind, "story")) { p1->show_skills = true; p1->menu_tab = TAB_STORY; }
+        if (!strcmp(g_demo_kind, "named")) {
+            for (int i = 0; i < MAX_MONSTERS; i++) g->mons[i].alive = false;
+            Named t;
+            story_chapter_target(&g->world, s->chapter, &t);
+            vec3 f = v3(cosf(p1->pl.yaw), 0, sinf(p1->pl.yaw));
+            Monster *m = story_spawn_named_at(g, &t, v3_add(p1->pl.pos, v3_scale(f, 7.0f)));
+            if (m) { m->yaw = p1->pl.yaw + PI_F; m->awake = false; }
+        }
         return;
     }
     if (!strcmp(g_demo_kind, "bestiary")) {
@@ -395,6 +440,77 @@ static void handle_events(App *a) {
 }
 
 /* --test-pad: a virtual gamepad joins with START, walks forward, turns and attacks. */
+/* --demo storytest: reads a real note or bounty board, kills the first chapter target,
+ * and carries a quest item home, logging each step (used as an end-to-end test). */
+static void story_test_step(App *a) {
+    Game *g = a->g;
+    static int phase;
+    static u64 quest_key;
+    if (!g_demo_kind || strcmp(g_demo_kind, "storytest") || !a->demo_done) return;
+    PlayerSlot *p1 = &g->players[0];
+    float t = a->shot_wait;
+    if (phase == 0 && t > 0.8f) {
+        /* walk up to a mission trace (prefer a corpse note) */
+        Pickup *best = NULL;
+        for (int pass = 0; pass < 2 && !best; pass++)
+            for (int i = 0; i < MAX_PICKUPS; i++) {
+                Pickup *pk = &g->pickups[i];
+                if (!pk->alive || pk->kind != PK_TRACE) continue;
+                int cx = floordiv((int)floorf(pk->pos.x), CHUNK), cy = floordiv((int)floorf(pk->pos.y), CHUNK), cz = floordiv((int)floorf(pk->pos.z), CHUNK);
+                Trace tr;
+                if (story_trace(&g->world, cx, cy, cz, &tr) && tr.mission && (pass || tr.kind == TR_CORPSE)) { best = pk; break; }
+            }
+        if (best) {
+            p1->pl.pos = v3_add(best->pos, v3(0.8f, 0, 0));
+            SDL_Log("storytest: walked to a %s", best->amount == TR_CORPSE ? "corpse note" : "bounty board");
+        } else {
+            SDL_Log("storytest: no mission trace loaded nearby");
+        }
+        phase = 1;
+    } else if (phase == 1 && t > 1.2f) {
+        SDL_Log("storytest: read \"%s\"", p1->reading);
+        SDL_Log("storytest: missions %d, lore %d", p1->st.nmissions, g->nlore);
+        for (int i = 0; i < p1->st.nmissions; i++)
+            if (p1->st.missions[i].type == MI_RETRIEVE) quest_key = p1->st.missions[i].key;
+        /* the chapter target, here and now */
+        Named n;
+        story_chapter_target(&g->world, p1->st.chapter, &n);
+        Monster *m = story_spawn_named_at(g, &n, v3_add(p1->pl.pos, v3(2.0f, 0, 0)));
+        int before = p1->st.chapter;
+        if (m) monster_damage(g, m, 1e9f, p1->pl.pos, 0, 0);
+        SDL_Log("storytest: killed %s: chapter %d -> %d, lore %d, message \"%s\"", n.name, before + 1, p1->st.chapter + 1, g->nlore, p1->msg);
+        phase = 2;
+        if (quest_key) {
+            for (int i = 0; i < p1->st.nmissions; i++)
+                if (p1->st.missions[i].key == quest_key) {
+                    Mission *mi = &p1->st.missions[i];
+                    p1->pl.pos = v3(mi->tx * CHUNK + 16.0f, mi->ty * CHUNK + 20.0f, mi->tz * CHUNK + 16.0f);
+                    p1->pl.fly = true;
+                    SDL_Log("storytest: flying to the lost item at chunk %d %d %d", mi->tx, mi->ty, mi->tz);
+                }
+        }
+    } else if (phase == 2 && quest_key) {
+        for (int i = 0; i < MAX_PICKUPS; i++) {
+            Pickup *pk = &g->pickups[i];
+            if (pk->alive && pk->kind == PK_QUEST && pk->key == quest_key) {
+                int gold = p1->st.gold, nm = p1->st.nmissions;
+                p1->pl.pos = pk->pos;
+                p1->pl.fly = false;
+                SDL_Log("storytest: found the item at %.0f %.0f %.0f (gold %d, missions %d)", pk->pos.x, pk->pos.y, pk->pos.z, gold, nm);
+                phase = 3;
+                break;
+            }
+        }
+    } else if (phase == 3 && t > 0) {
+        static float wait;
+        wait += 1.0f / 60.0f;
+        if (wait > 0.5f) {
+            SDL_Log("storytest: after pick-up: gold %d, missions %d, item taken %d", p1->st.gold, p1->st.nmissions, looted_has(g, quest_key));
+            phase = 4;
+        }
+    }
+}
+
 static void test_pad_step(App *a) {
     if (!a->vpad) return;
     float t = a->shot_wait;
@@ -411,6 +527,7 @@ static void screenshot_step(App *a, float frame_dt) {
     PlayerSlot *p1 = &g->players[0];
     if (chunkmap_settled(&g->map, player_eye(&p1->pl))) a->shot_wait += frame_dt;
     test_pad_step(a);
+    story_test_step(a);
     if (g->opt.demo && !a->demo_done && a->shot_wait > 0.5f) {
         for (int i = 0; i < MAX_PLAYERS; i++) {
             PlayerSlot *ps = &g->players[i];
@@ -443,7 +560,8 @@ static void screenshot_step(App *a, float frame_dt) {
             int known = 0, bag = 0;
             for (int k = 0; k < SPELL_COUNT; k++) known += ps->st.spell_rank[k] > 0;
             for (int k = 0; k < BAG_SIZE; k++) bag += ps->st.bag[k].used;
-            SDL_Log("P%d gold %d  potions %d/%d  spells %d  bag %d", i + 1, ps->st.gold, ps->st.potions_hp, ps->st.potions_mp, known, bag);
+            SDL_Log("P%d gold %d  potions %d/%d  spells %d  bag %d  motive %d  chapter %d  missions %d  lore %d", i + 1, ps->st.gold,
+                    ps->st.potions_hp, ps->st.potions_mp, known, bag, ps->st.motive, ps->st.chapter + 1, ps->st.nmissions, g->nlore);
             SDL_Log("P%d time %.1f  hp %.0f/%.0f  level %d  kills %d  dead %d  pad %d  pos %.1f %.1f %.1f  yaw %.1f pitch %.1f",
                     i + 1, g->time, ps->st.hp, ps->st.maxhp, ps->st.level, ps->st.kills, ps->st.dead, ps->pad != NULL,
                     ps->pl.pos.x, ps->pl.pos.y, ps->pl.pos.z, ps->pl.yaw * 180.0f / PI_F, ps->pl.pitch * 180.0f / PI_F);
@@ -460,6 +578,7 @@ static void start_world(App *a) {
     if (!g->opt.seed_text[0]) snprintf(g->opt.seed_text, sizeof g->opt.seed_text, "%llu", (unsigned long long)g->opt.seed);
     SDL_Log("World seed: %s (%llu)", g->opt.seed_text, (unsigned long long)g->opt.seed);
     world_init(&g->world, g->opt.seed);
+    story_game_init(g);
     chunkmap_init(&g->map, &g->world, &g->r, g->opt.radius, g->opt.vradius);
     /* the saved characters of this world (screenshot and test runs start fresh) */
     if ((!g->opt.shot || g->opt.persist) && !g->opt.fresh) game_load(g);
@@ -654,6 +773,8 @@ int main(int argc, char **argv) {
     g->touch.active = g->touch.forced = g->opt.touch;
     /* the start screen picks the seed, unless it was given (or this is a screenshot run) */
     bool menu_shot = g->opt.shot && g_demo_kind && !strcmp(g_demo_kind, "menu");
+    /* screenshot runs pick a motive without asking, except the one that shows the question */
+    g->opt.auto_motive = g->opt.shot && !(g_demo_kind && !strcmp(g_demo_kind, "motive"));
     if ((!g->opt.has_seed && !g->opt.shot) || menu_shot) {
         menu_init(&a->menu);
         a->in_menu = true;

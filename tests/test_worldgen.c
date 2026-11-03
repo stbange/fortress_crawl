@@ -3,8 +3,11 @@
  *  2. portal alignment: every opening is open on both sides of its face
  *  3. reachability: a walking (crawl-capable) player starting outside the gate
  *     can reach most portal openings in a region around the start
- *  4. meshing smoke test with lighting */
+ *  4. meshing smoke test with lighting
+ *  6. stories: deterministic, and every chapter target and domain lord near the gate
+ *     has a floor with room for its size in its home chunk */
 #include "world/layout.h"
+#include "world/story.h"
 #include "world/mesher.h"
 #include "world/texgen.h"
 
@@ -300,6 +303,64 @@ int main(int argc, char **argv) {
         world_chunk_info(&g_world, probes[i][0], probes[i][1], probes[i][2], &ci);
         world_place_name(&ci, name, sizeof name);
         printf("  chunk %4d %4d %4d  level %3d  %s\n", probes[i][0], probes[i][1], probes[i][2], ci.level, name);
+    }
+
+    /* 6. stories */
+    {
+        Block *b = malloc(CHUNK_VOL);
+        ChunkInfo ci;
+        int room_ok = 0, room_total = 0;
+        for (int c = 0; c < 9; c++) {
+            Named t, t2;
+            story_chapter_target(&g_world, c, &t);
+            story_chapter_target(&g_world, c, &t2);
+            CHECK(t.key == t2.key && t.cx == t2.cx && t.cy == t2.cy && t.cz == t2.cz && !strcmp(t.name, t2.name),
+                  "story chapter targets are not deterministic");
+            world_generate_chunk(&g_world, t.cx, t.cy, t.cz, b, &ci);
+            CHECK(ci.arch != ARCH_EXTERIOR, "a chapter target lives outside");
+            /* a floor cell with headroom for the scaled monster (brute 2 m tall at most) */
+            int need = (int)ceilf(2.0f * t.scale) + 1, found = 0;
+            for (int y = 1; y + need < CHUNK && !found; y++)
+                for (int z = 1; z < CHUNK - 1 && !found; z++)
+                    for (int x = 1; x < CHUNK - 1 && !found; x++) {
+                        if (!block_solid(b[cidx(x, y - 1, z)])) continue;
+                        bool free_ = true;
+                        for (int k = 0; k < need && free_; k++) free_ = !block_solid(b[cidx(x, y + k, z)]);
+                        found = free_;
+                    }
+            room_total++;
+            room_ok += found;
+            if (!found) printf("  chapter %d target %s at %d %d %d has no room for scale %.1f\n", c + 1, t.name, t.cx, t.cy, t.cz, t.scale);
+        }
+        printf("story: %d/%d chapter targets have room for their full size\n", room_ok, room_total);
+        CHECK(room_ok >= room_total - 2, "too many chapter targets without room (the game shrinks them to fit)");
+        int lords = 0, lords_ok = 0;
+        for (int cz = -6; cz <= 6; cz += 2)
+            for (int cx = -6; cx <= 6; cx += 2) {
+                Domain d;
+                Named l;
+                story_domain(&g_world, cx, 0, cz, &d);
+                story_lord(&g_world, &d, &l);
+                Named here;
+                bool is_here = story_lord_here(&g_world, l.cx, l.cy, l.cz, &here);
+                if (d.level < 2) continue;
+                lords++;
+                lords_ok += is_here && here.key == l.key;
+            }
+        printf("story: %d/%d domain lords live in a chunk of their own domain\n", lords_ok, lords);
+        CHECK(lords_ok == lords, "a domain lord's home chunk belongs to another domain");
+        char t1[STORY_TEXT], t2[STORY_TEXT];
+        Trace tr;
+        int traces = 0;
+        for (int cx = -8; cx <= 8; cx++)
+            if (story_trace(&g_world, cx, 0, 3, &tr)) {
+                traces++;
+                story_trace_text(&g_world, cx, 0, 3, t1, sizeof t1);
+                story_trace_text(&g_world, cx, 0, 3, t2, sizeof t2);
+                CHECK(!strcmp(t1, t2) && t1[0], "trace texts are not deterministic");
+            }
+        printf("story: %d traces on a 17-chunk row\n", traces);
+        free(b);
     }
 
     if (g_fail) printf("%d check(s) failed\n", g_fail);

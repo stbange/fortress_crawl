@@ -73,11 +73,11 @@ void chunk_forget(Game *g, u64 chunk_key) { spawned_remove(g, chunk_key); }
 
 /* ---------- spawning ---------- */
 
-void monster_spawn(Game *g, int type, vec3 pos, int level, bool elite, vec3 tint, u64 key) {
+Monster *monster_spawn(Game *g, int type, vec3 pos, int level, bool elite, vec3 tint, u64 key) {
     Monster *m = NULL;
     for (int i = 0; i < MAX_MONSTERS && !m; i++)
         if (!g->mons[i].alive) m = &g->mons[i];
-    if (!m) return;
+    if (!m) return NULL;
     const MonsterDef *d = &MONSTERS[type];
     memset(m, 0, sizeof *m);
     m->alive = true;
@@ -100,6 +100,7 @@ void monster_spawn(Game *g, int type, vec3 pos, int level, bool elite, vec3 tint
     m->level = (float)level;
     m->yaw = (float)((key + (u64)g->mons_anim_seed * 97) % 628) * 0.01f;
     m->anim = (float)((key + (u64)g->mons_anim_seed * 31) % 100) * 0.1f;
+    return m;
 }
 
 static bool standable_cell(Game *g, int x, int y, int z, int headroom) {
@@ -125,6 +126,7 @@ static void spawn_chunk(Game *g, Chunk *c) {
     if (ci->arch == ARCH_EXTERIOR) return;
 
     loot_place_in_chunk(g, c);
+    story_spawn_lord(g, c);
     Rng r = rng_make(ci->seed ^ 0x5EED);
     int level = ci->level;
     /* most chunks hold a pack, structures two; packs grow with danger */
@@ -352,7 +354,8 @@ void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int 
         particles_burst(g, c, m->color, 18, 5.0f, 0.12f, false);
         particles_burst(g, c, v3_scale(m->color, 0.4f), 10, 4.0f, 0.08f, false);
         if (m->elite) flash_add(g, c, v3(1.0f, 0.6f, 0.3f), 8.0f, 0.4f);
-        loot_drop(g, m->pos, m->level, m->elite, 0.0f);
+        loot_drop(g, m->pos, m->level, m->elite, m->named_kind ? 0.5f : 0.0f);
+        if (m->story_key) story_on_kill(g, m);
         if (m->type == MON_SLIME && m->scale > 0.75f) {
             /* a big slime splits in two small ones */
             for (int k = 0; k < 2; k++) {

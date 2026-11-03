@@ -8,8 +8,10 @@ get from the gate, the more dangerous it gets.
 This is an early prototype. It has **world generation, lighting, the retro renderer,
 Hexen-style combat against seven kinds of primitive monsters, 12 weapon types with rarities
 and affixes, 94 spells, loot, chests and relics, an inventory, a classless skill tree,
-shrines, an explored-cells map and split-screen co-op for up to four players**. There is no loot, saving or audio yet. See [`docs/PLAN.md`](docs/PLAN.md)
-for the full plan.
+shrines, an explored-cells map, split-screen co-op for up to four players, saving, and
+generated stories: a motive per character, an endless metaplot of named enemies, inscriptions,
+notes of the dead and bounty boards**. There is no audio yet. See [`docs/PLAN.md`](docs/PLAN.md)
+for the full plan and [`docs/STORY.md`](docs/STORY.md) for how the stories work.
 
 ## Screenshots (prototype, seed 1337)
 
@@ -35,6 +37,10 @@ for the full plan.
 | Inventory (I) | Spellbook (B): 8 elements x 11 forms + 6 utility spells |
 | ![Loot](docs/screenshots/loot.png) | ![Spells](docs/screenshots/spells_cast.png) |
 | A chest, a weapon, a scroll, a relic, gold and potions | Firestorm, Fireball and Chain Lightning at a pack |
+| ![Motive](docs/screenshots/story_motive.png) | ![Story](docs/screenshots/story_story.png) |
+| Every character picks a motive | The STORY tab (L): chapter, target, missions, lore |
+| ![Reading](docs/screenshots/story_read.png) | ![Named enemy](docs/screenshots/story_named.png) |
+| An inscription and the tracker | A chapter target with its name plate |
 
 ## Build
 
@@ -150,6 +156,16 @@ Flare and Recall. You start with Flame Bolt and Heal; scrolls teach new spells o
 known one's rank (up to 5). The stronger forms only drop deeper in. The Focus skill makes all
 spells stronger and cheaper.
 
+**Stories:** every character picks a motive (revenge, glory, riches or truth). It turns the
+world's endless metaplot into chapters: a named captain, then the general above it, then the
+Power they serve, each farther from the gate; every kill reveals more of what the fortress
+hides and points to the next. The tracker at the top shows the current target and where it is;
+the map marks it in red. On the way, the dungeon talks: inscriptions, the notes of dead
+adventurers (some ask you to take something home) and bounty boards on domain lords. Standing
+next to one shows its text; everything read goes into the STORY tab. Each region (domain) has
+a name, a ruling faction, a past and a lord; entering one shows a banner. See
+[`docs/STORY.md`](docs/STORY.md).
+
 **Saving:** each world (seed) has its own save with every character that played in it
 (level, XP, skills, inventory, gold, potions, relics, spells, position and shrine), the chests
 and relics already taken, and the explored map near you. The game saves every 30 seconds,
@@ -170,7 +186,7 @@ last and shows what is saved; *New characters* (press twice) deletes the save of
 | Q (or middle mouse button) | cast the selected spell (hold for breath spells) |
 | R / Shift+R | next / previous known spell |
 | H / J | drink a health / mana potion |
-| TAB, I, B | character menu: last tab, inventory, spellbook (Q/E or [ ] switch tabs) |
+| TAB, I, B, L | character menu: last tab, inventory, spellbook, story (Q/E or [ ] switch tabs) |
 | in the menu | arrows or WASD select, Enter equips / uses / learns / makes a spell active, Del or X scraps a weapon |
 | M | map of the cells you have seen |
 | Space, Shift, Ctrl | jump, sprint, crouch (you duck and crawl automatically in low tunnels) |
@@ -217,7 +233,8 @@ fortress_crawl [--seed N] [--pos x y z] [--look yaw pitch] [--fly] [--radius n] 
                [--window w h] [--lowres w h] [--debug]
                [--invert-x] [--invert-y] [--sens s] [--recenter | --no-recenter]
                [--shot file.bmp] [--shot-time seconds]
-               [--demo combat|sword|death|skills|map|coop|menu|inventory|spells|loot|magic|bestiary]
+               [--demo combat|sword|death|skills|map|coop|menu|inventory|spells|loot|magic|bestiary|
+                       motive|story|read|named|storytest]
                [--players n] [--test-pad] [--touch] [--fresh] [--persist]
 ```
 
@@ -226,7 +243,10 @@ comparing seeds and changes to the generator. `--demo` sets up a scene for that 
 level-8 character facing a monster pack (`combat`, `sword`, `death` with 1 HP, `coop` with
 the other players beside you, `magic` casting three spells), a character with some loot in
 the `inventory` or `spells` screen, `loot` on the floor, one monster of each kind
-(`bestiary`), the start screen (`menu`), or the `skills` or `map` screen. `--players n` starts with n
+(`bestiary`), the start screen (`menu`), the motive question (`motive`), a story in progress
+(`story` tab, `read` at an inscription, `named` facing a chapter target), or the `skills` or
+`map` screen. `--demo storytest --pos 20 6 0.5 --shot-time 10` plays a scripted story run
+(read a note, kill a chapter target, bring a lost item home) and logs each step. `--players n` starts with n
 characters (gamepads take them over with START). `--test-pad` attaches a virtual gamepad
 that joins, walks, turns and attacks, to test the gamepad path without hardware. `--touch`
 shows the touch controls from the start.

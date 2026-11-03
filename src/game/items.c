@@ -239,6 +239,11 @@ void loot_place_in_chunk(Game *g, Chunk *c) {
         pickup_spawn(g, PK_CHEST, p, ci->level, NULL, chest_key, ck);
     if (rng_chance(&r, 0.08f) && !looted_has(g, relic_key) && !pickup_alive_with_key(g, relic_key) && find_spot(g, c, &r, &p))
         pickup_spawn(g, PK_RELIC, v3_add(p, v3(0, 0.6f, 0)), (ci->stratum * 5 + ci->flavor * 7) % RELIC_COUNT, NULL, relic_key, ck);
+    /* something to read: an inscription, a dead adventurer, a bounty board */
+    Trace t;
+    Rng tr = rng_make(ci->seed ^ 0x7ACEULL);
+    if (story_trace(&g->world, c->cx, c->cy, c->cz, &t) && !pickup_alive_with_key(g, t.key) && find_spot(g, c, &tr, &p))
+        pickup_spawn(g, PK_TRACE, p, t.kind, NULL, t.key, ck);
 }
 
 static int bag_free(Stats *s) {
@@ -293,6 +298,10 @@ static bool collect(Game *g, PlayerSlot *ps, Pickup *p) {
         flash_add(g, at, v3(1.0f, 0.85f, 0.4f), 10.0f, 0.6f);
         looted_add(g, p->key);
         return true;
+    case PK_TRACE:
+        return false; /* read, not taken (quests.c) */
+    case PK_QUEST:
+        return story_collect_quest(g, ps, p);
     case PK_CHEST:
         looted_add(g, p->key);
         flash_add(g, at, v3(1.0f, 0.8f, 0.4f), 8.0f, 0.4f);
@@ -392,6 +401,39 @@ void pickups_draw(Game *g, vec3 eye) {
         case PK_RELIC:
             batch3d_octa(c, 0.18f, 0.26f, p->t * 1.5f, v3(1.0f, 0.85f, 0.35f), true);
             batch3d_octa(c, 0.08f, 0.34f, -p->t * 2.0f, v3(1.0f, 1.0f, 0.8f), true);
+            break;
+        case PK_TRACE: {
+            float yaw = (float)(p->key % 8) * PI_F * 0.25f;
+            vec3 stone = v3(0.42f * l.x, 0.4f * l.y, 0.38f * l.z);
+            vec3 f = v3(cosf(yaw), 0, sinf(yaw));
+            if (p->amount == TR_STELE) {
+                /* a standing stone with a faint glowing line of script */
+                batch3d_box(v3_add(p->pos, v3(0, 0.55f, 0)), v3(0.12f, 0.55f, 0.32f), yaw, stone, false);
+                batch3d_box(v3_add(p->pos, v3(0, 1.12f, 0)), v3(0.14f, 0.04f, 0.36f), yaw, v3_scale(stone, 0.8f), false);
+                float glow = 0.35f + 0.15f * sinf(p->t * 1.7f);
+                batch3d_box(v3_add(v3_add(p->pos, v3_scale(f, 0.125f)), v3(0, 0.75f, 0)), v3(0.01f, 0.03f, 0.2f), yaw,
+                            v3(0.9f * glow, 0.75f * glow, 0.45f * glow), true);
+            } else if (p->amount == TR_CORPSE) {
+                /* bones and a pale scrap of paper */
+                vec3 bone = v3(0.7f * l.x, 0.66f * l.y, 0.58f * l.z), r = v3(-sinf(yaw), 0, cosf(yaw));
+                batch3d_box(v3_add(p->pos, v3(0, 0.1f, 0)), v3(0.35f, 0.08f, 0.14f), yaw, bone, false);
+                batch3d_box(v3_add(v3_add(p->pos, v3_scale(f, 0.46f)), v3(0, 0.12f, 0)), v3(0.11f, 0.1f, 0.1f), yaw, bone, false);
+                batch3d_box(v3_add(v3_add(p->pos, v3_scale(r, 0.3f)), v3(0, 0.05f, 0)), v3(0.25f, 0.04f, 0.04f), yaw + 0.4f, v3_scale(bone, 0.8f), false);
+                batch3d_box(v3_add(v3_add(p->pos, v3_scale(r, -0.35f)), v3(0, 0.03f, 0)), v3(0.08f, 0.01f, 0.1f), yaw + 0.3f,
+                            v3(0.85f, 0.8f, 0.65f), true);
+            } else {
+                /* a bounty board on two posts */
+                vec3 wood = v3(0.42f * l.x, 0.27f * l.y, 0.14f * l.z), r = v3(-sinf(yaw), 0, cosf(yaw));
+                for (int k = -1; k <= 1; k += 2) batch3d_box(v3_add(v3_add(p->pos, v3_scale(r, 0.45f * k)), v3(0, 0.75f, 0)), v3(0.05f, 0.75f, 0.05f), yaw, wood, false);
+                batch3d_box(v3_add(p->pos, v3(0, 1.2f, 0)), v3(0.04f, 0.32f, 0.5f), yaw, v3_scale(wood, 1.2f), false);
+                batch3d_box(v3_add(v3_add(p->pos, v3_scale(f, 0.05f)), v3(0, 1.22f, 0)), v3(0.01f, 0.18f, 0.14f), yaw, v3(0.95f, 0.88f, 0.7f), true);
+                batch3d_box(v3_add(v3_add(p->pos, v3_scale(f, 0.06f)), v3(0, 1.3f, 0)), v3(0.01f, 0.03f, 0.08f), yaw, v3(0.7f, 0.1f, 0.08f), true);
+            }
+            break;
+        }
+        case PK_QUEST:
+            batch3d_box(c, v3(0.12f, 0.1f, 0.12f), p->t, v3(0.85f, 0.75f, 0.55f), true);
+            batch3d_octa(v3_add(c, v3(0, 0.45f, 0)), 0.06f, 0.09f, p->t * 2.0f, v3(1.0f, 0.9f, 0.6f), true);
             break;
         case PK_CHEST: {
             vec3 wood = v3(0.45f * l.x, 0.28f * l.y, 0.14f * l.z);

@@ -4,8 +4,11 @@
  *                                                  structures outlined, the start marked white
  *   worldmap section <cz> <radius> out.ppm         vertical slice (x/y) through chunk row cz
  *   worldmap blocks <wy> <wx0> <wz0> <size> out.ppm  top-down block map of one world layer
+ *   worldmap story <chapters> <radius>              prints the seed's myth, the first chapters of the
+ *                                                  metaplot and the domains and traces around the gate
  */
 #include "world/layout.h"
+#include "world/story.h"
 
 static void write_ppm(const char *path, const u8 *rgb, int w, int h) {
     FILE *f = fopen(path, "wb");
@@ -80,6 +83,63 @@ static void block_map(const World *w, int wy, int wx0, int wz0, int size, const 
     free(img);
 }
 
+static void story_dump(const World *w, int chapters, int radius) {
+    StoryWorld sw;
+    story_world(w->seed, &sw);
+    printf("seed %llu: %s, raised by %s over %s. It fell on %s.\n\n", (unsigned long long)w->seed, sw.fortress, sw.builders,
+           sw.sealed, sw.fall);
+    Personal p;
+    story_personal(w->seed, 0, &p);
+    char buf[STORY_TEXT];
+    for (int c = 0; c < chapters; c++) {
+        Named t;
+        story_chapter_target(w, c, &t);
+        ChunkInfo ci;
+        world_chunk_info(w, t.cx, t.cy, t.cz, &ci);
+        if (c % 3 == 0) {
+            story_arc_title(w, c / 3, buf, sizeof buf);
+            printf("ARC %s\n", buf);
+        }
+        char place[96];
+        world_place_name(&ci, place, sizeof place);
+        printf("  chapter %d: %s, %s (monster %d x%.1f) at chunk %d %d %d, level %d, %s\n", c + 1, t.name, t.title, t.mon,
+               t.scale, t.cx, t.cy, t.cz, ci.level, place);
+        for (int m = 0; m < MOTIVE_COUNT; m++) {
+            story_chapter_hook(w, m, c, &p, buf, sizeof buf);
+            printf("    %-7s hook: %s\n", MOTIVE_NAMES[m], buf);
+        }
+        story_chapter_done(w, MOTIVE_REVENGE, c, &p, buf, sizeof buf);
+        printf("    done (revenge): %s\n", buf);
+        story_revelation(w, c, buf, sizeof buf);
+        printf("    revelation: %s\n", buf);
+    }
+    printf("\nDOMAINS AND TRACES within %d chunks of the gate (y 0)\n", radius);
+    u64 seen[512];
+    int nseen = 0;
+    for (int cz = -radius; cz <= radius; cz++)
+        for (int cx = -radius; cx <= radius; cx++) {
+            Domain d;
+            story_domain(w, cx, 0, cz, &d);
+            bool known = false;
+            for (int i = 0; i < nseen; i++) known |= seen[i] == d.id;
+            if (!known && nseen < 512) {
+                seen[nseen++] = d.id;
+                char line[128];
+                story_domain_line(&d, line, sizeof line);
+                Named l;
+                story_lord(w, &d, &l);
+                printf("  domain %s (%s, level %d): %s. Lord: %s, %s, at %d %d %d\n", d.name, CULTURE_NAMES[d.culture], d.level,
+                       line, l.name, l.title, l.cx, l.cy, l.cz);
+            }
+            Trace t;
+            if (story_trace(w, cx, 0, cz, &t)) {
+                story_trace_text(w, cx, 0, cz, buf, sizeof buf);
+                static const char *K[TR_COUNT] = { "stele", "corpse", "bounty" };
+                printf("    %d %d %s%s: %s\n", cx, cz, K[t.kind], t.mission ? " (mission)" : "", buf);
+            }
+        }
+}
+
 int main(int argc, char **argv) {
     World w;
     const char *s = getenv("FC_SEED");
@@ -88,9 +148,10 @@ int main(int argc, char **argv) {
     else if (argc == 5 && strcmp(argv[1], "section") == 0) chunk_map(&w, true, atoi(argv[2]), atoi(argv[3]), argv[4]);
     else if (argc == 7 && strcmp(argv[1], "blocks") == 0)
         block_map(&w, atoi(argv[2]), atoi(argv[3]), atoi(argv[4]), atoi(argv[5]), argv[6]);
+    else if (argc == 4 && strcmp(argv[1], "story") == 0) story_dump(&w, atoi(argv[2]), atoi(argv[3]));
     else {
         fprintf(stderr, "usage:\n  worldmap places <cy> <radius> out.ppm\n  worldmap section <cz> <radius> out.ppm\n"
-                        "  worldmap blocks <wy> <wx0> <wz0> <size> out.ppm\n");
+                        "  worldmap blocks <wy> <wx0> <wz0> <size> out.ppm\n  worldmap story <chapters> <radius>\n");
         return 1;
     }
     return 0;

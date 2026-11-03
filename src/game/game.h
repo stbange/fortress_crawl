@@ -11,6 +11,7 @@
 #include "render/renderer.h"
 #include "world/chunkmap.h"
 #include "world/layout.h"
+#include "world/story.h"
 
 #define MAX_MONSTERS 320
 #define MAX_PROJECTILES 512
@@ -52,6 +53,10 @@ typedef struct Monster {
     /* status effects from elements */
     float burn_t, burn_dps, poison_t, poison_dps, slow_t;
     float level;     /* danger level it was made for (loot quality) */
+    /* named enemies (chapter targets and domain lords) */
+    u64 story_key;
+    u8 named_kind;   /* 0 none, else NK_* + 1 */
+    char name[STORY_NAME];
 } Monster;
 
 typedef struct Projectile {
@@ -79,6 +84,26 @@ typedef struct Flash {
     float radius, life, max_life;
 } Flash;
 
+/* A task from something found in the dungeon (a bounty board, a dead adventurer's note). */
+enum { MI_BOUNTY = 1, MI_RETRIEVE };
+#define MAX_MISSIONS 6
+typedef struct Mission {
+    u8 type;
+    u64 key;          /* the lord to kill or the item to bring back */
+    int tx, ty, tz;   /* target chunk */
+    int sx, sy, sz;   /* the trace it came from */
+    int reward;       /* gold */
+} Mission;
+
+/* Lore read in this world (shared by all characters). */
+enum { LORE_TRACE = 1, LORE_REVEAL };
+#define MAX_LORE 512
+typedef struct LoreEntry {
+    u8 kind;
+    int a, b, c; /* the trace's chunk, or the chapter */
+    char *text;  /* generated on first display (not saved) */
+} LoreEntry;
+
 typedef struct Stats {
     float hp, maxhp, mana, maxmana;
     int level, points, kills;
@@ -102,6 +127,11 @@ typedef struct Stats {
     int spell;      /* selected spell */
     float spell_cd;
     float ward, ward_t, haste_t;
+    /* story (per character) */
+    u8 motive;       /* 0: not chosen yet, else MOTIVE_* + 1 */
+    int chapter;
+    Mission missions[MAX_MISSIONS];
+    int nmissions;
 } Stats;
 
 /* Cells the player has seen, one bit per cell, per chunk. */
@@ -139,6 +169,7 @@ typedef struct Options {
     bool touch;    /* show the touch controls from the start */
     bool fresh;    /* ignore the save (new characters) */
     bool persist;  /* load and save even in screenshot runs (tests) */
+    bool auto_motive; /* screenshot runs: pick a motive without asking */
 } Options;
 
 /* On-screen touch controls for player 1 (phones and tablets). */
@@ -203,6 +234,19 @@ typedef struct PlayerSlot {
     bool show_map, show_skills; /* show_skills: the character menu */
     int menu_tab, inv_sel, book_sel;
     float potion_cd;
+    /* story */
+    Named target;           /* the current chapter's target (cache) */
+    int target_chapter;     /* chapter the cache belongs to, -1 none */
+    float target_retry;
+    char reading[STORY_TEXT]; /* the trace you stand at */
+    u64 reading_key;
+    float reading_t;
+    char msg[STORY_TEXT], msg_next[STORY_TEXT]; /* story messages (chapters) */
+    float msg_t;
+    u64 domain_id;
+    int domain_cx, domain_cy, domain_cz;
+    char domain_name[STORY_NAME];
+    int motive_sel, story_scroll;
     int skill_sel;
     char banner[128];
     float banner_time;
@@ -251,6 +295,9 @@ typedef struct Game {
     Explored explored;
     TouchCtl touch;
     SavedPlayer saved[MAX_PLAYERS];
+    StoryWorld story;
+    LoreEntry lore[MAX_LORE];
+    int nlore;
     bool world_started;
     float play_time, autosave_timer;
 
@@ -289,7 +336,7 @@ void monsters_spawn_for_chunks(Game *g);
 void monsters_update(Game *g, float dt);
 void monsters_draw(Game *g, vec3 eye);
 void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int attacker);
-void monster_spawn(Game *g, int type, vec3 pos, int level, bool elite, vec3 tint, u64 key);
+Monster *monster_spawn(Game *g, int type, vec3 pos, int level, bool elite, vec3 tint, u64 key);
 Monster *monster_nearest(Game *g, vec3 p, float max_dist, const Monster *exclude);
 void flow_update(Game *g, PlayerSlot *ps, float dt);
 /* Forget that a chunk was populated: monsters and loot are placed again on return. */
@@ -349,7 +396,28 @@ void touch_draw(Game *g);
 int touch_low_width(Game *g, int win_w, int win_h);
 
 /* Character menu tabs. */
-enum { TAB_INVENTORY, TAB_SPELLS, TAB_SKILLS, TAB_COUNT };
+enum { TAB_INVENTORY, TAB_SPELLS, TAB_SKILLS, TAB_STORY, TAB_COUNT };
+
+/* quests.c: motives, chapters, missions, lore, named enemies */
+void story_game_init(Game *g);
+void story_update(Game *g, float dt);
+bool story_motive_pending(const Game *g, const PlayerSlot *ps);
+void story_pick_motive(Game *g, PlayerSlot *ps, int motive);
+void story_picker_nav(Game *g, PlayerSlot *ps, int nav);
+void story_picker_tap(Game *g, PlayerSlot *ps, int W, int H, float x, float y);
+void story_draw_picker(Game *g, PlayerSlot *ps, int W, int H);
+void story_tab_nav(Game *g, PlayerSlot *ps, int nav);
+void story_draw_tab(Game *g, PlayerSlot *ps, int W, int H, int top);
+void story_draw_panel(Game *g, PlayerSlot *ps, int W, int H);
+void story_draw_tracker(Game *g, PlayerSlot *ps, int W, int H, int y);
+void story_draw_plates(Game *g, PlayerSlot *viewer, int W, int H);
+void story_map_markers(Game *g, PlayerSlot *ps, float cx, float cy, int pxw, int pyw, int pzw, int px, float x0, float y0, float x1, float y1);
+void story_on_kill(Game *g, Monster *m);
+bool story_collect_quest(Game *g, PlayerSlot *ps, Pickup *p);
+/* A domain lord lives in this chunk: spawn it (from spawn_chunk). */
+void story_spawn_lord(Game *g, Chunk *c);
+void lore_add(Game *g, int kind, int a, int b, int c);
+Monster *story_spawn_named_at(Game *g, const Named *n, vec3 pos);
 
 /* spells.c */
 void spells_give_start(Stats *s);

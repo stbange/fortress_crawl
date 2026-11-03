@@ -245,6 +245,7 @@ void game_update_atmosphere(Game *g, PlayerSlot *ps, float dt) {
 static void menu_nav(Game *g, PlayerSlot *ps, int nav) {
     if (ps->menu_tab == TAB_INVENTORY) inventory_nav(g, ps, nav);
     else if (ps->menu_tab == TAB_SPELLS) spellbook_nav(g, ps, nav);
+    else if (ps->menu_tab == TAB_STORY) story_tab_nav(g, ps, nav);
     else if (nav != NAV_DROP) game_skills_nav(ps, nav);
 }
 
@@ -382,7 +383,13 @@ void game_event(Game *g, const SDL_Event *e) {
         ps->st.weapon = (ps->st.weapon + d) % WPN_COUNT;
     } else if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat) {
         SDL_Keycode k = e->key.key;
-        if (ps->show_skills && k != SDLK_TAB && k != SDLK_ESCAPE && k != SDLK_I && k != SDLK_B) {
+        if (story_motive_pending(g, ps)) {
+            if (k == SDLK_UP || k == SDLK_W) story_picker_nav(g, ps, NAV_UP);
+            else if (k == SDLK_DOWN || k == SDLK_S) story_picker_nav(g, ps, NAV_DOWN);
+            else if (k == SDLK_RETURN || k == SDLK_SPACE || k == SDLK_KP_ENTER) story_picker_nav(g, ps, NAV_BUY);
+            return;
+        }
+        if (ps->show_skills && k != SDLK_TAB && k != SDLK_ESCAPE && k != SDLK_I && k != SDLK_B && k != SDLK_L) {
             switch (k) {
             case SDLK_LEFT: case SDLK_A: menu_nav(g, ps, NAV_LEFT); break;
             case SDLK_RIGHT: case SDLK_D: menu_nav(g, ps, NAV_RIGHT); break;
@@ -400,6 +407,7 @@ void game_event(Game *g, const SDL_Event *e) {
         case SDLK_TAB: ps->show_skills = !ps->show_skills; ps->show_map = false; break;
         case SDLK_I: open_menu(ps, TAB_INVENTORY); break;
         case SDLK_B: open_menu(ps, TAB_SPELLS); break;
+        case SDLK_L: open_menu(ps, TAB_STORY); break;
         case SDLK_Q: ps->spell_held = true; break;
         case SDLK_R: spell_next(ps, (SDL_GetModState() & SDL_KMOD_SHIFT) ? -1 : 1); break;
         case SDLK_H: drink_potion(g, ps, false); break;
@@ -480,6 +488,17 @@ static void read_pad(Game *g, PlayerSlot *ps, PlayerInput *in, float dt) {
     deadzone(&lx, &ly, 0.2f);
     deadzone(&rx, &ry, 0.15f);
 
+    if (story_motive_pending(g, ps)) {
+        static float pick_cool[MAX_PLAYERS];
+        float *cool = &pick_cool[ps->index];
+        *cool -= dt;
+        if (PRESSED(SDL_GAMEPAD_BUTTON_DPAD_UP) || (ly < -0.6f && *cool <= 0)) { story_picker_nav(g, ps, NAV_UP); *cool = 0.25f; }
+        if (PRESSED(SDL_GAMEPAD_BUTTON_DPAD_DOWN) || (ly > 0.6f && *cool <= 0)) { story_picker_nav(g, ps, NAV_DOWN); *cool = 0.25f; }
+        if (fabsf(ly) < 0.3f) *cool = 0;
+        if (PRESSED(SDL_GAMEPAD_BUTTON_SOUTH)) story_picker_nav(g, ps, NAV_BUY);
+        ps->attack_held = ps->alt_held = ps->pad_attack = ps->pad_alt = ps->pad_spell = false;
+        return;
+    }
     if (ps->show_skills) {
         static float nav_cool[MAX_PLAYERS];
         float *cool = &nav_cool[ps->index];
@@ -597,9 +616,10 @@ void game_update(Game *g, const PlayerInput *kb, float dt) {
         if (ps->keyboard && kb) inputs[i] = *kb;
         if (ps->keyboard) touch_input(g, &inputs[i]);
         if (ps->pad) read_pad(g, ps, &inputs[i], dt);
-        if (ps->show_skills || ps->show_map) memset(&inputs[i], 0, sizeof inputs[i]);
+        bool modal = ps->show_skills || ps->show_map || story_motive_pending(g, ps);
+        if (modal) memset(&inputs[i], 0, sizeof inputs[i]);
         /* menus pause the game only when playing alone */
-        if (g->nplayers == 1 && (ps->show_skills || ps->show_map)) paused = true;
+        if (g->nplayers == 1 && modal) paused = true;
     }
     if (!paused) {
         for (int i = 0; i < MAX_PLAYERS; i++)
@@ -614,6 +634,7 @@ void game_update(Game *g, const PlayerInput *kb, float dt) {
     }
     for (int i = 0; i < MAX_PLAYERS; i++)
         if (g->players[i].active) explore_update(g, &g->players[i], dt);
+    story_update(g, dt);
     g->time += dt;
     g->play_time += dt;
     /* autosave (not in screenshot and test runs) */
@@ -656,7 +677,7 @@ static SkillLayout skills_layout(int W, int H) {
 
 /* ---------- character menu: tabs ---------- */
 
-static const char *TAB_NAMES[TAB_COUNT] = { "ITEMS", "SPELLS", "SKILLS" };
+static const char *TAB_NAMES[TAB_COUNT] = { "ITEMS", "SPELLS", "SKILLS", "STORY" };
 
 static void tab_rect(int W, int t, float *x, float *y, float *w, float *h) {
     *w = W < 440 ? 52.0f : 72.0f;
@@ -677,6 +698,8 @@ void game_menu_tap(Game *g, PlayerSlot *ps, int W, int H, float x, float y) {
         inventory_tap(g, ps, inventory_hit(ps, W, H, MENU_TOP, x, y));
     } else if (ps->menu_tab == TAB_SPELLS) {
         spellbook_tap(g, ps, spellbook_hit(ps, W, H, MENU_TOP, x, y));
+    } else if (ps->menu_tab == TAB_STORY) {
+        story_tab_nav(g, ps, y < H / 2 ? NAV_UP : NAV_DOWN); /* tap the upper or lower half to scroll */
     } else {
         int hit = game_skills_hit(ps, W, H, x, y);
         if (hit == -2) game_skills_nav(ps, NAV_LEFT);
@@ -852,6 +875,9 @@ static void draw_hud(Game *g, PlayerSlot *ps, int W, int H) {
     }
     bool idle_pad = false;
     for (int i = 0; i < ARRAY_LEN(g->idle_pads); i++) idle_pad |= g->idle_pads[i] != NULL;
+    font_end();
+    story_draw_tracker(g, ps, W, H, g->hud && ps->index == 0 ? 4 + 8 * FONT_LINE : (touch ? 30 : 4) + (idle_pad ? 10 : 0));
+    font_begin(W, H);
     if (idle_pad && ps->index == 0 && g->nplayers < MAX_PLAYERS) {
         const char *t = "GAMEPAD READY: PRESS START TO JOIN";
         font_text((W - font_text_width(t)) / 2, 6, t, 0.7f, 0.85f, 0.95f);
@@ -910,6 +936,7 @@ static void draw_menu(Game *g, PlayerSlot *ps, int W, int H) {
     font_end();
     if (ps->menu_tab == TAB_INVENTORY) inventory_draw(g, ps, W, H, MENU_TOP);
     else if (ps->menu_tab == TAB_SPELLS) spellbook_draw(g, ps, W, H, MENU_TOP);
+    else if (ps->menu_tab == TAB_STORY) story_draw_tab(g, ps, W, H, MENU_TOP);
     else draw_skills(g, ps, W, H);
 }
 
@@ -968,9 +995,14 @@ static void render_view(Game *g, PlayerSlot *ps, int vx, int vy, int vw, int vh)
     batch3d_flush(&vm_proj, &none);
     renderer_end_world(&g->r);
 
+    if (story_motive_pending(g, ps)) { story_draw_picker(g, ps, vw, vh); return; }
     if (ps->show_map) explore_draw_map(g, ps, vw, vh);
     else if (ps->show_skills) draw_menu(g, ps, vw, vh);
-    else draw_hud(g, ps, vw, vh);
+    else {
+        story_draw_plates(g, ps, vw, vh);
+        draw_hud(g, ps, vw, vh);
+    }
+    if (!ps->show_skills && !ps->show_map) story_draw_panel(g, ps, vw, vh);
 }
 
 void game_render(Game *g) {

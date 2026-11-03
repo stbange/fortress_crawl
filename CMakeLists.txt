@@ -53,7 +53,8 @@ add_library(fcworld STATIC
   src/world/gen_chunk.c
   src/world/gen_struct.c
   src/world/gen_exterior.c
-  src/world/mesher.c)
+  src/world/mesher.c
+  src/world/story.c)
 target_include_directories(fcworld PUBLIC src)
 target_compile_options(fcworld PRIVATE ${FC_WARN})
 if(NOT MSVC)
@@ -78,6 +79,7 @@ add_executable(fortress_crawl
   src/game/items.c
   src/game/spells.c
   src/game/save.c
+  src/game/quests.c
   src/render/renderer.c
   src/render/batch.c
   src/world/chunkmap.c)

@@ -106,7 +106,11 @@ void touch_event(Game *g, const SDL_Event *e) {
         if (i >= 0) release(g, i);
         if (t->nfingers >= TOUCH_MAX_FINGERS) return;
         int role = TOUCH_NONE;
-        if (ps->show_skills || ps->show_map) {
+        if (story_motive_pending(g, ps)) {
+            int vx, vy, vw, vh;
+            game_view_rect(g, ps, &vx, &vy, &vw, &vh);
+            story_picker_tap(g, ps, vw, vh, x - vx, y - vy);
+        } else if (ps->show_skills || ps->show_map) {
             menu_tap(g, ps, x, y);
         } else {
             for (int b = 0; b < TB_COUNT && role == TOUCH_NONE; b++)
@@ -212,6 +216,10 @@ void touch_draw(Game *g) {
         const char *a = "TURN YOUR PHONE SIDEWAYS";
         font_text((W - font_text_width(a)) / 2, H / 2 - 4, a, 0.95f, 0.8f, 0.5f);
         font_end();
+        return;
+    }
+    if (story_motive_pending(g, ps)) {
+        batch2d_flush();
         return;
     }
     if (ps->show_skills || ps->show_map) {
