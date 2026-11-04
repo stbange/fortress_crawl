@@ -20,7 +20,9 @@ for the full plan and [`docs/STORY.md`](docs/STORY.md) for how the stories work.
 | ![Before the gates](docs/screenshots/exterior.png) | ![The Grand Vestibule](docs/screenshots/vestibule.png) |
 | Before the gates | The Grand Vestibule |
 | ![Great hall](docs/screenshots/hall_colossus.png) | ![Chasm](docs/screenshots/chasm.png) |
-| A great hall in the mines | A chasm with ledges and stairs |
+| A great hall: one layer high, its staircase standing in it like a tower | A chasm: the rare place where two layers meet in the open |
+| ![Layers from above](docs/screenshots/layers.png) | ![Map of a layer](docs/screenshots/map.png) |
+| Two layers from above (gate level, one below): rooms and corridors on one floor each | The map shows your layer and the stairs you have seen |
 | ![Heaven](docs/screenshots/heaven.png) | ![Ember-forged dungeon](docs/screenshots/ember.png) |
 | Heaven (far up) | Ember-forged dungeon (far south) |
 | ![Jade dungeon](docs/screenshots/jade.png) | ![Gothic dungeon](docs/screenshots/gothic.png) |
@@ -137,6 +139,14 @@ The game starts with the **start screen**: type a seed (a number or any word; th
 always makes the same world) or roll a random one, and enter the fortress. `--seed` on the
 command line skips it.
 
+**Layers:** the fortress is built like the floors of a building. Each layer has one floor:
+you walk through its rooms and corridors without falling into another layer, and the only
+ways up and down are spiral staircases. Every chunk (32 x 32 m) has one staircase up and one
+down, so the next one is never far; great halls and caverns have one of each for the whole
+hall, and the rare chasm joins two layers with a long stair of its own. The map shows the
+layer you are on (gate level, "layer 3 below", ...) and marks the staircases you have seen;
+directions to targets are given in layers.
+
 **Monsters** come in packs in most chunks, two packs in structures, and bats in swarms.
 Skeletons shoot arrows from a distance, slimes split in two, wisps throw fire, horned beasts
 charge, brutes hit hard. Elites (with a burning crown) are tougher and drop better loot.
@@ -243,7 +253,7 @@ fortress_crawl [--seed N] [--pos x y z] [--look yaw pitch] [--fly] [--radius n] 
                [--shot file.bmp] [--shot-time seconds]
                [--demo combat|sword|death|skills|map|coop|menu|inventory|spells|loot|magic|bestiary|
                        motive|story|read|named|storytest]
-               [--players n] [--test-pad] [--touch] [--fresh] [--persist]
+               [--players n] [--test-pad] [--touch] [--fresh] [--persist] [--fullbright] [--chapter n]
 ```
 
 `--shot` waits until the view has loaded, saves one frame and exits. It is useful for

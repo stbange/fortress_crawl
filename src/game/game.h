@@ -168,6 +168,7 @@ typedef struct Options {
     bool test_pad; /* scripted virtual gamepad that joins and plays (test) */
     bool touch;    /* show the touch controls from the start */
     bool fresh;    /* ignore the save (new characters) */
+    bool fullbright; /* --fullbright: no lighting (look at the geometry) */
     bool persist;  /* load and save even in screenshot runs (tests) */
     bool auto_motive; /* screenshot runs: pick a motive without asking */
     int demo_chapter; /* --chapter n: story demos start at chapter n */
@@ -190,6 +191,7 @@ typedef struct TouchCtl {
 /* A character from the save, waiting for its slot (save.c). */
 typedef struct SavedPlayer {
     bool valid;
+    bool moved; /* saved before the layered world: starts again at the gate */
     Stats st;
     Player pl;
 } SavedPlayer;
@@ -478,6 +480,9 @@ float relic_bonus(const Stats *s, int bonus);
 /* explore.c */
 void explore_update(Game *g, PlayerSlot *ps, float dt);
 bool explore_get(Game *g, int x, int y, int z);
+/* The layer a feet height is on, and its name ("LAYER 3 BELOW"). */
+int layer_of(float feet_y);
+void layer_name(int layer, char *out, int n);
 void explore_draw_map(Game *g, PlayerSlot *ps, int w, int h);
 
 #endif

@@ -4,6 +4,7 @@
  *                                                  structures outlined, the start marked white
  *   worldmap section <cz> <radius> out.ppm         vertical slice (x/y) through chunk row cz
  *   worldmap blocks <wy> <wx0> <wz0> <size> out.ppm  top-down block map of one world layer
+ *   worldmap structs <radius>                       lists the halls, caverns and chasms near the gate
  *   worldmap story <chapters> <radius>              prints the seed's myth, the first chapters of the
  *                                                  metaplot and the domains and traces around the gate
  */
@@ -83,6 +84,21 @@ static void block_map(const World *w, int wy, int wx0, int wz0, int size, const 
     free(img);
 }
 
+static void structs_dump(const World *w, int radius) {
+    for (int cy = -radius / 2; cy <= radius / 2; cy++)
+        for (int cz = -radius; cz <= radius; cz++)
+            for (int cx = -radius; cx <= radius; cx++) {
+                Structure s;
+                if (!world_structure_at(w, cx, cy, cz, &s) || cx != s.cx0 || cy != s.cy0 || cz != s.cz0) continue;
+                ChunkInfo ci;
+                world_chunk_info(w, cx, cy, cz, &ci);
+                char name[96];
+                world_place_name(&ci, name, sizeof name);
+                printf("%-40s chunks %d %d %d size %dx%dx%d, floor y %d (world centre %d %d %d)\n", name, s.cx0, s.cy0, s.cz0, s.sx,
+                       s.sy, s.sz, s.floor_y, s.cx0 * CHUNK + s.sx * 16, s.floor_y, s.cz0 * CHUNK + s.sz * 16);
+            }
+}
+
 static void story_dump(const World *w, int chapters, int radius) {
     StoryWorld sw;
     story_world(w->seed, &sw);
@@ -149,9 +165,10 @@ int main(int argc, char **argv) {
     else if (argc == 7 && strcmp(argv[1], "blocks") == 0)
         block_map(&w, atoi(argv[2]), atoi(argv[3]), atoi(argv[4]), atoi(argv[5]), argv[6]);
     else if (argc == 4 && strcmp(argv[1], "story") == 0) story_dump(&w, atoi(argv[2]), atoi(argv[3]));
+    else if (argc == 3 && strcmp(argv[1], "structs") == 0) structs_dump(&w, atoi(argv[2]));
     else {
         fprintf(stderr, "usage:\n  worldmap places <cy> <radius> out.ppm\n  worldmap section <cz> <radius> out.ppm\n"
-                        "  worldmap blocks <wy> <wx0> <wz0> <size> out.ppm\n  worldmap story <chapters> <radius>\n");
+                        "  worldmap blocks <wy> <wx0> <wz0> <size> out.ppm\n  worldmap story <chapters> <radius>\n  worldmap structs <radius>\n");
         return 1;
     }
     return 0;

@@ -100,7 +100,10 @@ someone already killed says so.
   30 M BELOW", at the top of the view.
 - **Name plates:** named enemies in view show their name and health.
 - **Map:** the chapter target (red) and missions (gold), on the edge when off the map.
-- **Golden Thread** (a spell everyone has; G, right stick click, PATH on touch): a weighted A*
+- **Directions** are given in layers: "140 M NORTH-EAST, 2 LAYERS DOWN".
+- **Golden Thread** (a spell everyone has; G, right stick click, PATH on touch): when the
+  target is on another layer, it first leads to the best staircase of your layer in that
+  direction (stair positions are known in advance). Otherwise a weighted A*
   search over the walkable cells of the loaded chunks (level moves, one-cell steps up, drops
   of up to six cells, crawlspaces, no corner cutting) toward the target, laid out as a thin
   golden line with a light pulse running along it toward the goal; it dissolves after about

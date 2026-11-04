@@ -11,7 +11,7 @@
  * user's preference folder. The world itself never needs saving: the seed rebuilds it. */
 
 #define SAVE_MAGIC 0x56534346u /* "FCSV" */
-#define SAVE_VERSION 2 /* 2: story (motive, chapter, missions, lore) */
+#define SAVE_VERSION 3 /* 2: story (motive, chapter, missions, lore); 3: layered world */
 #define EXPLORED_BUDGET (1200 * 1024)
 
 /* ---------- storage backends ---------- */
@@ -280,6 +280,8 @@ static void read_player(Rd *r, SavedPlayer *sp) {
     rbytes(r, s->relics, RELIC_COUNT);
     rbytes(r, s->spell_rank, SPELL_COUNT);
     s->spell = (int)r32(r);
+    /* before version 3 the world had another shape: the place is meaningless now */
+    sp->moved = r->ver < 3;
     if (r->ver >= 2) {
         s->motive = r8(r);
         s->chapter = (int)r32(r);
@@ -366,7 +368,7 @@ bool game_load(Game *g) {
         take(&r, mask, sizeof mask);
         for (int k = 0; k < CHUNK_VOL / 8; k++)
             if (mask[k >> 3] & (1 << (k & 7))) bits[k] = r8(&r);
-        if (!r.bad) explore_import(g, cx, cy, cz, bits);
+        if (!r.bad && r.ver >= 3) explore_import(g, cx, cy, cz, bits); /* old maps show old layouts */
     }
     free(d);
     SDL_Log("Loaded the save of world %s: %d characters, %u chests and relics taken, %u map chunks", g->opt.seed_text,
@@ -403,12 +405,19 @@ void save_apply_player(Game *g, PlayerSlot *ps) {
     s->mana = fminf(mana, s->maxmana);
     s->since_hurt = 100.0f;
     s->invuln = 2.0f;
-    ps->pl.pos = sp->pl.pos;
-    ps->pl.yaw = sp->pl.yaw;
-    ps->pl.pitch = sp->pl.pitch;
-    ps->pl.fly = sp->pl.fly;
     ps->book_sel = s->spell;
     char buf[96];
-    snprintf(buf, sizeof buf, "WELCOME BACK - LEVEL %d", s->level);
+    if (sp->moved) {
+        /* the fortress was rebuilt in layers since this save: back to the gate */
+        s->respawn = g->start_pos;
+        s->respawn_yaw = g->start_yaw;
+        snprintf(buf, sizeof buf, "THE FORTRESS HAS SHIFTED - LEVEL %d, BACK AT THE GATE", s->level);
+    } else {
+        ps->pl.pos = sp->pl.pos;
+        ps->pl.yaw = sp->pl.yaw;
+        ps->pl.pitch = sp->pl.pitch;
+        ps->pl.fly = sp->pl.fly;
+        snprintf(buf, sizeof buf, "WELCOME BACK - LEVEL %d", s->level);
+    }
     game_banner(ps, buf);
 }

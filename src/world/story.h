@@ -114,7 +114,7 @@ void story_trace_text(const World *w, int cx, int cy, int cz, char *out, int n);
 bool story_retrieve(const World *w, int cx, int cy, int cz, Retrieve *out);
 bool story_bounty(const World *w, int cx, int cy, int cz, Named *lord, int *gold);
 
-/* "140 M NORTH-EAST, 30 M BELOW" from a world position to a chunk's centre. */
+/* "140 M NORTH-EAST, 2 LAYERS DOWN" from a world position (feet + 1) to a chunk's centre. */
 void story_direction(float fx, float fy, float fz, int cx, int cy, int cz, char *out, int n);
 
 #endif

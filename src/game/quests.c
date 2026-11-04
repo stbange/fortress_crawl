@@ -937,9 +937,29 @@ bool story_cast_thread(Game *g, PlayerSlot *ps) {
     ps->thread_goal = g->time - ps->thread_cast_time < 8.0f ? (ps->thread_goal + 1) % n : 0;
     ps->thread_cast_time = g->time;
     int i = ps->thread_goal;
-    int r = thread_path(g, ps->pl.pos, goal[i], &ps->thread);
+    /* on another layer: lead to the best staircase of this layer in that direction (every
+     * chunk has one up and one down, and where they are is known) */
+    int here = layer_of(ps->pl.pos.y + 0.01f), there = layer_of(goal[i].y);
+    vec3 dest = goal[i];
+    bool via_stairs = false;
+    if (there != here) {
+        bool up = there > here;
+        int pcx = floordiv((int)floorf(ps->pl.pos.x), CHUNK), pcz = floordiv((int)floorf(ps->pl.pos.z), CHUNK);
+        float best = 1e30f;
+        for (int dz = -2; dz <= 2; dz++)
+            for (int dx = -2; dx <= 2; dx++) {
+                Portal sp;
+                if (!world_face_portals(&g->world, 1, pcx + dx, up ? here : here - 1, pcz + dz, &sp, 1)) continue;
+                vec3 at = v3(sp.x + 0.5f, (float)(here * CHUNK + LAYER_FLOOR) + 1.0f, sp.z + 0.5f);
+                float a = v3_len(v3(at.x - ps->pl.pos.x, 0, at.z - ps->pl.pos.z));
+                float b = v3_len(v3(goal[i].x - at.x, 0, goal[i].z - at.z));
+                if (a + b * 0.8f < best) { best = a + b * 0.8f; dest = at; via_stairs = true; }
+            }
+    }
+    int r = thread_path(g, ps->pl.pos, dest, &ps->thread);
     char buf[128];
     if (r == 0) snprintf(buf, sizeof buf, "THE THREAD FINDS NO WAY FROM HERE");
+    else if (via_stairs && r == 2) snprintf(buf, sizeof buf, "THE STAIRS %s - TOWARDS %s", there > here ? "UP" : "DOWN", names[i]);
     else if (r == 2) snprintf(buf, sizeof buf, "THE THREAD LEADS TO %s", names[i]);
     else snprintf(buf, sizeof buf, "TOWARDS %s - FOLLOW THE THREAD, CAST AGAIN", names[i]);
     upper(buf);

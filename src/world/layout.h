@@ -11,7 +11,16 @@
  *
  * Axes: +Y up, +X east, +Z south (so north is -Z).
  * The castle gate is at world x = 0, z = -4..3, facing west. The valley in
- * front of it (chunks x -3..-1, z -2..1, y >= 0) is the only "outside". */
+ * front of it (chunks x -3..-1, z -2..1, y >= 0) is the only "outside".
+ *
+ * The world is built in layers like the floors of a building: each chunk row in y is
+ * one layer, and every layer walks on one main floor (LAYER_FLOOR cells above the
+ * bottom of its chunks); caverns add small slopes but never lead to another layer.
+ * Layers connect only by spiral staircases: every chunk has one up and one down
+ * (a great hall or cavern has one of each for the whole structure). The rare chasm
+ * spans two layers and has its own long stair between them. */
+
+#define LAYER_FLOOR 6
 
 #define CHUNK 32
 #define CHUNK_VOL (CHUNK * CHUNK * CHUNK)

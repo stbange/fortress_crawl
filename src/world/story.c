@@ -720,8 +720,10 @@ void story_trace_text(const World *w, int cx, int cy, int cz, char *out, int n) 
 /* ---------- directions ---------- */
 
 void story_direction(float fx, float fy, float fz, int cx, int cy, int cz, char *out, int n) {
-    float dx = cx * CHUNK + 16.0f - fx, dy = cy * CHUNK + 12.0f - fy, dz = cz * CHUNK + 16.0f - fz;
+    float dx = cx * CHUNK + 16.0f - fx, dz = cz * CHUNK + 16.0f - fz;
     float h = sqrtf(dx * dx + dz * dz);
+    /* height in layers: the world is built like floors of a building */
+    int layers = cy - floordiv((int)floorf(fy) - 3, CHUNK);
     static const char *const DIRS[8] = { "east", "south-east", "south", "south-west", "west", "north-west", "north", "north-east" };
     char hs[48] = "", vs[32] = "";
     if (h >= 20.0f) {
@@ -729,7 +731,7 @@ void story_direction(float fx, float fy, float fz, int cx, int cy, int cz, char 
         oct = ((oct % 8) + 8) % 8;
         snprintf(hs, sizeof hs, "%d m %s", (int)(h / 10.0f + 0.5f) * 10, DIRS[oct]);
     }
-    if (fabsf(dy) >= 12.0f) snprintf(vs, sizeof vs, "%d m %s", (int)(fabsf(dy) / 10.0f + 0.5f) * 10, dy < 0 ? "below" : "above");
+    if (layers) snprintf(vs, sizeof vs, "%d layer%s %s", abs(layers), abs(layers) == 1 ? "" : "s", layers < 0 ? "down" : "up");
     if (hs[0] && vs[0]) snprintf(out, (size_t)n, "%s, %s", hs, vs);
     else if (hs[0]) snprintf(out, (size_t)n, "%s", hs);
     else if (vs[0]) snprintf(out, (size_t)n, "%s", vs);

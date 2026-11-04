@@ -56,21 +56,22 @@ static void sbox(GenCtx *g, bool along_x, int al, int as, int a0, int a1, int c0
 }
 
 static void build_colossus(GenCtx *g, bool along_x, int al, int as, int floor, int face) {
-    /* face = -1: the statue looks toward the low end of the long axis */
-    sbox(g, along_x, al, as, -6, 6, -6, 6, floor, floor + 2, B_ACCENT);
+    /* face = -1: the statue looks toward the low end of the long axis.
+     * It fits under one layer's vault: 21 cells from pedestal to crown. */
+    sbox(g, along_x, al, as, -6, 6, -6, 6, floor, floor + 1, B_ACCENT);
     for (int s = -1; s <= 1; s += 2) {
-        sbox(g, along_x, al, as, -1, 1, s * 3 - 1, s * 3 + 1, floor + 3, floor + 12, B_PILLAR);
-        sbox(g, along_x, al, as, -1, 1, s * 7 - 1, s * 7 + 1, floor + 12, floor + 23, B_PILLAR);
+        sbox(g, along_x, al, as, -1, 1, s * 3 - 1, s * 3 + 1, floor + 2, floor + 8, B_PILLAR);
+        sbox(g, along_x, al, as, -1, 1, s * 7 - 1, s * 7 + 1, floor + 9, floor + 16, B_PILLAR);
     }
-    sbox(g, along_x, al, as, -2, 2, -5, 5, floor + 13, floor + 24, B_PILLAR);
-    sbox(g, along_x, al, as, -2, 2, -2, 2, floor + 25, floor + 29, B_PILLAR);
-    sbox(g, along_x, al, as, -2, 2, -3, 3, floor + 30, floor + 30, B_ACCENT);
-    sbox(g, along_x, al, as, face * 3, face * 3, -1, -1, floor + 27, floor + 27, B_CRYSTAL);
-    sbox(g, along_x, al, as, face * 3, face * 3, 1, 1, floor + 27, floor + 27, B_CRYSTAL);
+    sbox(g, along_x, al, as, -2, 2, -5, 5, floor + 9, floor + 16, B_PILLAR);
+    sbox(g, along_x, al, as, -2, 2, -2, 2, floor + 17, floor + 20, B_PILLAR);
+    sbox(g, along_x, al, as, -2, 2, -3, 3, floor + 21, floor + 21, B_ACCENT);
+    sbox(g, along_x, al, as, face * 3, face * 3, -1, -1, floor + 19, floor + 19, B_CRYSTAL);
+    sbox(g, along_x, al, as, face * 3, face * 3, 1, 1, floor + 19, floor + 19, B_CRYSTAL);
     /* a great sword planted in front */
-    sbox(g, along_x, al, as, face * 4, face * 4, 0, 0, floor + 3, floor + 28, B_METAL);
-    sbox(g, along_x, al, as, face * 4, face * 4, -2, 2, floor + 22, floor + 22, B_METAL);
-    sbox(g, along_x, al, as, face * 4, face * 4, 0, 0, floor + 29, floor + 30, B_ACCENT);
+    sbox(g, along_x, al, as, face * 4, face * 4, 0, 0, floor + 2, floor + 19, B_METAL);
+    sbox(g, along_x, al, as, face * 4, face * 4, -2, 2, floor + 15, floor + 15, B_METAL);
+    sbox(g, along_x, al, as, face * 4, face * 4, 0, 0, floor + 20, floor + 21, B_ACCENT);
 }
 
 static void carve_gate(GenCtx *g) {
@@ -157,7 +158,7 @@ static void gen_hall(GenCtx *g) {
         /* chandelier between pillar pairs */
         int ca = a + spacing / 2;
         if (ca <= lmax - 8 && ca < statue_zone) {
-            int yb = floor + 14 + (int)(hash3f(s->seed, ca, 0, 0, 0xC4A) * 8);
+            int yb = floor + 10 + (int)(hash3f(s->seed, ca, 0, 0, 0xC4A) * 6);
             sbox(g, along_x, ca, smid, 0, 0, 0, 0, yb + 2, top, B_CHAIN);
             sbox(g, along_x, ca, smid, 0, 0, 0, 0, yb + 1, yb + 1, B_FIRE);
             sbox(g, along_x, ca, smid, -1, 1, -1, 1, yb, yb, B_METAL);
@@ -187,14 +188,13 @@ static void gen_hall(GenCtx *g) {
 
     if (vest) {
         carve_gate(g);
-        Portal p;
-        if (world_face_portals(g->w, 1, 1, -1, -1, &p, 1)) carve_helix_w(g, p.x, p.z, 0, p.y_up + 3, p.phase, true);
-        if (world_face_portals(g->w, 1, 1, 1, 0, &p, 1)) carve_helix_w(g, p.x, p.z, p.y_low, Y1, p.phase, true);
         /* a shrine opposite the gate */
         g_fill_w(g, lmax - 3, floor, smid - 1, lmax - 1, floor + 1, smid + 1, B_ACCENT);
         g_set_w(g, lmax - 2, floor + 2, smid, B_SHRINE);
     }
 
+    /* the hall's staircases up and down stand in the hall like towers */
+    carve_shafts(g);
     carve_portal_mouths(g, 4, false);
     skin_pass(g, true);
     g->light_rate *= 0.6f;
@@ -215,8 +215,9 @@ static void cavern_shape(const Structure *s, CavernShape *c) {
     c->s = s;
     c->X0 = s->cx0 * CHUNK; c->Y0 = s->cy0 * CHUNK; c->Z0 = s->cz0 * CHUNK;
     c->X1 = c->X0 + s->sx * CHUNK - 1; c->Y1 = c->Y0 + s->sy * CHUNK - 1; c->Z1 = c->Z0 + s->sz * CHUNK - 1;
-    c->cx = c->X0 + s->sx * 16.0f; c->cy = c->Y0 + s->sy * 16.0f; c->cz = c->Z0 + s->sz * 16.0f;
-    c->rx = s->sx * 16.0f - 5; c->ry = s->sy * 16.0f - 5; c->rz = s->sz * 16.0f - 5;
+    /* the floor (one layer's) cuts the dome halfway down, where it is wide */
+    c->rx = s->sx * 16.0f - 5; c->ry = s->sy * 16.0f - 2; c->rz = s->sz * 16.0f - 5;
+    c->cx = c->X0 + s->sx * 16.0f; c->cy = s->floor_y + c->ry * 0.5f; c->cz = c->Z0 + s->sz * 16.0f;
     Rng r = rng_make(s->seed ^ 0xC01);
     c->ncol = rng_range(&r, 2, 6);
     for (int i = 0; i < c->ncol; i++) {
@@ -306,6 +307,28 @@ static void gen_cavern(GenCtx *g) {
                 g_put(g, lx, ly, lz, v);
             }
     cavern_tunnels(g, &c);
+    /* the cavern's staircases: a passage from each stair exit into the cave */
+    int n0 = g->nnodes;
+    carve_shafts(g);
+    for (int i = n0; i < g->nnodes; i++) {
+        const Node *nd = &g->nodes[i];
+        int x = g->ox + nd->x, z = g->oz + nd->z, f = g->oy + nd->y;
+        float dx = c.cx - x, dz = c.cz - z, len = sqrtf(dx * dx + dz * dz);
+        if (len < 1.0f) continue;
+        dx /= len; dz /= len;
+        for (int step = 0; step < 40; step++) {
+            int px = x + (int)lrintf(dx * step), pz = z + (int)lrintf(dz * step);
+            if (step >= 2) {
+                if (cavern_air(&c, px, f, pz) && cavern_air(&c, px, f + 1, pz)) break;
+                f = CLAMPI(cavern_floor(s, px, pz), f - 1, f + 1);
+            }
+            for (int oz = -1; oz <= 1; oz++)
+                for (int ox = -1; ox <= 1; ox++) {
+                    for (int y = f; y <= f + 3; y++) g_set_w(g, px + ox, y, pz + oz, B_AIR);
+                    if (!block_solid(g_get_w(g, px + ox, f - 1, pz + oz))) g_set_w(g, px + ox, f - 1, pz + oz, B_ROCK);
+                }
+        }
+    }
     skin_pass(g, false);
     g->light_rate *= 0.8f;
     decorate(g, true);

@@ -99,7 +99,27 @@ static void map_arrow(float cx, float cy, float yaw, vec3 c) {
     }
 }
 
-/* Top-down map of explored cells around the player, sized to their view; north (-Z) is up. */
+/* A small triangle pointing up (staircase up) or down. */
+static void stair_icon(float x, float y, bool up) {
+    vec3 c = up ? v3(0.55f, 1.0f, 0.5f) : v3(0.45f, 0.7f, 1.0f);
+    batch2d_rect(x - 5, y - 5, 11, 10, 0.05f, 0.05f, 0.05f, 0.9f);
+    for (int r = 0; r < 4; r++) {
+        int wdt = up ? 1 + 2 * r : 7 - 2 * r;
+        batch2d_rect(x - wdt / 2.0f, y - 3 + r * 2, (float)wdt, 2, c.x, c.y, c.z, 1.0f);
+    }
+}
+
+/* Which layer a feet height belongs to (on a staircase: the one whose chunk you are in,
+ * counted from just below its floor). */
+int layer_of(float feet_y) { return floordiv((int)floorf(feet_y) - 2, CHUNK); }
+
+void layer_name(int layer, char *out, int n) {
+    if (layer == 0) snprintf(out, (size_t)n, "GATE LEVEL");
+    else snprintf(out, (size_t)n, "LAYER %d %s", abs(layer), layer < 0 ? "BELOW" : "ABOVE");
+}
+
+/* Top-down map of the explored cells of the player's layer, sized to their view;
+ * north (-Z) is up. Staircases you have seen are marked. */
 void explore_draw_map(Game *g, PlayerSlot *ps, int w, int h) {
     int px = 2;
     int cells = MINI(110, (MINI(w, h) - 30) / px);
@@ -110,15 +130,28 @@ void explore_draw_map(Game *g, PlayerSlot *ps, int w, int h) {
     batch2d_rect(ox - 3, oy - 3, size + 6.0f, size + 6.0f, 0.35f, 0.28f, 0.18f, 1.0f);
     batch2d_rect(ox - 2, oy - 2, size + 4.0f, size + 4.0f, 0.06f, 0.05f, 0.05f, 1.0f);
     int pxw = (int)floorf(ps->pl.pos.x), pyw = (int)floorf(ps->pl.pos.y + 0.01f), pzw = (int)floorf(ps->pl.pos.z);
+    int layer = layer_of(ps->pl.pos.y + 0.01f);
+    int floor_y = layer * CHUNK + LAYER_FLOOR;
+    pyw = floor_y; /* shade relative to the layer's floor */
     for (int j = 0; j < cells; j++)
         for (int i = 0; i < cells; i++) {
             int wx = pxw + i - cells / 2, wz = pzw + j - cells / 2;
-            /* highest seen walkable cell within a few metres of the player's height */
-            for (int y = pyw + 3; y >= pyw - 6; y--) {
+            /* highest seen walkable cell around this layer's floor */
+            bool seen_air = false;
+            float fx = ox + i * px, fy = oy + j * px;
+            for (int y = floor_y + 4; y >= floor_y - 4; y--) {
                 if (!explore_get(g, wx, y, wz)) continue;
                 bool known;
                 Block b = chunkmap_block(&g->map, wx, y, wz, &known);
-                float fx = ox + i * px, fy = oy + j * px;
+                if (known && !block_opaque(b) && b != B_WATER) {
+                    /* open air you saw: the floor under it is what the map shows */
+                    int yy = y;
+                    bool kb = true;
+                    while (yy > floor_y - 5 && !block_solid(chunkmap_block(&g->map, wx, yy - 1, wz, &kb)) && kb) yy--;
+                    if (yy <= floor_y - 5 || !kb) { seen_air = true; continue; }
+                    y = yy;
+                    b = chunkmap_block(&g->map, wx, y, wz, &known);
+                }
                 if (known && block_opaque(b)) {
                     bool known_above;
                     bool floor = !block_opaque(chunkmap_block(&g->map, wx, y + 1, wz, &known_above));
@@ -133,11 +166,31 @@ void explore_draw_map(Game *g, PlayerSlot *ps, int w, int h) {
                 if (b == B_WATER) batch2d_rect(fx, fy, (float)px, (float)px, 0.15f * depth, 0.3f * depth, 0.55f * depth, 1.0f);
                 else if (b == B_SHRINE || BLOCKS[b].light) batch2d_rect(fx, fy, (float)px, (float)px, 1.0f, 0.75f, 0.3f, 1.0f);
                 else batch2d_rect(fx, fy, (float)px, (float)px, 0.72f * depth, 0.66f * depth, 0.52f * depth, 1.0f);
+                seen_air = false;
                 break;
             }
+            (void)seen_air;
         }
-    /* the other players in their colours, then you */
+    /* staircases of this layer: up through its ceiling, down through its floor */
     float cx = ox + (cells / 2) * px + 1, cy = oy + (cells / 2) * px + 1;
+    int c0x = floordiv(pxw - cells / 2, CHUNK), c1x = floordiv(pxw + cells / 2, CHUNK);
+    int c0z = floordiv(pzw - cells / 2, CHUNK), c1z = floordiv(pzw + cells / 2, CHUNK);
+    for (int ccz = c0z; ccz <= c1z; ccz++)
+        for (int ccx = c0x; ccx <= c1x; ccx++)
+            for (int up = 0; up < 2; up++) {
+                Portal p;
+                if (!world_face_portals(&g->world, 1, ccx, up ? layer : layer - 1, ccz, &p, 1)) continue;
+                /* only stairs you have seen: their well at this layer's floor */
+                bool seen = false;
+                for (int dz = -2; dz <= 2 && !seen; dz++)
+                    for (int dx = -2; dx <= 2 && !seen; dx++)
+                        for (int y = floor_y - 1; y <= floor_y + 2 && !seen; y++) seen = explore_get(g, p.x + dx, y, p.z + dz);
+                if (!seen) continue;
+                float mx = cx + (p.x - pxw) * (float)px, my = cy + (p.z - pzw) * (float)px;
+                if (mx < ox + 5 || mx > ox + size - 5 || my < oy + 5 || my > oy + size - 5) continue;
+                stair_icon(mx, my, up);
+            }
+    /* the other players in their colours, then you */
     for (int i = 0; i < MAX_PLAYERS; i++) {
         PlayerSlot *o = &g->players[i];
         if (!o->active || o == ps) continue;
@@ -151,9 +204,15 @@ void explore_draw_map(Game *g, PlayerSlot *ps, int w, int h) {
     font_begin(w, h);
     font_text((int)ox + size / 2 - 3, (int)oy - 12, "N", 0.9f, 0.8f, 0.6f);
     char buf[160];
-    snprintf(buf, sizeof buf, "MAP - %s", ps->domain_name[0] ? ps->domain_name : ps->place);
-    if (size < 200) buf[MINI((int)sizeof buf - 1, size / 6)] = 0; /* 6 px per glyph */
+    char ln[48];
+    layer_name(layer, ln, sizeof ln);
+    snprintf(buf, sizeof buf, "%s - %.60s", ln, ps->domain_name[0] ? ps->domain_name : ps->place);
+    /* 6 px per glyph; leave room for the close hint */
+    buf[MINI((int)sizeof buf - 1, size >= 160 ? (size - 66) / 6 : size / 6)] = 0;
     font_text((int)ox, (int)(oy + size + 5), buf, 0.85f, 0.75f, 0.55f);
-    if (size >= 160) font_text((int)(ox + size - 60), (int)(oy + size + 5), ps->keyboard && g->touch.active ? "TAP: CLOSE" : ps->pad && !ps->keyboard ? "B: CLOSE" : "M: CLOSE", 0.6f, 0.55f, 0.45f);
+    if (size >= 160) {
+        font_text((int)(ox + size - 60), (int)(oy + size + 5), ps->keyboard && g->touch.active ? "TAP: CLOSE" : ps->pad && !ps->keyboard ? "B: CLOSE" : "M: CLOSE", 0.6f, 0.55f, 0.45f);
+        font_text((int)(ox + size - 72), (int)oy - 12, "^ UP  v DOWN", 0.6f, 0.75f, 0.6f);
+    }
     font_end();
 }

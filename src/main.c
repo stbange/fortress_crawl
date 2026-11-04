@@ -65,6 +65,7 @@ static bool parse_args(Options *o, int argc, char **argv) {
         else if (!strcmp(a, "--test-pad")) o->test_pad = true;
         else if (!strcmp(a, "--touch")) o->touch = true;
         else if (!strcmp(a, "--fresh")) o->fresh = true;
+        else if (!strcmp(a, "--fullbright")) o->fullbright = true;
         else if (!strcmp(a, "--persist")) o->persist = true;
         else if (!strcmp(a, "--chapter") && i + 1 < argc) o->demo_chapter = atoi(argv[++i]) - 1;
         else {
@@ -777,6 +778,7 @@ int main(int argc, char **argv) {
     g->r.set.low_h = g->opt.low_h;
     g->r.set.dither = true;
     g->r.set.torch = true;
+    g->r.set.fullbright = g->opt.fullbright;
     g->r.set.fov_deg = 72.0f;
     g->res_mode = 1;
     int ww, wh;

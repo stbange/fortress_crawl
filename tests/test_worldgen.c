@@ -4,6 +4,8 @@
  *  3. reachability: a walking (crawl-capable) player starting outside the gate
  *     can reach most portal openings in a region around the start
  *  4. meshing smoke test with lighting
+ *  5b. layers: every chunk has its up and down staircase (structures one each), the
+ *     walkable floor of a layer is flat, and the walk from the gate reaches every layer
  *  6. stories: deterministic, and every chapter target and domain lord near the gate
  *     has a floor with room for its size in its home chunk */
 #include "world/layout.h"
@@ -186,6 +188,73 @@ int main(int argc, char **argv) {
     printf("reachability: start at y=%d, %ld walkable cells reached, %d/%d portal openings reachable (%.0f%%)\n", sy,
            reached, ok, nportal_cells, 100.0 * ok / (nportal_cells ? nportal_cells : 1));
     CHECK(ok * 100 >= nportal_cells * 95, "less than 95%% of portal openings reachable");
+
+    /* 5b. layers */
+    {
+        /* reached cells per layer (by the layer's floor band) */
+        long per_layer[R_Y1 - R_Y0 + 1] = { 0 };
+        for (int y = R_Y0 * CHUNK; y < (R_Y1 + 1) * CHUNK; y++)
+            for (int z = R_Z0 * CHUNK; z < (R_Z1 + 1) * CHUNK; z++)
+                for (int x = R_X0 * CHUNK; x < (R_X1 + 1) * CHUNK; x++)
+                    if (in_region(x, y, z) && g_seen[widx(x, y, z)] && floormod(y, CHUNK) == LAYER_FLOOR)
+                        per_layer[floordiv(y, CHUNK) - R_Y0]++;
+        printf("layers: floor cells reached from the gate per layer:");
+        for (int l = 0; l <= R_Y1 - R_Y0; l++) {
+            printf(" %d:%ld", R_Y0 + l, per_layer[l]);
+            CHECK(per_layer[l] > 500, "a layer is not reachable from the gate");
+        }
+        printf("\n");
+        /* staircases: every inner chunk has one up and one down unless a structure or the
+         * outside rules it out */
+        int chunks = 0, both = 0, exempt = 0;
+        for (int cy = R_Y0 + 1; cy < R_Y1; cy++)
+            for (int cz = R_Z0; cz <= R_Z1; cz++)
+                for (int cx = R_X0; cx <= R_X1; cx++) {
+                    ChunkInfo ci;
+                    world_chunk_info(&g_world, cx, cy, cz, &ci);
+                    if (ci.arch == ARCH_EXTERIOR) continue;
+                    Portal up[4], dn[4];
+                    int nu = world_face_portals(&g_world, 1, cx, cy, cz, up, 4);
+                    int nd = world_face_portals(&g_world, 1, cx, cy - 1, cz, dn, 4);
+                    bool near_outside = world_is_exterior(cx, cy + 1, cz) || world_is_exterior(cx, cy - 1, cz);
+                    ChunkInfo above, below;
+                    world_chunk_info(&g_world, cx, cy + 1, cz, &above);
+                    world_chunk_info(&g_world, cx, cy - 1, cz, &below);
+                    if (ci.has_struct || above.has_struct || below.has_struct || near_outside) { exempt++; continue; }
+                    chunks++;
+                    both += nu == 1 && nd == 1;
+                }
+        printf("layers: %d/%d plain chunks have both an up and a down staircase (%d next to structures or outside)\n", both,
+               chunks, exempt);
+        CHECK(both == chunks, "a plain chunk misses a staircase");
+        /* flatness: where can you stand in plain chunks (outside the stair wells)? */
+        long on_floor = 0, near_floor = 0, total = 0;
+        for (int cy = R_Y0; cy <= R_Y1; cy++)
+            for (int cz = R_Z0; cz <= R_Z1; cz++)
+                for (int cx = R_X0; cx <= R_X1; cx++) {
+                    ChunkInfo ci;
+                    world_chunk_info(&g_world, cx, cy, cz, &ci);
+                    if (ci.arch == ARCH_EXTERIOR || ci.has_struct) continue;
+                    Portal ps[MAX_TEST_PORTALS];
+                    int np = world_chunk_portals(&g_world, cx, cy, cz, ps, MAX_TEST_PORTALS);
+                    for (int ly = 1; ly < CHUNK - 1; ly++)
+                        for (int lz = 1; lz < CHUNK - 1; lz++)
+                            for (int lx = 1; lx < CHUNK - 1; lx++) {
+                                int x = cx * CHUNK + lx, y = cy * CHUNK + ly, z = cz * CHUNK + lz;
+                                if (!standable(x, y, z)) continue;
+                                bool well = false;
+                                for (int i = 0; i < np && !well; i++)
+                                    if (ps[i].axis == 1 && abs(x - ps[i].x) <= 2 && abs(z - ps[i].z) <= 2) well = true;
+                                if (well) continue;
+                                total++;
+                                on_floor += ly == LAYER_FLOOR;
+                                near_floor += abs(ly - LAYER_FLOOR) <= 2;
+                            }
+                }
+        printf("layers: %.1f%% of the standing cells outside stair wells are on the layer floor, %.1f%% within two steps\n",
+               100.0 * on_floor / (total ? total : 1), 100.0 * near_floor / (total ? total : 1));
+        CHECK(near_floor * 100 >= total * 90, "plain chunks are not flat enough");
+    }
 
     /* per-chunk: all openings of a chunk connect to each other inside it (+1 cell margin) */
     {

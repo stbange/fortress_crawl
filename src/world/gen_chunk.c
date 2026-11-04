@@ -198,9 +198,11 @@ static void gen_arena(GenCtx *g) {
     decorate(g, false);
 }
 
-/* Open air: floating islands and bridges. Heaven gets little temples, the void gets crystals. */
+/* Open air: islands and bridges over a glass floor (the layer's floor: nobody falls
+ * into the layer below). Heaven gets little temples, the void gets crystals. */
 static void gen_void(GenCtx *g) {
     memset(g->b, B_AIR, CHUNK_VOL);
+    g_fill(g, 0, LAYER_FLOOR - 1, 0, CHUNK - 1, LAYER_FLOOR - 1, CHUNK - 1, B_GLASS);
     Room isl[8];
     int n = place_rooms(g, isl, rng_range(&g->rng, 2, 5), 4, 9, 6, 10);
     for (int i = 0; i < n; i++) {

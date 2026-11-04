@@ -1,4 +1,4 @@
-# Fortress Crawl: Development Plan (v0.6)
+# Fortress Crawl: Development Plan (v0.7)
 
 An endless, procedurally generated 3D dungeon crawler written in C with SDL3 and OpenGL 3.3.
 The player starts in front of a giant castle built into a mountain. The gate is
@@ -11,7 +11,8 @@ gamepads (section 6.4) and touch controls (6.5). v0.5 adds a start screen with t
 denser monsters with three new kinds, loot, weapons, relics, an inventory and 95 spells
 (section 6.6) and saving (6.7). v0.6 adds generated stories: motives, an endless metaplot of
 named enemies, domains, inscriptions, notes and bounty boards (6.8, details in
-[STORY.md](STORY.md)).
+[STORY.md](STORY.md)). v0.7 rebuilds the world in layers like the floors of a building, with
+one floor height per layer and an up and a down staircase in every chunk (section 4).
 
 ---
 
@@ -103,28 +104,36 @@ Later it will drive monsters, traps, loot and puzzles.
 
 - **Chunks** are 32^3 cells of 1 m. Every chunk is a pure function of (seed, coordinates), so
   generation needs no stored history, runs in any order, and runs on worker threads.
-- **Floor levels:** each normal chunk has one or two floor levels, from its own hash.
-  Corridors run flat on a level and are routed with A* (they avoid stairwells and reuse
-  existing passages). Height changes always go through **spiral stairwells**. This keeps
-  everything connected and avoids corridors cutting through each other.
+- **Layers (v0.7):** the world is built like the floors of a building. Each chunk row in y
+  is one **layer**, and every layer walks on one main floor, `LAYER_FLOOR` (6) cells above the
+  bottom of its chunks, so the ground outside the gate is layer 0. Corridors run flat on that
+  floor and are routed with A* (they avoid stairwells and reuse existing passages); caverns
+  add slopes of a few cells but never lead to another layer.
+- **Staircases:** layers connect only by spiral staircases (5x5 around a pillar, 32 steps).
+  Every chunk has one up and one down: the stair on the face between two layers rises from
+  the lower chunk's floor through its ceiling and comes out of the upper chunk's floor. The
+  two stairs of a chunk use separate zones, so they never collide. A great hall or cavern has
+  one up and one down for the whole structure (in opposite corners); a chasm has its own.
+  The positions are pure functions too: the map and the Golden Thread know where they are.
 - **Portals:** the openings on the face between two chunks are computed from that face's own
-  hash, so both neighbours carve them identically. Portal heights are taken from the
-  neighbouring chunks' floor levels or from a structure's gallery levels. Types: corridor,
-  narrow (1 x 2 m squeeze), crawl (1 x 1 m), grand (7 x 10 m arch), gate. Vertical
-  connections are spiral **shafts** through floors and ceilings. Crawl-heavy chunks prefer
-  crawl portals, structures prefer grand arches, and a crawl tunnel opening into a great hall
-  is a deliberate contrast.
-- **Chunk archetypes:** rooms, crawlspace, caves, mine, cell block, arena, open void.
+  hash, so both neighbours carve them identically, always at the layer's floor. Mostly
+  connected: about one chunk side in twelve is a wall. Types: corridor, narrow (1 x 2 m
+  squeeze), crawl (1 x 1 m), grand (7 x 10 m arch), gate. Crawl-heavy chunks prefer crawl
+  portals, structures prefer grand arches, and a crawl tunnel opening into a great hall is a
+  deliberate contrast.
+- **Chunk archetypes:** rooms, crawlspace, caves, mine, cell block, arena, open void (islands
+  over a glass floor, so nobody falls into the layer below).
 - **Megastructures**, at most one per 6x6x6-chunk cell, spanning several chunks:
-  - **Great Hall** (64-96 m wide, 64 m tall): pillar rows, vaulted ceiling, galleries on
-    every level linked by stairs, tall glowing windows, braziers, chandeliers. Variants:
-    *Colossus* (a 30 m statue with glowing eyes and a sword) and *Cistern* (flooded floor
-    with walkways).
-  - **Cavern** (up to 96 m): noise-carved, with columns, stalactites, ponds, crystals and fungus.
-  - **Chasm** (up to 160 m deep): ledge rings on each level, stairs, wooden bridges,
-    braziers and lava or water at the bottom.
-  - **Grand Vestibule**: the fixed hall behind the gate, with a spiral stair down into the
-    floor and a 60 m free-standing spiral up through the ceiling.
+  - **Great Hall** (64-96 m wide, one layer, 22 m to the vault): pillar rows, vaulted
+    ceiling, tall glowing windows, braziers, chandeliers, and its two staircases standing in
+    the hall like towers. Variants: *Colossus* (a 21 m statue with glowing eyes and a sword)
+    and *Cistern* (flooded floor with walkways).
+  - **Cavern** (up to 96 m wide, one layer): noise-carved dome cut by the layer's floor, with
+    gentle slopes, columns, stalactites, ponds, crystals and fungus.
+  - **Chasm** (rare showpiece, two layers): ledges on both layers' floors, a 32-step straight
+    stair along one wall between them, wooden bridges, braziers, and lava or water below.
+  - **Grand Vestibule**: the fixed hall behind the gate, on layer 0, with its stairs up and
+    down.
 - **Outside:** the valley in front of the gate with mountain walls, the castle front (curtain
   wall, gatehouse, towers with lit windows and conical roofs), dead trees, a graveyard, a
   shrine and a brazier-lined path. The castle sits against a sheer cliff that rises into the
