@@ -19,6 +19,8 @@
 #include "render/batch.h"
 
 static const char *g_demo_kind;
+/* --weapon base[:rarity[:affix[:affix]]], e.g. greatsword:epic:fire:keen (screenshots of weapons) */
+static const char *g_demo_weapon;
 
 static bool parse_args(Options *o, int argc, char **argv) {
     memset(o, 0, sizeof *o);
@@ -68,6 +70,7 @@ static bool parse_args(Options *o, int argc, char **argv) {
         else if (!strcmp(a, "--fullbright")) o->fullbright = true;
         else if (!strcmp(a, "--persist")) o->persist = true;
         else if (!strcmp(a, "--mute")) o->mute = true;
+        else if (!strcmp(a, "--weapon") && i + 1 < argc) g_demo_weapon = argv[++i];
         else if (!strcmp(a, "--sound")) o->sound = true;
         else if (!strcmp(a, "--chapter") && i + 1 < argc) o->demo_chapter = atoi(argv[++i]) - 1;
         else {
@@ -93,6 +96,56 @@ static void save_screenshot(Game *g, const char *path) {
         SDL_DestroySurface(s);
     }
     free(px);
+}
+
+static int name_index(const char *s, int len, const char *const *names, int n) {
+    for (int i = 0; i < n; i++)
+        if ((int)strlen(names[i]) == len && !SDL_strncasecmp(s, names[i], (size_t)len)) return i;
+    return -1;
+}
+
+static bool parse_weapon(const char *spec, Item *out) {
+    static const char *BASES[WB_COUNT] = { "dagger", "sword", "axe", "mace", "spear", "greatsword",
+                                           "shortbow", "longbow", "crossbow", "wand", "staff", "scepter" };
+    static const char *RARS[RAR_COUNT] = { "common", "magic", "rare", "epic" };
+    static const char *AFF[AF_COUNT] = { "none", "fire", "frost", "shock", "venom", "vampiric", "swift", "keen", "heavy" };
+    Item it = { 0 };
+    it.used = 1;
+    it.level = 8;
+    int field = 0, naff = 0;
+    for (const char *p = spec; field < 4;) {
+        const char *e = strchr(p, ':');
+        int len = e ? (int)(e - p) : (int)strlen(p);
+        int k = field == 0 ? name_index(p, len, BASES, WB_COUNT) : field == 1 ? name_index(p, len, RARS, RAR_COUNT) : name_index(p, len, AFF, AF_COUNT);
+        if (k < 0) return false;
+        if (field == 0) it.base = (u8)k;
+        else if (field == 1) it.rarity = (u8)k;
+        else it.affix[naff++] = (u8)k;
+        field++;
+        if (!e) break;
+        p = e + 1;
+    }
+    *out = it;
+    return true;
+}
+
+/* A rack of every weapon on the floor ahead, in different rarities and affixes. */
+static void demo_weapons(Game *g, PlayerSlot *p1) {
+    static const u8 RAR[WB_COUNT] = { RAR_COMMON, RAR_MAGIC, RAR_RARE, RAR_EPIC, RAR_MAGIC, RAR_EPIC,
+                                      RAR_COMMON, RAR_RARE, RAR_EPIC, RAR_MAGIC, RAR_RARE, RAR_EPIC };
+    static const u8 AFX[WB_COUNT] = { AF_NONE, AF_FIRE, AF_FROST, AF_SHOCK, AF_VENOM, AF_VAMPIRIC,
+                                      AF_NONE, AF_FIRE, AF_SHOCK, AF_FROST, AF_VENOM, AF_KEEN };
+    vec3 f = v3(cosf(p1->pl.yaw), 0, sinf(p1->pl.yaw)), r = v3(-sinf(p1->pl.yaw), 0, cosf(p1->pl.yaw));
+    for (int i = 0; i < WB_COUNT; i++) {
+        Item it = { 1, (u8)i, RAR[i], 8, { AFX[i], 0 } };
+        int row = i / 6, col = i % 6;
+        vec3 p = v3_add(v3_add(p1->pl.pos, v3_scale(f, 2.0f + row * 1.3f)), v3_scale(r, (col - 2.5f) * (0.75f + row * 0.25f)));
+        p.y += 1.0f + row * 0.35f; /* at eye height, so each can be seen */
+        pickup_spawn(g, PK_WEAPON, p, 0, &it, 880 + (u64)i, 0);
+        for (int k = MAX_PICKUPS - 1; k >= 0; k--)
+            if (g->pickups[k].alive && g->pickups[k].key == 880 + (u64)i) g->pickups[k].t = 1.0f + i * 0.6f; /* turned differently */
+    }
+    for (int i = 0; i < MAX_MONSTERS; i++) g->mons[i].alive = false;
 }
 
 /* Scripted setups for screenshots of the combat systems. */
@@ -136,6 +189,15 @@ static void demo_setup(Game *g) {
         s->mana = s->maxmana;
         if (!strcmp(g_demo_kind, "inventory")) { p1->show_skills = true; p1->menu_tab = TAB_INVENTORY; return; }
         if (!strcmp(g_demo_kind, "spells")) { p1->show_skills = true; p1->menu_tab = TAB_SPELLS; return; }
+    }
+    if (!strcmp(g_demo_kind, "weapons")) { demo_weapons(g, p1); return; }
+    if (!strcmp(g_demo_kind, "impact")) {
+        /* one tough monster right ahead, for the hit effects of the weapon in hand */
+        for (int i = 0; i < MAX_MONSTERS; i++) g->mons[i].alive = false;
+        vec3 f = v3(cosf(p1->pl.yaw), 0, sinf(p1->pl.yaw));
+        Monster *m = monster_spawn(g, MON_BRUTE, v3_add(p1->pl.pos, v3_scale(f, 2.2f)), 30, false, v3(0.5f, 0.45f, 0.4f), 4242);
+        if (m) { m->yaw = p1->pl.yaw + PI_F; m->hp = m->maxhp = 1e6f; m->cooldown = 99.0f; }
+        return;
     }
     if (!strcmp(g_demo_kind, "loot")) {
         /* a chest and some loot on the floor ahead */
@@ -575,9 +637,16 @@ static void screenshot_step(App *a, float frame_dt) {
         }
         demo_setup(g);
         a->demo_done = true;
+        Item it;
+        if (g_demo_weapon && parse_weapon(g_demo_weapon, &it)) {
+            int wc = WEAPON_BASES[it.base].wclass;
+            p1->st.equipped[wc] = it;
+            p1->st.weapon = wc;
+        } else if (g_demo_weapon) SDL_Log("--weapon: not understood: %s", g_demo_weapon);
     }
     const char *kind = g_demo_kind ? g_demo_kind : "";
-    bool fight = !strcmp(kind, "combat") || !strcmp(kind, "sword") || !strcmp(kind, "death") || !strcmp(kind, "coop");
+    bool fight = !strcmp(kind, "combat") || !strcmp(kind, "sword") || !strcmp(kind, "death") || !strcmp(kind, "coop") ||
+                 !strcmp(kind, "impact");
     bool magic = !strcmp(kind, "magic");
     if (g->opt.demo && a->demo_done && fight) {
         p1->attack_held = a->shot_wait > 0.9f && a->shot_wait < 0.95f;

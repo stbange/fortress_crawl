@@ -30,6 +30,8 @@ static void weapon_hit(Game *g, PlayerSlot *ps, Monster *m, int wclass, float dm
     sfx_at(g, base == WB_MACE ? SFX_HIT_BLUNT : SFX_HIT_BLADE, v3_add(m->pos, v3(0, MONSTERS[m->type].h * m->scale * 0.5f, 0)),
            base == WB_GREATSWORD || base == WB_AXE ? 1.2f : 1.0f);
     if (el != EL_NONE) sfx_at(g, sfx_element_impact(el), m->pos, 0.5f);
+    weapon_impact_fx(g, el, ps->st.equipped[wclass].rarity, el == EL_SHADOW,
+                     v3_add(m->pos, v3(0, MONSTERS[m->type].h * m->scale * 0.55f, 0)), ps->index);
     if (el != EL_NONE) element_hit(g, m, el, dmg, from, knock, ps->index);
     else monster_damage(g, m, dmg, from, knock, ps->index);
 }
@@ -105,7 +107,10 @@ static Projectile *proj_new(Game *g, int owner, u8 kind, vec3 pos, vec3 vel, flo
 static vec3 proj_color(const Projectile *p) {
     switch (p->kind) {
     case PJ_ARROW: return v3(0.75f, 0.65f, 0.5f);
-    case PJ_BOLT: return p->explode ? v3(1.0f, 0.55f, 0.2f) : v3(0.55f, 0.6f, 1.0f);
+    case PJ_BOLT:
+        if (p->element == EL_SHADOW) return v3(0.95f, 0.15f, 0.2f); /* vampiric */
+        if (p->element != EL_NONE) return element_color(p->element);
+        return p->explode ? v3(1.0f, 0.55f, 0.2f) : p->rarity >= RAR_RARE ? rarity_color(p->rarity) : v3(0.55f, 0.6f, 1.0f);
     case PJ_NOVA: return v3(1.0f, 0.5f, 0.15f);
     case PJ_SPELL: return element_color(p->element);
     case PJ_ENEMY_ARROW: return v3(0.85f, 0.82f, 0.7f);
@@ -161,6 +166,7 @@ static void projectile_hit_monster(Game *g, Projectile *p, Monster *m, int index
     else if (p->kind == PJ_NOVA) sfx_at(g, SFX_IMPACT_FIRE, p->pos, 0.7f);
     if (p->element != EL_NONE) element_hit(g, m, p->element, p->dmg, v3_sub(p->pos, p->vel), knock, p->owner);
     else monster_damage(g, m, p->dmg, v3_sub(p->pos, p->vel), knock, p->owner);
+    if (p->kind == PJ_ARROW || p->kind == PJ_BOLT) weapon_impact_fx(g, p->element, p->rarity, p->element == EL_SHADOW, p->pos, p->owner);
     if (p->kind == PJ_BOLT) {
         if (p->explode) explode(g, p->owner, p->pos, p->dmg * 0.6f, 3.0f, m);
         if (p->chain) chain_lightning(g, p->owner, m, p->dmg * 0.6f);
@@ -226,11 +232,15 @@ static void update_projectiles(Game *g, float dt) {
             }
         }
         /* trailing sparks for spells */
-        if (p->alive && p->kind != PJ_ARROW && p->kind != PJ_ENEMY_ARROW && g->nparts < MAX_PARTICLES - 1 && game_nearest_player(g, p->pos, 40.0f)) {
+        bool magic_arrow = p->kind == PJ_ARROW && (p->element != EL_NONE || p->rarity > RAR_COMMON);
+        if (p->alive && (magic_arrow || (p->kind != PJ_ARROW && p->kind != PJ_ENEMY_ARROW)) && g->nparts < MAX_PARTICLES - 1 &&
+            game_nearest_player(g, p->pos, 40.0f)) {
             Particle *q = &g->parts[g->nparts++];
             q->pos = p->pos;
             q->vel = v3(0, 0.3f, 0);
-            q->color = proj_color(p);
+            q->color = magic_arrow ? (p->element == EL_SHADOW ? v3(0.95f, 0.15f, 0.2f)
+                                      : p->element != EL_NONE ? element_color(p->element) : rarity_color(p->rarity))
+                                   : proj_color(p);
             q->max_life = q->life = 0.3f;
             q->size = 0.05f;
             q->emissive = true;
@@ -332,6 +342,7 @@ static void fire_arrows(Game *g, PlayerSlot *ps, int count, float spread_deg) {
         if (!p) continue;
         p->pierce = wb->pierce + (s->ranks[SK_PIERCING] ? 3 : 0);
         p->element = (u8)item_affix_element(&s->equipped[WPN_BOW]);
+        p->rarity = s->equipped[WPN_BOW].rarity;
     }
 }
 
@@ -344,6 +355,7 @@ static void cast_bolt(Game *g, PlayerSlot *ps) {
     Projectile *p = proj_new(g, ps->index, PJ_BOLT, v3_add(eye, v3_scale(d, 0.4f)), v3_scale(d, wb->speed), dmg);
     if (p) {
         p->element = (u8)item_affix_element(&s->equipped[WPN_STAFF]);
+        p->rarity = s->equipped[WPN_STAFF].rarity;
         p->explode = s->ranks[SK_FIREBALL] > 0;
         p->chain = s->ranks[SK_CHAIN] > 0;
     }
@@ -468,11 +480,15 @@ void combat_draw_world(Game *g, vec3 eye) {
             vec3 d = v3_norm(p->vel);
             vec3 light = game_light_at(g, p->pos);
             vec3 tint = p->kind == PJ_ENEMY_ARROW ? v3(0.85f, 0.82f, 0.7f) : p->element != EL_NONE ? element_color(p->element) : v3(0.6f, 0.5f, 0.35f);
-            vec3 col = v3(tint.x * light.x, tint.y * light.y, tint.z * light.z);
+            bool magic = p->kind == PJ_ARROW && (p->element != EL_NONE || p->rarity > RAR_COMMON);
+            if (p->element == EL_SHADOW) tint = v3(0.95f, 0.15f, 0.2f);
+            else if (magic && p->element == EL_NONE) tint = rarity_color(p->rarity);
+            vec3 col = magic ? tint : v3(tint.x * light.x, tint.y * light.y, tint.z * light.z);
             vec3 up = fabsf(d.y) > 0.9f ? v3(1, 0, 0) : v3(0, 1, 0);
             vec3 sx = v3_scale(v3_norm(v3_cross(d, up)), 0.02f), sy = v3_scale(v3_norm(v3_cross(sx, d)), 0.02f);
-            batch3d_obox(p->pos, sx, sy, v3_scale(d, 0.35f), col, false);
-            batch3d_spike(v3_add(p->pos, v3_scale(d, 0.35f)), d, 0.04f, 0.1f, v3(0.5f * light.x, 0.5f * light.y, 0.55f * light.z), false);
+            batch3d_obox(p->pos, sx, sy, v3_scale(d, 0.35f), magic ? v3(0.5f * light.x, 0.4f * light.y, 0.3f * light.z) : col, false);
+            batch3d_spike(v3_add(p->pos, v3_scale(d, 0.35f)), d, 0.04f, 0.1f, magic ? col : v3(0.5f * light.x, 0.5f * light.y, 0.55f * light.z), magic);
+            if (magic) batch3d_obox(v3_sub(p->pos, v3_scale(d, 0.3f)), v3_scale(sx, 2.0f), v3_scale(sy, 2.0f), v3_scale(d, 0.06f), col, true); /* fletching */
         } else {
             float r = p->kind == PJ_NOVA ? 0.18f : p->kind == PJ_SPELL ? p->radius : 0.16f;
             if (p->kind == PJ_SPELL && p->form == SF_ORB) r *= 1.0f + 0.15f * sinf(p->age * 10.0f);
@@ -523,13 +539,15 @@ void combat_collect_lights(Game *g, PlayerSlot *viewer, SceneParams *sp) {
     for (int pass = 0; pass < 2 && sp->ndl < MAX_DLIGHTS; pass++)
         for (int i = 0; i < MAX_PROJECTILES && sp->ndl < MAX_DLIGHTS; i++) {
             Projectile *p = &g->proj[i];
-            if (!p->alive || p->kind == PJ_ARROW || p->kind == PJ_ENEMY_ARROW) continue;
+            if (!p->alive || p->kind == PJ_ENEMY_ARROW) continue;
+            if (p->kind == PJ_ARROW && p->element == EL_NONE) continue; /* only elemental arrows give light */
             if (p->kind == PJ_SPELL && p->form == SF_BREATH && (i & 3)) continue; /* breath: a few lights are enough */
             float d = v3_len(v3_sub(p->pos, eye));
             if ((pass == 0) != (d < 20.0f)) continue;
             sp->dl_pos[sp->ndl] = p->pos;
-            sp->dl_col[sp->ndl] = v3_scale(proj_color(p), 0.9f);
-            sp->dl_rad[sp->ndl] = p->kind == PJ_NOVA ? 4.0f : 7.0f;
+            sp->dl_col[sp->ndl] = p->kind == PJ_ARROW ? v3_scale(p->element == EL_SHADOW ? v3(0.95f, 0.15f, 0.2f) : element_color(p->element), 0.6f)
+                                                      : v3_scale(proj_color(p), 0.9f);
+            sp->dl_rad[sp->ndl] = p->kind == PJ_NOVA ? 4.0f : p->kind == PJ_ARROW ? 4.0f : 7.0f;
             sp->ndl++;
         }
     story_thread_lights(g, eye, sp);
@@ -542,62 +560,7 @@ void combat_draw_viewmodel(Game *g, PlayerSlot *ps) {
     if (s->dead || ps->pl.fly) return;
     vec3 light = game_light_at(g, player_eye(&ps->pl));
     light = v3(fminf(light.x + 0.15f, 1.3f), fminf(light.y + 0.12f, 1.3f), fminf(light.z + 0.1f, 1.3f));
-    float t = s->swing_len > 0 ? 1.0f - s->swing / s->swing_len : 1.0f; /* 0 at start of an attack */
-    float walk = sinf(ps->pl.bob * 2.0f) * 0.015f;
-    switch (s->weapon) {
-    case WPN_SWORD: {
-        /* swing from upper right to lower left */
-        float a = s->swing > 0 ? (s->swing_kind ? t * 2.0f * PI_F : lerpf(0.9f, -1.3f, smoothf(t))) : 0.25f;
-        float tilt = s->swing > 0 ? 0.9f : 0.35f;
-        vec3 base = v3(0.36f + walk, -0.42f + fabsf(walk), -0.72f);
-        if (s->swing > 0 && !s->swing_kind) base.x -= 0.25f * smoothf(t);
-        /* blade direction: mostly up/forward, rotated by the swing around the view axis */
-        vec3 dir = v3_norm(v3(-sinf(a) * tilt, cosf(a) * 0.9f, -0.55f));
-        vec3 side = v3_norm(v3_cross(dir, v3(0, 0, 1)));
-        vec3 thick = v3_cross(side, dir);
-        vec3 steel = v3(0.75f * light.x, 0.78f * light.y, 0.85f * light.z);
-        vec3 hilt = v3(0.45f * light.x, 0.3f * light.y, 0.15f * light.z);
-        batch3d_obox(v3_add(base, v3_scale(dir, 0.3f)), v3_scale(side, 0.03f), v3_scale(dir, 0.24f), v3_scale(thick, 0.01f), steel, false);
-        batch3d_spike(v3_add(base, v3_scale(dir, 0.54f)), dir, 0.025f, 0.07f, steel, false);
-        batch3d_obox(v3_add(base, v3_scale(dir, 0.05f)), v3_scale(side, 0.11f), v3_scale(dir, 0.02f), v3_scale(thick, 0.025f), hilt, false);
-        batch3d_obox(v3_sub(base, v3_scale(dir, 0.06f)), v3_scale(side, 0.02f), v3_scale(dir, 0.09f), v3_scale(thick, 0.02f), v3_scale(hilt, 0.7f), false);
-        break;
-    }
-    case WPN_BOW: {
-        float draw = s->swing > 0 ? (t < 0.3f ? 0.0f : (t - 0.3f) / 0.7f) : 1.0f; /* re-drawing after a shot */
-        vec3 c = v3(-0.12f + walk, -0.15f, -0.55f);
-        vec3 wood = v3(0.5f * light.x, 0.33f * light.y, 0.18f * light.z);
-        vec3 prev = v3(0, 0, 0);
-        for (int i = 0; i <= 8; i++) {
-            float u = (i / 8.0f - 0.5f) * 2.0f;
-            vec3 p = v3_add(c, v3(0.05f * (1.0f - u * u), u * 0.32f, 0.08f * (1.0f - u * u)));
-            if (i > 0) {
-                vec3 mid = v3_scale(v3_add(p, prev), 0.5f), d = v3_scale(v3_sub(p, prev), 0.5f);
-                batch3d_obox(mid, v3(0.018f, 0, 0), d, v3(0, 0, 0.018f), wood, false);
-            }
-            prev = p;
-        }
-        float pull = 0.12f * draw;
-        vec3 nock = v3_add(c, v3(0.05f, 0, 0.08f + pull));
-        vec3 string = v3(0.8f * light.x, 0.8f * light.y, 0.75f * light.z);
-        vec3 top = v3_add(c, v3(0, 0.32f, 0)), bot = v3_add(c, v3(0, -0.32f, 0));
-        batch3d_obox(v3_scale(v3_add(top, nock), 0.5f), v3(0.004f, 0, 0), v3_scale(v3_sub(top, nock), 0.5f), v3(0, 0, 0.004f), string, false);
-        batch3d_obox(v3_scale(v3_add(bot, nock), 0.5f), v3(0.004f, 0, 0), v3_scale(v3_sub(bot, nock), 0.5f), v3(0, 0, 0.004f), string, false);
-        if (draw > 0.6f) batch3d_obox(v3_add(nock, v3(0, 0, -0.3f)), v3(0.008f, 0, 0), v3(0, 0.008f, 0), v3(0, 0, 0.3f), v3(0.55f * light.x, 0.45f * light.y, 0.3f * light.z), false);
-        break;
-    }
-    case WPN_STAFF: {
-        float thrust = s->swing > 0 ? sinf(t * PI_F) * 0.12f : 0.0f;
-        vec3 tip = v3(0.25f + walk, -0.1f, -0.75f - thrust);
-        vec3 butt = v3(0.42f, -0.65f, -0.35f);
-        vec3 d = v3_scale(v3_sub(tip, butt), 0.5f);
-        batch3d_obox(v3_add(butt, d), v3(0.02f, 0, 0), d, v3(0, 0, 0.02f), v3(0.4f * light.x, 0.28f * light.y, 0.18f * light.z), false);
-        float glow = 0.7f + 0.3f * sinf(g->time * 6.0f) + (s->swing > 0 ? 0.5f * (1.0f - t) : 0.0f);
-        vec3 gem = s->ranks[SK_FIREBALL] ? v3(1.0f, 0.55f, 0.2f) : v3(0.55f, 0.6f, 1.0f);
-        batch3d_octa(v3_add(tip, v3(0, 0.04f, 0)), 0.032f, 0.05f, g->time * 2.0f, v3_scale(gem, glow), true);
-        break;
-    }
-    }
+    weapon_draw_view(g, ps, light);
     (void)WEAPON_NAMES;
 }
 

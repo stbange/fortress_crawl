@@ -824,12 +824,9 @@ void players_draw(Game *g, const PlayerSlot *viewer) {
         /* weapon in the right hand, torch flame in the left */
         float swing = ps->st.swing > 0 ? ps->st.swing / fmaxf(ps->st.swing_len, 0.01f) : 0.0f;
         vec3 hand = v3_add(v3_add(torso, v3_scale(r, 0.3f)), v3_add(v3(0, -0.1f, 0), v3_scale(f, 0.25f + swing * 0.3f)));
-        if (ps->st.weapon == WPN_SWORD)
-            batch3d_spike(hand, v3_add(f, v3(0, 1.2f - swing * 2.0f, 0)), 0.04f, 0.8f, steel, false);
-        else if (ps->st.weapon == WPN_BOW)
-            batch3d_box(hand, v3(0.03f, 0.35f, 0.03f), y, v3(0.5f * light.x, 0.32f * light.y, 0.18f * light.z), false);
-        else
-            batch3d_octa(v3_add(hand, v3(0, 0.35f, 0)), 0.07f, 0.09f, g->time * 3.0f, v3(0.5f, 0.6f, 1.0f), true);
+        /* the weapon they hold, the same model as in their own view */
+        vec3 wdir = ps->st.weapon == WPN_SWORD ? v3_add(f, v3(0, 1.2f - swing * 2.0f, 0)) : v3_add(f, v3(0, 1.6f, 0));
+        weapon_draw_held(&ps->st.equipped[ps->st.weapon], hand, wdir, r, light, g->time, (float)i * 17.0f);
         vec3 lhand = v3_add(v3_add(torso, v3_scale(r, -0.3f)), v3_add(v3(0, 0.05f, 0), v3_scale(f, 0.2f)));
         batch3d_octa(lhand, 0.06f, 0.1f, g->time * 5.0f, v3(1.0f, 0.65f, 0.25f), true);
         /* a coloured marker above the head so you can find your friends */

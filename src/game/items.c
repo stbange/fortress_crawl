@@ -411,11 +411,10 @@ void pickups_draw(Game *g, vec3 eye) {
             break;
         }
         case PK_WEAPON: {
+            /* the weapon itself, slowly turning; a marker in its rarity colour above the good ones */
             vec3 col = rarity_color(p->item.rarity);
-            float yaw = p->t * 1.2f;
-            batch3d_box(v3_add(c, v3(0, 0.15f, 0)), v3(0.35f, 0.04f, 0.04f), yaw, v3(0.75f * l.x, 0.75f * l.y, 0.8f * l.z), false);
-            batch3d_box(v3_add(c, v3(0, 0.15f, 0)), v3(0.05f, 0.05f, 0.14f), yaw, v3_scale(col, 0.8f), true);
-            if (p->item.rarity > RAR_COMMON) batch3d_octa(v3_add(c, v3(0, 0.5f, 0)), 0.05f, 0.07f, p->t * 2.0f, col, true);
+            weapon_draw_ground(&p->item, v3_add(c, v3(0, 0.1f, 0)), p->t * 1.2f, l, g->time, (float)i);
+            if (p->item.rarity >= RAR_RARE) batch3d_octa(v3_add(c, v3(0, 0.75f, 0)), 0.04f, 0.06f, p->t * 2.0f, col, true);
             break;
         }
         case PK_RELIC:
