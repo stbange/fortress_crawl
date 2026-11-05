@@ -1,0 +1,23 @@
+{
+  "name": "fortress-crawl-tools",
+  "description": "Tools for Fortress Crawl (sound effect generation)",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "sfx": "node tools/gen_sfx.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stbange/fortress_crawl.git"
+  },
+  "bugs": {
+    "url": "https://github.com/stbange/fortress_crawl/issues"
+  },
+  "homepage": "https://github.com/stbange/fortress_crawl#readme",
+  "dependencies": {
+    "@elevenlabs/elevenlabs-js": "^2.76.0"
+  },
+  "private": true
+}

@@ -213,6 +213,7 @@ static Monster *spawn_named(Game *g, const Named *n, u64 chunk_key) {
     int level = (int)world_difficulty(n->cx, n->cy, n->cz);
     static const vec3 TINT[4] = { { 0.7f, 0.3f, 0.2f }, { 0.4f, 0.25f, 0.6f }, { 0.15f, 0.1f, 0.12f }, { 0.6f, 0.5f, 0.3f } };
     Monster *m = monster_spawn(g, n->mon, p, level, true, TINT[n->kind & 3], chunk_key);
+    if (m) sfx_at(g, SFX_NAMED_APPEAR, p, 1.0f);
     if (!m) return NULL;
     m->scale = scale;
     m->maxhp = m->hp = m->hp / 3.0f * n->hp_mult; /* monster_spawn tripled it for an elite */
@@ -261,6 +262,7 @@ static void chapter_complete(Game *g, PlayerSlot *ps, bool other_killed) {
     Personal p = personal_of(g, ps);
     char done[STORY_TEXT], rev[STORY_TEXT], text[STORY_TEXT * 2 + 64], hook[STORY_TEXT];
     story_chapter_done(&g->world, m, ch, &p, done, sizeof done);
+    sfx_player(g, ps, SFX_CHAPTER_DONE, 1.0f);
     story_revelation(&g->world, ch, rev, sizeof rev);
     lore_add(g, LORE_REVEAL, ch, 0, 0);
     if (other_killed) snprintf(text, sizeof text, "Someone was faster: %.40s is already dead. %.200s %.200s", ps->target.name, done, rev);
@@ -350,6 +352,7 @@ static void read_trace(Game *g, PlayerSlot *ps, Pickup *p) {
     int cx, cy, cz;
     chunk_of(p->pos, &cx, &cy, &cz);
     story_trace_text(&g->world, cx, cy, cz, ps->reading, sizeof ps->reading);
+    sfx_player(g, ps, SFX_READ_NOTE, 1.0f);
     lore_add(g, LORE_TRACE, cx, cy, cz);
     Trace t;
     if (!story_trace(&g->world, cx, cy, cz, &t) || !t.mission) return;
@@ -392,6 +395,7 @@ static void mission_reward(Game *g, PlayerSlot *ps, const Mission *m, const char
     snprintf(buf, sizeof buf, "%s - %d GOLD", what, m->reward);
     upper(buf);
     game_banner(ps, buf);
+    sfx_player(g, ps, SFX_MISSION_DONE, 1.0f);
 }
 
 bool story_collect_quest(Game *g, PlayerSlot *ps, Pickup *p) {

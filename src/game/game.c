@@ -120,6 +120,7 @@ void game_add_xp(Game *g, PlayerSlot *ps, float xp) {
         char buf[96];
         snprintf(buf, sizeof buf, "LEVEL %d!  +1 SKILL POINT (%s)", s->level, game_skills_key(g, ps));
         game_banner(ps, buf);
+        sfx_player(g, ps, SFX_LEVEL_UP, 1.0f);
         flash_add(g, player_eye(&ps->pl), v3(1.2f, 1.0f, 0.6f), 10.0f, 0.6f);
     }
 }
@@ -134,6 +135,7 @@ void game_hurt_player(Game *g, PlayerSlot *ps, float dmg, vec3 from) {
         s->ward -= absorbed;
         dmg -= absorbed;
         particles_burst(g, player_eye(&ps->pl), v3(0.5f, 0.7f, 1.0f), 5, 2.0f, 0.04f, true);
+        sfx_player(g, ps, SFX_WARD_ABSORB, 1.0f);
         if (dmg <= 0) return;
     }
     s->hp -= dmg;
@@ -144,8 +146,10 @@ void game_hurt_player(Game *g, PlayerSlot *ps, float dmg, vec3 from) {
     push = v3_norm(push);
     ps->pl.vel = v3_add(ps->pl.vel, v3_scale(push, 4.0f));
     if (ps->pad) SDL_RumbleGamepad(ps->pad, 0x6000, 0x9000, 180);
+    if (s->hp > 0) sfx_player(g, ps, SFX_PLAYER_HURT, clampf(0.6f + dmg / s->maxhp * 3.0f, 0.6f, 1.2f));
     if (s->hp <= 0) {
         s->hp = 0;
+        sfx_player(g, ps, SFX_PLAYER_DEATH, 1.0f);
         s->dead = true;
         s->dead_t = 0;
         game_banner(ps, "YOU HAVE FALLEN");
@@ -237,6 +241,7 @@ void game_update_atmosphere(Game *g, PlayerSlot *ps, float dt) {
     if (strcmp(name, ps->place) != 0) {
         snprintf(ps->place, sizeof ps->place, "%s", name);
         if (!ps->st.dead) game_banner(ps, name);
+        if (!ps->st.dead && ps->index == 0) sfx_ui(SFX_PLACE_ENTER, 0.6f);
     }
     ps->banner_time -= dt;
 }
@@ -419,6 +424,7 @@ void game_event(Game *g, const SDL_Event *e) {
         case SDLK_2: ps->st.weapon = WPN_BOW; break;
         case SDLK_3: ps->st.weapon = WPN_STAFF; break;
         case SDLK_F1: g->hud = !g->hud; break;
+        case SDLK_F9: sfx_toggle_mute(); game_banner(ps, sfx_muted() ? "SOUND OFF (F9)" : "SOUND ON (F9)"); break;
         case SDLK_F2:
             g->res_mode = (g->res_mode + 1) % 3;
             g->r.set.low_w = RES_MODES[g->res_mode][0];
@@ -574,6 +580,7 @@ static void update_shrines(Game *g, PlayerSlot *ps) {
             game_banner(ps, g->opt.shot ? "SHRINE ATTUNED - YOU WILL RETURN HERE" : "SHRINE ATTUNED - GAME SAVED");
             g->autosave_timer = 1e9f; /* save right away */
             particles_burst(g, g->shrines[i], v3(1.0f, 0.85f, 0.45f), 30, 4.0f, 0.06f, true);
+            sfx_at(g, SFX_SHRINE, g->shrines[i], 1.0f);
             flash_add(g, g->shrines[i], v3(1.3f, 1.1f, 0.6f), 10.0f, 0.8f);
         }
     }

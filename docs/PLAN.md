@@ -33,7 +33,7 @@ adds traps, easy mechanical puzzles and vaults (section 6.9).
 | Worlds | Fixed seed per world, several worlds (save slots) possible. No minimap. |
 | Puzzles | Easy mechanical puzzles (levers, plates, rotating statues, light beams). |
 | Platforms | Linux, Windows, macOS. Keyboard and mouse. |
-| Assets | All textures generated in code. Audio decided later. |
+| Assets | All textures generated in code. Sound effects generated with the ElevenLabs API (`tools/gen_sfx.mjs`), committed as WAV files. |
 | First focus | World generation and lighting (done as prototype, see section 6). |
 
 ---
@@ -354,7 +354,7 @@ Known gaps:
 - Saves do not keep killed monsters, dropped loot lying around or spell effects; a world
   you return to is repopulated.
 - A few chunks still contain an opening that is only reachable from outside the chunk.
-- No audio yet.
+- No music yet, only sound effects and ambience. Sounds are not muffled behind walls.
 - Split screen draws the world once per view, so four views cost about four times the GPU
   and draw-call time of one. Gamepad buttons cannot be remapped yet.
 - Touch controls are tested in an emulated phone browser only; feel and real-device speed
@@ -374,7 +374,7 @@ Known gaps:
 | M7  | Progression and loot (XP, skill tree, affixes, inventory, map screen) | first version done |
 | M8  | Traps and easy mechanical puzzles, vaults | first version done |
 | M9  | Character creation (gameplay), shrines, save/load per world | shrines done |
-| M10 | Atmosphere: audio, particles, polish | |
+| M10 | Atmosphere: audio, particles, polish | sound effects and ambience done |
 | M11 | Local split-screen co-op (up to 4, gamepads) | first version done |
 | M12 | Stories: S1 information, S2 motives, chapters, missions | done |
 | M13 | Stories: S3 camps and people, S4 consequences, S5 choices | |

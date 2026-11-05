@@ -26,6 +26,10 @@ static float weapon_mult(const Stats *s, int wclass) {
 /* A hit with a weapon: its elemental affix adds the element's effect. */
 static void weapon_hit(Game *g, PlayerSlot *ps, Monster *m, int wclass, float dmg, vec3 from, float knock) {
     int el = item_affix_element(&ps->st.equipped[wclass]);
+    int base = ps->st.equipped[wclass].base;
+    sfx_at(g, base == WB_MACE ? SFX_HIT_BLUNT : SFX_HIT_BLADE, v3_add(m->pos, v3(0, MONSTERS[m->type].h * m->scale * 0.5f, 0)),
+           base == WB_GREATSWORD || base == WB_AXE ? 1.2f : 1.0f);
+    if (el != EL_NONE) sfx_at(g, sfx_element_impact(el), m->pos, 0.5f);
     if (el != EL_NONE) element_hit(g, m, el, dmg, from, knock, ps->index);
     else monster_damage(g, m, dmg, from, knock, ps->index);
 }
@@ -110,6 +114,7 @@ static vec3 proj_color(const Projectile *p) {
 }
 
 static void explode(Game *g, int owner, vec3 at, float dmg, float radius, const Monster *skip) {
+    sfx_at(g, SFX_EXPLOSION, at, 1.0f);
     flash_add(g, at, v3(1.4f, 0.75f, 0.3f), radius * 3.0f, 0.35f);
     particles_burst(g, at, v3(1.0f, 0.55f, 0.2f), 24, 6.0f, 0.08f, true);
     for (int i = 0; i < MAX_MONSTERS; i++) {
@@ -135,6 +140,7 @@ static void chain_lightning(Game *g, int owner, Monster *from, float dmg) {
         }
         if (!best) return;
         vec3 bc = v3_add(best->pos, v3(0, 0.6f, 0));
+        if (k == 0) sfx_at(g, SFX_CHAIN_ZAP, bc, 1.0f);
         for (int s = 0; s <= 8; s++) {
             vec3 q = v3_lerp(pc, bc, s / 8.0f);
             q.y += (s % 2 ? 0.15f : -0.1f);
@@ -150,6 +156,9 @@ static void projectile_hit_monster(Game *g, Projectile *p, Monster *m, int index
     p->last_hit = index;
     if (p->kind == PJ_SPELL) { spell_projectile_hit(g, p, m); return; }
     float knock = p->kind == PJ_ARROW ? 3.0f : 5.0f;
+    if (p->kind == PJ_ARROW) sfx_at(g, SFX_HIT_ARROW, p->pos, 1.0f);
+    else if (p->kind == PJ_BOLT) sfx_at(g, p->element != EL_NONE ? sfx_element_impact(p->element) : SFX_BOLT_HIT, p->pos, 1.0f);
+    else if (p->kind == PJ_NOVA) sfx_at(g, SFX_IMPACT_FIRE, p->pos, 0.7f);
     if (p->element != EL_NONE) element_hit(g, m, p->element, p->dmg, v3_sub(p->pos, p->vel), knock, p->owner);
     else monster_damage(g, m, p->dmg, v3_sub(p->pos, p->vel), knock, p->owner);
     if (p->kind == PJ_BOLT) {
@@ -177,6 +186,13 @@ static void update_projectiles(Game *g, float dt) {
             if (game_solid(g, (int)floorf(p->pos.x), (int)floorf(p->pos.y), (int)floorf(p->pos.z)) != 0) {
                 p->alive = false;
                 vec3 back = v3_sub(p->pos, step);
+                switch (p->kind) {
+                case PJ_ARROW: case PJ_ENEMY_ARROW: sfx_at(g, SFX_ARROW_WALL, back, 1.0f); break;
+                case PJ_BOLT: if (!p->explode) sfx_at(g, SFX_BOLT_HIT, back, 0.8f); break;
+                case PJ_SPELL: sfx_at(g, sfx_element_impact(p->element), back, 0.7f); break;
+                case PJ_ENEMY_FIRE: sfx_at(g, SFX_ENEMY_FIRE_HIT, back, 0.8f); break;
+                default: break;
+                }
                 if (p->kind == PJ_BOLT && p->explode) explode(g, p->owner, back, p->dmg * 0.6f, 3.0f, NULL);
                 else particles_burst(g, back, proj_color(p), 6, 2.5f, 0.04f, p->kind != PJ_ARROW && p->kind != PJ_ENEMY_ARROW);
                 if (p->kind != PJ_ARROW && p->kind != PJ_ENEMY_ARROW) flash_add(g, back, proj_color(p), 5.0f, 0.15f);
@@ -189,6 +205,7 @@ static void update_projectiles(Game *g, float dt) {
                     if (!ps->active || ps->st.dead) continue;
                     if (fabsf(p->pos.x - f.x) < 0.45f && fabsf(p->pos.z - f.z) < 0.45f && p->pos.y > f.y &&
                         p->pos.y < f.y + player_height(ps->pl.stance) + 0.1f) {
+                        sfx_at(g, p->kind == PJ_ENEMY_ARROW ? SFX_HIT_ARROW : SFX_ENEMY_FIRE_HIT, p->pos, 1.0f);
                         game_hurt_player(g, ps, p->dmg, v3_sub(p->pos, step));
                         particles_burst(g, p->pos, proj_color(p), 10, 3.0f, 0.05f, true);
                         p->alive = false;
@@ -267,7 +284,11 @@ static void sword_strike(Game *g, PlayerSlot *ps, bool whirl) {
         /* sparks when hitting a wall */
         vec3 look = dir_from_angles(ps->pl.yaw, ps->pl.pitch);
         float d = phys_raycast(eye, look, range, game_solid, g);
-        if (d < range) particles_burst(g, v3_add(eye, v3_scale(look, d - 0.05f)), v3(1.0f, 0.85f, 0.5f), 6, 2.5f, 0.03f, true);
+        if (d < range) {
+            vec3 at = v3_add(eye, v3_scale(look, d - 0.05f));
+            particles_burst(g, at, v3(1.0f, 0.85f, 0.5f), 6, 2.5f, 0.03f, true);
+            sfx_at(g, SFX_HIT_WALL, at, 1.0f);
+        }
     }
 }
 
@@ -390,6 +411,15 @@ static void try_attack(Game *g, PlayerSlot *ps, bool alt) {
     }
     s->swing = s->swing_len;
     s->swing_kind = alt ? 1 : 0;
+    /* the sound of the weapon in hand */
+    static const int SWING[WB_COUNT] = {
+        [WB_DAGGER] = SFX_SWING_DAGGER, [WB_SWORD] = SFX_SWING_SWORD, [WB_AXE] = SFX_SWING_AXE, [WB_MACE] = SFX_SWING_MACE,
+        [WB_SPEAR] = SFX_SWING_SPEAR, [WB_GREATSWORD] = SFX_SWING_GREATSWORD, [WB_SHORTBOW] = SFX_SHOOT_SHORTBOW,
+        [WB_LONGBOW] = SFX_SHOOT_LONGBOW, [WB_CROSSBOW] = SFX_SHOOT_CROSSBOW, [WB_WAND] = SFX_CAST_WAND,
+        [WB_STAFF] = SFX_CAST_STAFF, [WB_SCEPTER] = SFX_CAST_SCEPTER,
+    };
+    static const int ALT[WPN_COUNT] = { SFX_WHIRLWIND, SFX_ARROW_STORM, SFX_STAFF_NOVA };
+    sfx_player(g, ps, alt ? ALT[s->weapon] : SWING[it->base < WB_COUNT ? it->base : WB_SWORD], 1.0f);
 }
 
 void combat_update(Game *g, float dt) {

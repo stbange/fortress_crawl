@@ -172,6 +172,7 @@ static int area_hit(Game *g, vec3 c, float r, int element, float dmg, float knoc
 void spell_projectile_hit(Game *g, Projectile *p, Monster *m) {
     element_hit(g, m, p->element, p->dmg, v3_sub(p->pos, v3_scale(p->vel, 0.05f)), p->element == EL_EARTH ? 4.0f : 2.5f, p->owner);
     flash_add(g, p->pos, element_color(p->element), 4.0f, 0.15f);
+    sfx_at(g, sfx_element_impact(p->element), p->pos, p->form == SF_BREATH || p->form == SF_ORB ? 0.5f : 1.0f);
     if (p->pierce > 0) p->pierce--;
     else p->alive = false;
 }
@@ -282,7 +283,17 @@ static void cast_chain(Game *g, PlayerSlot *ps, int element, float dmg) {
     }
 }
 
+static bool cast_utility_do(Game *g, PlayerSlot *ps, int u, int rank);
+
 static bool cast_utility(Game *g, PlayerSlot *ps, int u, int rank) {
+    static const int S[SU_COUNT] = { SFX_SPELL_HEAL, SFX_SPELL_BLINK, SFX_SPELL_WARD, SFX_SPELL_HASTE,
+                                     SFX_SPELL_FLARE, SFX_SPELL_RECALL, SFX_SPELL_THREAD };
+    if (!cast_utility_do(g, ps, u, rank)) return false;
+    if (u >= 0 && u < SU_COUNT) sfx_player(g, ps, S[u], 1.0f);
+    return true;
+}
+
+static bool cast_utility_do(Game *g, PlayerSlot *ps, int u, int rank) {
     Stats *s = &ps->st;
     vec3 eye = player_eye(&ps->pl);
     switch (u) {
@@ -349,6 +360,7 @@ bool spell_cast_id(Game *g, PlayerSlot *ps, int id) {
     float cost = si.mana * (1.0f - 0.15f * s->ranks[SK_FOCUS]);
     if (s->mana < cost) {
         if (ps->banner_time <= 0) game_banner(ps, "NOT ENOUGH MANA");
+        sfx_player(g, ps, SFX_SPELL_FIZZLE, 1.0f);
         s->spell_cd = 0.3f;
         return false;
     }
@@ -367,6 +379,10 @@ bool spell_cast_id(Game *g, PlayerSlot *ps, int id) {
     vec3 start = v3_add(eye, v3_scale(look, 0.4f));
     float speed = e == EL_ARCANE || e == EL_LIGHTNING ? 30.0f : (e == EL_EARTH ? 18.0f : 24.0f);
     vec3 col = element_color(e);
+    if (f == SF_BREATH) sfx_player(g, ps, SFX_BREATH, 0.8f);
+    else sfx_player(g, ps, sfx_element_cast(e), 1.0f);
+    if (f == SF_ORBIT) sfx_player(g, ps, SFX_ORBIT_HUM, 0.8f);
+    if (f == SF_AURA) sfx_player(g, ps, SFX_AURA_PULSE, 0.9f);
     switch (f) {
     case SF_BOLT: spell_proj(g, ps->index, e, f, start, v3_scale(look, speed), dmg, 3.0f, 0.16f); break;
     case SF_BARRAGE:
@@ -409,12 +425,17 @@ bool spell_cast_id(Game *g, PlayerSlot *ps, int id) {
                 if (oldest < 0 || g->effects[i].t > g->effects[oldest].t) oldest = i;
             }
         if (mine >= 4 && oldest >= 0) g->effects[oldest].alive = false;
-        effect_new(g, EF_RUNE, e, ps->index, aim_point(g, ps, 8.0f, true), 40.0f, dmg, 3.5f);
+        Effect *rn = effect_new(g, EF_RUNE, e, ps->index, aim_point(g, ps, 8.0f, true), 40.0f, dmg, 3.5f);
+        if (rn) sfx_at(g, SFX_RUNE_PLACE, rn->pos, 1.0f);
         break;
     }
     case SF_ORBIT: effect_new(g, EF_ORBIT, e, ps->index, ps->pl.pos, 8.0f, dmg, 1.7f); break;
     case SF_STORM: effect_new(g, EF_STORM, e, ps->index, aim_point(g, ps, 30.0f, true), 4.0f, dmg, 4.5f); break;
-    case SF_METEOR: effect_new(g, EF_METEOR, e, ps->index, aim_point(g, ps, 35.0f, true), 1.0f, dmg, 4.5f); break;
+    case SF_METEOR: {
+        Effect *mt = effect_new(g, EF_METEOR, e, ps->index, aim_point(g, ps, 35.0f, true), 1.0f, dmg, 4.5f);
+        if (mt) sfx_at(g, SFX_METEOR_FALL, v3_add(mt->pos, v3(0, 6.0f, 0)), 1.0f);
+        break;
+    }
     case SF_AURA: effect_new(g, EF_AURA, e, ps->index, ps->pl.pos, 6.0f, dmg, 3.8f); break;
     }
     s->mana -= cost;
@@ -455,6 +476,7 @@ void spells_update(Game *g, float dt) {
                 vec3 p = v3_add(e->pos, v3(cosf(a) * r, 0.3f, sinf(a) * r));
                 for (int k = 0; k < 6; k++) particles_burst(g, v3_add(p, v3(0, k * 1.2f, 0)), col, 1, 0.5f, 0.06f, true);
                 flash_add(g, p, col, 5.0f, 0.15f);
+                sfx_at(g, SFX_STORM_STRIKE, p, 0.7f);
                 area_hit(g, p, 1.8f, e->element, e->dmg, 2.0f, e->owner);
             }
             break;
@@ -467,6 +489,8 @@ void spells_update(Game *g, float dt) {
             if (trig) {
                 vec3 c = v3_add(e->pos, v3(0, 0.6f, 0));
                 flash_add(g, c, col, 10.0f, 0.35f);
+                sfx_at(g, SFX_RUNE_TRIGGER, c, 1.0f);
+                sfx_at(g, sfx_element_impact(e->element), c, 0.8f);
                 particles_burst(g, c, col, 26, 6.0f, 0.08f, true);
                 area_hit(g, c, e->radius, e->element, e->dmg, 5.0f, e->owner);
                 e->alive = false;
@@ -477,6 +501,8 @@ void spells_update(Game *g, float dt) {
             if (e->t >= e->life) {
                 vec3 c = v3_add(e->pos, v3(0, 0.5f, 0));
                 flash_add(g, c, col, 16.0f, 0.5f);
+                sfx_at(g, SFX_METEOR_IMPACT, c, 1.0f);
+                sfx_at(g, sfx_element_impact(e->element), c, 0.8f);
                 particles_burst(g, c, col, 40, 8.0f, 0.1f, true);
                 particles_burst(g, c, v3(0.4f, 0.35f, 0.3f), 20, 6.0f, 0.1f, false);
                 area_hit(g, c, e->radius, e->element, e->dmg, 7.0f, e->owner);
@@ -500,6 +526,7 @@ void spells_update(Game *g, float dt) {
             e->pos = owner->pl.pos;
             if (e->tick <= 0) {
                 e->tick = 0.5f;
+                if (owner && fmodf(e->t, 1.5f) < 0.5f) sfx_player(g, owner, SFX_AURA_PULSE, 0.3f);
                 area_hit(g, v3_add(e->pos, v3(0, 0.8f, 0)), e->radius, e->element, e->dmg, 1.0f, e->owner);
                 for (int k = 0; k < 10; k++) {
                     float a = k * 2.0f * PI_F / 10.0f + e->t;
