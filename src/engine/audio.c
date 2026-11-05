@@ -200,5 +200,9 @@ bool audio_playing(unsigned voice) {
     return on;
 }
 
-void audio_set_master(float vol) { master = vol < 0 ? 0 : vol > 1.5f ? 1.5f : vol; }
+void audio_set_master(float vol) {
+    if (stream) SDL_LockAudioStream(stream);
+    master = vol < 0 ? 0 : vol > 1.5f ? 1.5f : vol;
+    if (stream) SDL_UnlockAudioStream(stream);
+}
 float audio_master(void) { return master; }
