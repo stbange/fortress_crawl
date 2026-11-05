@@ -263,8 +263,8 @@ static void scan_points(Game *g) {
                     float d2 = dx * dx + dy * dy + dz * dz;
                     if (d2 < nd[k]) { nd[k] = d2; np[k] = v3(x + 0.5f, y + 0.5f, z + 0.5f); }
                 }
-        vec3 vents[16];
-        int nv = mech_burning_flames(g, vents, 16);
+        vec3 vents[MAX_DEVICES];
+        int nv = mech_burning_flames(g, vents, MAX_DEVICES);
         for (int d = 0; d < nv; d++) {
             float dd = v3_len(v3_sub(vents[d], eye));
             if (dd * dd < nd[LP_FLAMES]) { nd[LP_FLAMES] = dd * dd; np[LP_FLAMES] = vents[d]; }
