@@ -258,6 +258,7 @@ static bool collect(Game *g, PlayerSlot *ps, Pickup *p) {
     vec3 at = v3_add(p->pos, v3(0, 0.3f, 0));
     switch (p->kind) {
     case PK_GOLD:
+        sfx_player(g, ps, SFX_PICKUP_GOLD, 1.0f);
         s->gold += p->amount;
         particles_burst(g, at, v3(1.0f, 0.85f, 0.3f), 4, 1.5f, 0.03f, true);
         return true;
@@ -266,10 +267,12 @@ static bool collect(Game *g, PlayerSlot *ps, Pickup *p) {
         int *n = p->kind == PK_POTION_HP ? &s->potions_hp : &s->potions_mp;
         if (*n >= 9) return false;
         (*n)++;
+        sfx_player(g, ps, SFX_PICKUP_POTION, 1.0f);
         return true;
     }
     case PK_SCROLL: {
         int rank = spell_learn(ps, p->amount);
+        sfx_player(g, ps, SFX_PICKUP_SCROLL, 1.0f);
         SpellInfo si;
         spell_info(p->amount, &si);
         if (rank == 1) snprintf(buf, sizeof buf, "NEW SPELL: %s", si.name);
@@ -281,10 +284,11 @@ static bool collect(Game *g, PlayerSlot *ps, Pickup *p) {
     case PK_WEAPON: {
         int slot = bag_free(s);
         if (slot < 0) {
-            if (ps->banner_time <= 0) game_banner(ps, "BAG FULL - SCRAP SOMETHING");
+            if (ps->banner_time <= 0) { game_banner(ps, "BAG FULL - SCRAP SOMETHING"); sfx_player(g, ps, SFX_BAG_FULL, 1.0f); }
             return false;
         }
         s->bag[slot] = p->item;
+        sfx_player(g, ps, SFX_PICKUP_WEAPON, 1.0f);
         item_name(&p->item, name, sizeof name);
         snprintf(buf, sizeof buf, "%s %s", p->item.rarity >= RAR_RARE ? RARITY_NAMES[p->item.rarity] : "FOUND", name);
         game_banner(ps, buf);
@@ -292,6 +296,7 @@ static bool collect(Game *g, PlayerSlot *ps, Pickup *p) {
     }
     case PK_RELIC:
         s->relics[p->amount]++;
+        sfx_player(g, ps, SFX_PICKUP_RELIC, 1.0f);
         stats_refresh(ps);
         snprintf(buf, sizeof buf, "RELIC: %s (%s)", RELICS[p->amount].name, RELIC_BONUS_TEXT[RELICS[p->amount].bonus]);
         game_banner(ps, buf);
@@ -315,9 +320,11 @@ static bool collect(Game *g, PlayerSlot *ps, Pickup *p) {
             Item it = item_roll(mix64(p->key ^ 0x7A), (float)level + 3, lrand() < 0.25f ? RAR_EPIC : RAR_RARE);
             pickup_spawn(g, PK_WEAPON, v3_add(p->pos, v3(0, 0.7f, 0)), 0, &it, 0, 0);
             game_banner(ps, "THE VAULT'S HOARD");
+            sfx_at(g, SFX_HOARD_OPEN, at, 1.0f);
             return true;
         }
         flash_add(g, at, v3(1.0f, 0.8f, 0.4f), 8.0f, 0.4f);
+        sfx_at(g, SFX_CHEST_OPEN, at, 1.0f);
         particles_burst(g, at, v3(1.0f, 0.8f, 0.3f), 18, 4.0f, 0.05f, true);
         for (int i = 0; i < 3; i++) loot_drop(g, p->pos, (float)p->amount, false, 0.25f);
         {
@@ -470,6 +477,7 @@ void drink_potion(Game *g, PlayerSlot *ps, bool mana) {
     if (mana) s->mana = fminf(s->maxmana, s->mana + s->maxmana * 0.6f);
     else s->hp = fminf(s->maxhp, s->hp + s->maxhp * 0.5f);
     ps->potion_cd = 0.6f;
+    sfx_player(g, ps, SFX_POTION_DRINK, 1.0f);
     particles_burst(g, player_eye(&ps->pl), mana ? v3(0.3f, 0.5f, 1.0f) : v3(1.0f, 0.3f, 0.3f), 10, 1.5f, 0.04f, true);
 }
 
@@ -540,6 +548,7 @@ static void scrap(Game *g, PlayerSlot *ps, int i) {
     item_name(it, name, sizeof name);
     snprintf(buf, sizeof buf, "SCRAPPED %s: +%d GOLD", name, gold);
     game_banner(ps, buf);
+    sfx_ui(SFX_SCRAP_ITEM, 1.0f);
     memset(it, 0, sizeof *it);
     (void)g;
 }
@@ -555,6 +564,7 @@ static void activate(Game *g, PlayerSlot *ps, int i) {
     Item old = s->equipped[wc];
     s->equipped[wc] = *it;
     *it = old;
+    sfx_ui(SFX_EQUIP, 1.0f);
     s->weapon = wc;
 }
 

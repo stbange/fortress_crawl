@@ -5,3 +5,4 @@ build-web/
 build-*/
 # Local secrets written by `elevenlabs onboard`
 /.env.local
+node_modules/

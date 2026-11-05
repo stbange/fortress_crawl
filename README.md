@@ -10,7 +10,8 @@ Hexen-style combat against seven kinds of primitive monsters, 12 weapon types wi
 and affixes, 95 spells, loot, chests and relics, an inventory, a classless skill tree,
 shrines, an explored-cells map, split-screen co-op for up to four players, saving, and
 generated stories: a motive per character, an endless metaplot of named enemies, inscriptions,
-notes of the dead and bounty boards**. There is no audio yet. See [`docs/PLAN.md`](docs/PLAN.md)
+notes of the dead and bounty boards**, and **sound**: every monster, weapon, spell, trap and
+place has its own sound effects, made with ElevenLabs (see [Sound](#sound)). See [`docs/PLAN.md`](docs/PLAN.md)
 for the full plan and [`docs/STORY.md`](docs/STORY.md) for how the stories work.
 
 ## Screenshots (prototype, seed 1337)
@@ -229,6 +230,7 @@ last and shows what is saved; *New characters* (press twice) deletes the save of
 | F3 / F4 | ordered dithering / PS1-style vertex snapping |
 | F5 / F6 | full-bright (inspect the generator) / player torch |
 | F7 / F8 | invert mouse Y / X |
+| F9 | sound on / off (`--mute` starts without sound) |
 | - / = | mouse sensitivity down / up |
 | F12 | save `screenshot.bmp` (desktop only) |
 | Esc | release the mouse (press again to quit) |
@@ -291,6 +293,38 @@ shows the touch controls from the start.
 Shrines (glowing rune stones) are respawn points: walk up to one to attune it. When you die,
 you return to the last attuned shrine and keep everything.
 
+## Sound
+
+All sound effects are generated with the [ElevenLabs](https://elevenlabs.io) sound effects
+API and committed in `assets/sfx` (mono 22 kHz WAV, about 16 MB), so building and playing need
+nothing extra. The game mixes them itself on an SDL3 audio stream (`src/engine/audio.c`):
+
+- **monsters**: an alert, attack, hurt and death sound for each of the seven kinds, plus the
+  horned charge, slime hops and splits, stuns, and named enemies appearing and dying. Big
+  monsters sound deeper, elites deeper still.
+- **weapons**: a swing or shot for each of the 12 weapon bases, the three alternate attacks,
+  and hits on flesh, bone and stone.
+- **spells**: a cast and an impact sound for each of the 8 elements, the forms (meteor, rune,
+  storm, aura, orbit, breath) and the 7 utility spells.
+- **the world**: one ambience loop per stratum and one for outside, crossfading as you move;
+  torches, lava, water and burning flame vents heard as you come close; and now and then a
+  sound from somewhere in the dark (drips, chains, distant screams, a bell) that fits the place.
+- **you**: footsteps by floor (stone, dirt, wood, water, ice), jumps, landings, pain, death,
+  level-ups, potions, pickups, chests, shrines, menus, traps and the vault puzzles.
+
+Sounds are positional: they fade with distance and are panned for the nearest player. The
+list of sounds with their prompts is `tools/sfx_list.mjs`; to change or add sounds, edit it
+and run the generator (it needs Node.js and an ElevenLabs API key in `ELEVENLABS_API_KEY` or
+in `.env.local`, which `npx -y @elevenlabs/cli@latest onboard init` writes):
+
+```bash
+npm install
+npm run sfx                                        # makes every file that is missing
+npm run sfx -- --only=brute_alert,loop_mines --force   # makes these again
+```
+
+It also rewrites `src/game/sfx_ids.h`, the list of sound ids the game uses.
+
 ## Tools and tests
 
 ```bash
@@ -305,10 +339,11 @@ you return to the last attuned shrine and keep everything.
 
 ```
 src/core     hashing, RNG, noise, math (no dependencies)
-src/engine   GL loader, shaders, bitmap font, worker threads
+src/engine   GL loader, shaders, bitmap font, worker threads, audio mixer
 src/world    themes, texture generator, world layout, chunk generators, mesher + lighting,
              chunk streaming
 src/render   low-res renderer, sky, post-processing, entity/UI batches
-src/game     player controller, physics, monsters and AI, combat, skills, map
-tests, tools headless generator checks and map exporters
+src/game     player controller, physics, monsters and AI, combat, skills, map, sound effects
+tests, tools headless generator checks and map exporters, sound generator (tools/gen_sfx.mjs)
+assets/sfx   the sound effects (generated with ElevenLabs)
 ```

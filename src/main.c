@@ -67,6 +67,8 @@ static bool parse_args(Options *o, int argc, char **argv) {
         else if (!strcmp(a, "--fresh")) o->fresh = true;
         else if (!strcmp(a, "--fullbright")) o->fullbright = true;
         else if (!strcmp(a, "--persist")) o->persist = true;
+        else if (!strcmp(a, "--mute")) o->mute = true;
+        else if (!strcmp(a, "--sound")) o->sound = true;
         else if (!strcmp(a, "--chapter") && i + 1 < argc) o->demo_chapter = atoi(argv[++i]) - 1;
         else {
             SDL_Log("usage: fortress_crawl [--seed N] [--pos x y z] [--look yaw pitch] [--fly] [--radius n] [--vradius n]\n"
@@ -74,7 +76,7 @@ static bool parse_args(Options *o, int argc, char **argv) {
                     "                      [--recenter | --no-recenter]\n"
                     "                      [--shot file.bmp] [--shot-time s] [--demo combat|sword|death|skills|map|coop|menu|inventory|spells|loot|magic|bestiary\n"
                     "                      |motive|story|read|named]\n"
-                    "                      [--players n] [--test-pad] [--touch] [--fresh] [--persist]");
+                    "                      [--players n] [--test-pad] [--touch] [--fresh] [--persist] [--mute] [--sound]");
             return false;
         }
     }
@@ -722,6 +724,7 @@ static void frame(void *user) {
     }
     for (int i = 0; i < MAX_PLAYERS; i++)
         if (g->players[i].active) game_update_atmosphere(g, &g->players[i], frame_dt);
+    sfx_update(g, frame_dt);
     game_render(g);
     if (g->opt.shot) screenshot_step(a, frame_dt);
     SDL_GL_SwapWindow(a->win);
@@ -807,6 +810,7 @@ int main(int argc, char **argv) {
     if (!renderer_init(&g->r, ww, wh)) return 1;
     font_init();
     batch_init();
+    sfx_init(g);
     g->touch.active = g->touch.forced = g->opt.touch;
     /* the start screen picks the seed, unless it was given (or this is a screenshot run) */
     bool menu_shot = g->opt.shot && g_demo_kind && !strcmp(g_demo_kind, "menu");
@@ -845,6 +849,7 @@ int main(int argc, char **argv) {
     }
     if (!a->in_menu) chunkmap_shutdown(&g->map);
     jobs_shutdown();
+    sfx_shutdown();
     SDL_GL_DestroyContext(a->ctx);
     SDL_DestroyWindow(a->win);
     SDL_Quit();

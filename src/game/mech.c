@@ -206,6 +206,8 @@ static void vault_solve(Game *g, MechVault *v, PlayerSlot *by) {
     looted_mark(g, vault_key(v->chunk_key));
     vec3 gate = v3(v->gx + 0.5f, v->y + 1.0f, v->gz + 0.5f);
     flash_add(g, gate, v3(1.2f, 1.0f, 0.6f), 9.0f, 0.8f);
+    sfx_at(g, SFX_PUZZLE_SOLVED, gate, 1.0f);
+    sfx_at(g, SFX_GATE_OPEN, gate, 1.0f);
     particles_burst(g, gate, v3(1.0f, 0.85f, 0.4f), 24, 3.0f, 0.05f, true);
     for (int i = 0; i < MAX_PLAYERS; i++) {
         PlayerSlot *ps = &g->players[i];
@@ -276,13 +278,16 @@ bool mech_use(Game *g, PlayerSlot *ps) {
     vec3 c = dev_centre(d);
     switch (d->kind) {
     case DV_LEVER:
+        sfx_at(g, SFX_LEVER, c, 1.0f);
         d->state ^= 1;
         v->lamps = mech_lever_pull(v->lamps, d->part, v->v.nparts);
         break;
     case DV_STATUE:
+        sfx_at(g, SFX_STATUE_TURN, c, 1.0f);
         v->facing[d->part] = (u8)((v->facing[d->part] + 1) & 3);
         break;
     case DV_MIRROR:
+        sfx_at(g, SFX_MIRROR_TURN, c, 1.0f);
         v->facing[d->part] = (u8)((v->facing[d->part] + 1) & 7);
         break;
     }
@@ -307,11 +312,13 @@ static void update_plate(Game *g, Device *d) {
         vec3 c = v3(d->x + 0.5f, d->y + 0.1f, d->z + 0.5f);
         if (d->part == v->progress) {
             v->progress++;
+            sfx_at(g, SFX_PLATE_OK, c, 1.0f);
             particles_burst(g, c, v3(1.0f, 0.8f, 0.35f), 8, 1.5f, 0.04f, true);
             vault_check(g, v, who);
         } else if (d->part >= v->progress) {
             /* the wrong stone: the lamps go out and the floor spits fire */
             v->progress = 0;
+            sfx_at(g, SFX_PLATE_WRONG, c, 1.0f);
             flash_add(g, c, v3(1.2f, 0.5f, 0.15f), 5.0f, 0.3f);
             particles_burst(g, c, v3(1.0f, 0.45f, 0.1f), 16, 3.0f, 0.06f, true);
             game_hurt_player(g, who, 3.0f + v->level * 0.5f, v3(c.x, c.y - 1.0f, c.z));
@@ -403,17 +410,24 @@ static void update_trap(Game *g, Device *d, float dt) {
             d->cool = 1.5f;
             vec3 hole = v3(c.x + DIR_X[d->dir] * (d->size + 0.45f), c.y + 1.0f, c.z + DIR_Z[d->dir] * (d->size + 0.45f));
             particles_burst(g, hole, v3(0.5f, 0.45f, 0.4f), 5, 1.0f, 0.03f, false);
+            sfx_at(g, SFX_DARTS, hole, 1.0f);
         }
         d->state = held;
         d->anim += ((held ? 1.0f : 0.0f) - d->anim) * fminf(1.0f, dt * 12.0f);
     } else if (d->kind == DV_SPIKES) {
-        if (fmodf(d->t, SPIKE_CYCLE) < fmodf(prev, SPIKE_CYCLE)) { d->hit_players = 0; d->hit_mons = 0; }
         float h = spike_height(d->t);
         float s = d->size * 0.5f;
         vec3 mid = v3(d->x + s, (float)d->y, d->z + s);
+        if (fmodf(d->t, SPIKE_CYCLE) < fmodf(prev, SPIKE_CYCLE)) {
+            d->hit_players = 0;
+            d->hit_mons = 0;
+            sfx_at(g, SFX_SPIKES_RATTLE, mid, 1.0f);
+        }
+        if (fmodf(prev, SPIKE_CYCLE) < 0.5f && fmodf(d->t, SPIKE_CYCLE) >= 0.5f) sfx_at(g, SFX_SPIKES, mid, 1.0f);
         if (h > 0.4f) trap_hit(g, d, mid, s + 0.15f, 1.0f, 10.0f * level_mult(d->level), &d->hit_players);
     } else {
         int ph = flame_phase(d->t);
+        if (ph == 2 && flame_phase(prev) != 2) sfx_at(g, SFX_FLAMES, v3(c.x, c.y + 0.8f, c.z), 1.0f);
         bool near = nearest_player_dist(g, c) < 40.0f;
         if (ph == 1 && near && g->nparts < MAX_PARTICLES - 40 && fmodf(d->t, 0.15f) < dt)
             particles_burst(g, v3(c.x, c.y + 0.1f, c.z), v3(1.0f, 0.5f, 0.15f), 2, 1.0f, 0.03f, true);
@@ -443,6 +457,7 @@ static void update_lava(Game *g, PlayerSlot *ps, float dt) {
     ps->lava_t -= dt;
     if (b != B_LAVA || ps->lava_t > 0) return;
     ps->lava_t = 0.4f;
+    sfx_player(g, ps, SFX_LAVA_BURN, 1.0f);
     game_hurt_player(g, ps, 4.0f + ps->st.maxhp * 0.04f, v3(f.x, f.y - 2.0f, f.z));
     particles_burst(g, v3(f.x, f.y + 0.1f, f.z), v3(1.0f, 0.5f, 0.1f), 8, 2.0f, 0.05f, true);
     if (ps->banner_time <= 0) game_banner(ps, "THE LAVA BURNS");
@@ -508,6 +523,15 @@ void mech_update(Game *g, float dt) {
             ps->reading_key = 0;
         }
     }
+}
+
+int mech_burning_flames(Game *g, vec3 *out, int max) {
+    int n = 0;
+    for (int i = 0; i < MAX_DEVICES && n < max; i++) {
+        const Device *d = &g->devs[i];
+        if (d->alive && d->kind == DV_FLAME && flame_phase(d->t) == 2) out[n++] = v3(d->x + 0.5f, d->y + 0.8f, d->z + 0.5f);
+    }
+    return n;
 }
 
 /* ---------- drawing ---------- */

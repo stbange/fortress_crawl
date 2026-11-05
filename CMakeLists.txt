@@ -68,6 +68,7 @@ add_executable(fortress_crawl
   src/engine/shader.c
   src/engine/font.c
   src/engine/jobs.c
+  src/engine/audio.c
   src/game/player.c
   src/game/physics.c
   src/game/skills.c
@@ -82,11 +83,14 @@ add_executable(fortress_crawl
   src/game/save.c
   src/game/quests.c
   src/game/mech.c
+  src/game/sfx.c
   src/render/renderer.c
   src/render/batch.c
   src/world/chunkmap.c)
 target_link_libraries(fortress_crawl PRIVATE fcworld SDL3::SDL3)
 target_compile_options(fortress_crawl PRIVATE ${FC_WARN})
+# Sound effects (made by tools/gen_sfx.mjs): found next to the executable in sfx/, else in the source tree.
+target_compile_definitions(fortress_crawl PRIVATE FC_SFX_DIR="${CMAKE_SOURCE_DIR}/assets/sfx")
 
 if(EMSCRIPTEN)
   # Web build: WebGL 2, single thread, page from web/shell.html. Output: index.html + .js + .wasm
@@ -94,7 +98,8 @@ if(EMSCRIPTEN)
   target_link_options(fortress_crawl PRIVATE
     -sMIN_WEBGL_VERSION=2 -sMAX_WEBGL_VERSION=2 -sGL_ENABLE_GET_PROC_ADDRESS=1
     -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=268435456 -sSTACK_SIZE=1048576
-    -sENVIRONMENT=web --shell-file ${CMAKE_SOURCE_DIR}/web/shell.html)
+    -sENVIRONMENT=web --shell-file ${CMAKE_SOURCE_DIR}/web/shell.html
+    --preload-file ${CMAKE_SOURCE_DIR}/assets/sfx@/sfx)
   set_property(TARGET fortress_crawl APPEND PROPERTY LINK_DEPENDS ${CMAKE_SOURCE_DIR}/web/shell.html)
 endif()
 

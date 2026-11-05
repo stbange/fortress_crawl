@@ -326,6 +326,7 @@ static void wake_neighbours(Game *g, Monster *m) {
     for (int i = 0; i < MAX_MONSTERS; i++) {
         Monster *o = &g->mons[i];
         if (o->alive && !o->awake && v3_len(v3_sub(o->pos, m->pos)) < 10.0f) {
+            sfx_monster(g, o, MSFX_ALERT);
             o->awake = true;
             o->state = MS_CHASE;
         }
@@ -340,7 +341,7 @@ void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int 
         m->last_hitter = attacker;
         if (!g->players[attacker].st.dead) m->target = attacker; /* turn on whoever hurts you */
     }
-    if (!m->awake) { m->awake = true; m->state = MS_CHASE; wake_neighbours(g, m); }
+    if (!m->awake) { sfx_monster(g, m, MSFX_ALERT); m->awake = true; m->state = MS_CHASE; wake_neighbours(g, m); }
     vec3 dir = v3_sub(m->pos, from);
     dir.y = 0;
     dir = v3_norm(dir);
@@ -349,8 +350,11 @@ void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int 
     if (m->type != MON_WISP && knock > 0) m->vel.y += 2.0f * resist;
     vec3 c = monster_centre(m);
     particles_burst(g, c, v3_scale(m->color, 0.5f), 6, 3.0f, 0.06f, false);
+    if (m->hp > 0) sfx_monster(g, m, MSFX_HURT);
     if (m->hp <= 0) {
         m->alive = false;
+        sfx_monster(g, m, MSFX_DEATH);
+        if (m->named_kind) sfx_at(g, SFX_NAMED_DEATH, c, 1.0f);
         particles_burst(g, c, m->color, 18, 5.0f, 0.12f, false);
         particles_burst(g, c, v3_scale(m->color, 0.4f), 10, 4.0f, 0.08f, false);
         if (m->elite) flash_add(g, c, v3(1.0f, 0.6f, 0.3f), 8.0f, 0.4f);
@@ -358,6 +362,7 @@ void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int 
         if (m->story_key) story_on_kill(g, m);
         if (m->type == MON_SLIME && m->scale > 0.75f) {
             /* a big slime splits in two small ones */
+            sfx_at(g, SFX_SLIME_SPLIT, c, 1.0f);
             for (int k = 0; k < 2; k++) {
                 vec3 p = v3_add(m->pos, v3(k ? 0.4f : -0.4f, 0.1f, 0));
                 monster_spawn(g, MON_SLIME, p, (int)m->level, false, m->color, m->chunk_key);
@@ -448,6 +453,7 @@ static void monster_physics(Game *g, Monster *m, vec3 want, float dt) {
         m->vel.y = 0;
     }
     if (blocked && m->state == MS_CHARGE) {
+        sfx_at(g, SFX_MONSTER_STUN, m->pos, 1.0f);
         m->state = MS_STUN;
         m->timer = 1.0f;
         particles_burst(g, v3_add(m->pos, v3(0, h, 0)), v3(1.0f, 0.9f, 0.5f), 8, 3.0f, 0.05f, true);
@@ -507,6 +513,7 @@ void monsters_update(Game *g, float dt) {
         if (all_dead) { m->awake = false; m->state = MS_IDLE; }
         if (!m->awake && !all_dead) {
             if (dist < 7.0f || (dist < 24.0f && los)) {
+                sfx_monster(g, m, MSFX_ALERT);
                 m->awake = true;
                 m->state = MS_CHASE;
                 wake_neighbours(g, m);
@@ -550,6 +557,7 @@ void monsters_update(Game *g, float dt) {
                 if (m->type == MON_SKELETON) {
                     /* archer: keeps its distance and shoots */
                     if (los && dist < 24.0f && m->cooldown <= 0) {
+                        sfx_monster(g, m, MSFX_ATTACK);
                         enemy_fire(g, m, v3_add(eye, v3(0, -0.2f, 0)));
                         m->cooldown = d->attack_time;
                     }
@@ -566,6 +574,7 @@ void monsters_update(Game *g, float dt) {
                     want = v3_add(v3_scale(dir3, speed), v3_scale(side, 2.5f * sinf(m->anim * 2.0f)));
                     want.y = (eye.y - 0.4f - c.y) * 3.0f + sinf(m->anim * 3.0f);
                     if (dist < 1.4f && m->cooldown <= 0) {
+                        sfx_monster(g, m, MSFX_ATTACK);
                         game_hurt_player(g, tp, m->dmg, c);
                         m->cooldown = d->attack_time;
                         m->vel = v3_scale(dir3, -5.0f); /* bounce off */
@@ -573,6 +582,7 @@ void monsters_update(Game *g, float dt) {
                     moved = true;
                 } else if (m->type == MON_WISP) {
                     if (los && dist < 18.0f && m->cooldown <= 0) {
+                        sfx_monster(g, m, MSFX_ATTACK);
                         enemy_fire(g, m, eye);
                         m->cooldown = d->attack_time;
                     }
@@ -587,6 +597,7 @@ void monsters_update(Game *g, float dt) {
                     }
                 } else {
                     if (m->type == MON_HORNED && los && hdist > 4.0f && hdist < 14.0f && fabsf(dy) < 1.5f && m->cooldown <= 0) {
+                        sfx_at(g, SFX_HORNED_CHARGE, c, 1.0f);
                         m->state = MS_CHARGE;
                         m->charge_dir = hdir;
                         m->timer = 1.3f;
@@ -595,6 +606,7 @@ void monsters_update(Game *g, float dt) {
                         break;
                     }
                     if (hdist < d->reach + d->hw * m->scale + 0.2f && fabsf(dy) < 1.8f && m->cooldown <= 0) {
+                        sfx_monster(g, m, MSFX_ATTACK);
                         m->state = MS_WINDUP;
                         m->timer = m->type == MON_BRUTE ? 0.6f : 0.35f;
                         break;
@@ -613,7 +625,10 @@ void monsters_update(Game *g, float dt) {
                 if (m->type == MON_SKELETON && los) m->yaw = atan2f(hdir.z, hdir.x);
                 else if (v3_len(want) > 0.1f) m->yaw = atan2f(want.z, want.x);
                 /* slimes move in hops */
-                if (m->type == MON_SLIME && m->on_ground && v3_len(want) > 0.5f && fmodf(m->anim, 1.3f) < 0.05f) m->vel.y = 4.5f;
+                if (m->type == MON_SLIME && m->on_ground && v3_len(want) > 0.5f && fmodf(m->anim, 1.3f) < 0.05f) {
+                    m->vel.y = 4.5f;
+                    sfx_at(g, SFX_SLIME_HOP, m->pos, m->scale);
+                }
                 break;
             }
             }

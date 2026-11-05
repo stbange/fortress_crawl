@@ -7,6 +7,7 @@
 #include "game/items.h"
 #include "game/physics.h"
 #include "game/player.h"
+#include "game/sfx.h"
 #include "game/skills.h"
 #include "render/renderer.h"
 #include "world/chunkmap.h"
@@ -203,6 +204,8 @@ typedef struct Options {
     bool fresh;    /* ignore the save (new characters) */
     bool fullbright; /* --fullbright: no lighting (look at the geometry) */
     bool persist;  /* load and save even in screenshot runs (tests) */
+    bool mute;     /* --mute: no sound */
+    bool sound;    /* --sound: sound even in screenshot runs (audio tests) */
     bool auto_motive; /* screenshot runs: pick a motive without asking */
     int demo_chapter; /* --chapter n: story demos start at chapter n */
 } Options;
@@ -488,6 +491,8 @@ void mech_draw_hud(Game *g, PlayerSlot *ps, int W, int H);
 /* Works the lever, statue or mirror the player faces; false if there is none. */
 bool mech_use(Game *g, PlayerSlot *ps);
 bool mech_solid(const Game *g, int x, int y, int z);
+/* Flame vents burning right now (centres of the flames); returns the count (sfx.c). */
+int mech_burning_flames(Game *g, vec3 *out, int max);
 /* Screenshot demos and the scripted test (--demo levers|plates|statues|beam|spikes|flames|darts|mechtest). */
 bool mech_demo_view(Game *g, PlayerSlot *ps, int puzzle);
 bool mech_demo_trap(Game *g, PlayerSlot *ps, int trap);
