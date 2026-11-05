@@ -44,8 +44,10 @@ static bool try_dir(const char *dir) {
 
 void sfx_init(Game *g) {
     for (int i = 0; i < SFX_COUNT; i++) last_play[i] = -1e9f;
-    if ((g->opt.shot && !g->opt.sound) || g->opt.mute) return; /* screenshot and test runs stay silent */
+    muted = g->opt.mute;
+    if (g->opt.shot && !g->opt.sound) return; /* screenshot and test runs stay silent */
     if (!audio_init()) return;
+    audio_set_master(muted ? 0.0f : 0.8f);
     log_plays = g->opt.sound; /* audio test runs say what they play */
     char dir[1024];
     const char *base = SDL_GetBasePath();
