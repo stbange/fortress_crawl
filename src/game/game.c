@@ -13,7 +13,8 @@ int game_solid(void *user, int x, int y, int z) {
     bool known;
     Block b = chunkmap_block(&g->map, x, y, z, &known);
     if (!known) return -1;
-    return block_solid(b) ? 1 : 0;
+    if (block_solid(b)) return 1;
+    return mech_solid(g, x, y, z) ? 1 : 0;
 }
 
 void game_banner(PlayerSlot *ps, const char *text) {
@@ -631,6 +632,7 @@ void game_update(Game *g, const PlayerInput *kb, float dt) {
             if (g->players[i].active) flow_update(g, &g->players[i], dt);
         monsters_update(g, dt);
         combat_update(g, dt);
+        mech_update(g, dt);
         for (int i = 0; i < MAX_PLAYERS; i++)
             if (g->players[i].active) update_shrines(g, &g->players[i]);
     }
@@ -976,6 +978,7 @@ static void render_view(Game *g, PlayerSlot *ps, int vx, int vy, int vw, int vh)
     sp.stars = ps->stars;
     sp.time = g->time;
     combat_collect_lights(g, ps, &sp);
+    mech_collect_lights(g, eye, &sp);
     renderer_set_view(&g->r, vx, vy, vw, vh);
     renderer_begin(&g->r, &sp);
     chunkmap_draw(&g->map, eye);
@@ -986,6 +989,7 @@ static void render_view(Game *g, PlayerSlot *ps, int vx, int vy, int vw, int vh)
     players_draw(g, ps);
     combat_draw_world(g, eye);
     pickups_draw(g, eye);
+    mech_draw(g, eye);
     spells_draw_world(g);
     story_draw_threads(g, eye);
     batch3d_flush(&g->r.vp, &fog);
@@ -1005,6 +1009,7 @@ static void render_view(Game *g, PlayerSlot *ps, int vx, int vy, int vw, int vh)
     else {
         story_draw_plates(g, ps, vw, vh);
         draw_hud(g, ps, vw, vh);
+        mech_draw_hud(g, ps, vw, vh);
     }
     if (!ps->show_skills && !ps->show_map) story_draw_panel(g, ps, vw, vh);
 }

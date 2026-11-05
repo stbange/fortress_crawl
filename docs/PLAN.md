@@ -1,4 +1,4 @@
-# Fortress Crawl: Development Plan (v0.7)
+# Fortress Crawl: Development Plan (v0.8)
 
 An endless, procedurally generated 3D dungeon crawler written in C with SDL3 and OpenGL 3.3.
 The player starts in front of a giant castle built into a mountain. The gate is
@@ -12,7 +12,8 @@ denser monsters with three new kinds, loot, weapons, relics, an inventory and 95
 (section 6.6) and saving (6.7). v0.6 adds generated stories: motives, an endless metaplot of
 named enemies, domains, inscriptions, notes and bounty boards (6.8, details in
 [STORY.md](STORY.md)). v0.7 rebuilds the world in layers like the floors of a building, with
-one floor height per layer and an up and a down staircase in every chunk (section 4).
+one floor height per layer and an up and a down staircase in every chunk (section 4). v0.8
+adds traps, easy mechanical puzzles and vaults (section 6.9).
 
 ---
 
@@ -290,6 +291,38 @@ character picks a motive that frames the chapters and decides the reward. Missio
 retrieve) come from traces, not people. Full design and the next steps (camps and people,
 consequences, choices): [STORY.md](STORY.md).
 
+### 6.9 Traps, puzzles and vaults (v0.8)
+
+The generator places them like everything else, from seed and position
+(`src/world/gen_mech.c`), and records them in the chunk info; the game builds working
+devices for the chunks near the players (`src/game/mech.c`). The rules both sides share are
+in `src/world/mech.h`.
+
+- **Vaults** (about one chunk in seven): a 3x3 room cut into solid rock beside a floor, with
+  a gilded frame and a portcullis facing the floor, and a hoard inside (gold, potions, a
+  rare or epic weapon). Lamps over the gate show the puzzle's progress. Standing at the gate
+  shows a one-line hint. Solving the puzzle raises the portcullis for good: solved vaults
+  and taken hoards are saved with the world.
+- **Puzzles** (one per vault, its parts on the floor reachable from the gate, 3 to 18 steps
+  away):
+  - *levers* (3 or 4 on walls): each pull flips its own lamp and the next one; light them all.
+  - *plates* (3 or 4 marked stones): step on them in the order of their marks. A wrong stone
+    puts the lamps out and spits fire.
+  - *statues* (3): the watchers must look at the gate; a strike turns one a quarter.
+  - *light beam*: a crystal casts light at a mirror (one or two mirrors); a strike turns a
+    mirror an eighth, and the light goes where it faces. Light on the crystal lock opens it.
+  Levers, statues and mirrors are worked by attacking them (any weapon, any input); a prompt
+  appears when one is in reach. The generator only keeps puzzles that can be solved and do
+  not start solved, and solid parts (statues, mirrors, the crystal) never cut a floor in two.
+  `test_worldgen` checks all of this, and `--demo mechtest` solves a vault through the game
+  code (strike, step, open, take the hoard).
+- **Traps** (from danger level 2, in about a third of the chunks, one to three): *darts*
+  (a loose flagstone fires three darts from a slit in the nearest wall), *spikes* (a 2x2 or
+  3x3 patch that rattles, then stabs, every 3.2 s) and *flame vents* (sputter, then a column
+  of fire, every 4 s). They hurt monsters too, and their damage grows with the danger level.
+  Darts are fired by anyone stepping on the plate, monsters included.
+- **Lava** burns anyone standing on it.
+
 ## 7. Status
 
 Done:
@@ -304,8 +337,10 @@ Done:
 - Start screen with seed choice; loot, weapons, relics, inventory, spells; more monsters (6.6).
 - Saving per world (6.7).
 - Stories S1 + S2: motives, metaplot chapters, named enemies, domains, traces, missions (6.8).
+- Traps, puzzles (levers, plates, statues, light beams) and vaults; lava burns (6.9).
 - Screenshot and demo modes (`--shot`, `--demo combat|sword|death|skills|map|coop|menu|
-  inventory|spells|loot|magic|bestiary|motive|story|read|named|storytest`, `--shot-time`,
+  inventory|spells|loot|magic|bestiary|motive|story|read|named|storytest|vault|levers|plates|
+  statues|beam|darts|spikes|flames|mechtest`, `--shot-time`,
   `--players n`, `--test-pad` with a scripted virtual gamepad).
 
 Known gaps:
@@ -313,7 +348,9 @@ Known gaps:
 - No armour, rings or amulets yet; spells have no visual for every element/form pairing
   beyond colour.
 - No summoners yet; named enemies are scaled-up monsters with a name, not bosses with their own attacks.
-- Lava and water are still harmless.
+- Water is still harmless; traps cannot be spotted or disarmed by a skill yet.
+- Puzzles are not yet mission steps (S5), and a half-solved puzzle resets when everyone
+  leaves.
 - Saves do not keep killed monsters, dropped loot lying around or spell effects; a world
   you return to is repopulated.
 - A few chunks still contain an opening that is only reachable from outside the chunk.
@@ -335,7 +372,7 @@ Known gaps:
 | M5  | World gen v2 (strata x flavors, megastructures) | first version done |
 | M6  | Combat and monsters (coloured primitives, AI, melee/magic/bow) | first version done |
 | M7  | Progression and loot (XP, skill tree, affixes, inventory, map screen) | first version done |
-| M8  | Traps and easy mechanical puzzles, vaults | |
+| M8  | Traps and easy mechanical puzzles, vaults | first version done |
 | M9  | Character creation (gameplay), shrines, save/load per world | shrines done |
 | M10 | Atmosphere: audio, particles, polish | |
 | M11 | Local split-screen co-op (up to 4, gamepads) | first version done |

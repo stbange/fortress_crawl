@@ -39,6 +39,35 @@ typedef struct Structure {
     bool levels_have_floor;        /* levels[0] is a full floor (false: chasm ledge) */
 } Structure;
 
+/* Mechanisms (M8), placed by the generator. Cells are local to the chunk, y = feet.
+ * A vault is a small sealed room behind a gate, opened by the puzzle in front of it. */
+enum { PZ_NONE, PZ_LEVERS, PZ_PLATES, PZ_STATUES, PZ_BEAM, PZ_COUNT };
+enum { TRAP_NONE, TRAP_DARTS, TRAP_SPIKES, TRAP_FLAME, TRAP_COUNT };
+#define VAULT_PARTS 4
+#define MAX_TRAPS 4
+
+typedef struct MechPart {
+    u8 x, y, z;
+    u8 dir;   /* levers: toward the wall (0..3); beam: the emitter's beam direction (0..7) */
+    u8 start; /* statues: rotation 0..3; mirrors: facing 0..7 */
+} MechPart;
+
+typedef struct Vault {
+    u8 puzzle;   /* PZ_*; PZ_NONE: no vault here */
+    u8 x, y, z;  /* inner centre (3x3x3 room), feet */
+    u8 door;     /* direction 0..3 from the centre to the gate (two cells out) */
+    u8 nparts;
+    u8 lamps;    /* levers: lamps lit at the start (bit per lever) */
+    MechPart parts[VAULT_PARTS]; /* levers, plates (in their order), statues; beam: [0] emitter, then mirrors */
+} Vault;
+
+typedef struct Trap {
+    u8 kind;    /* TRAP_* */
+    u8 x, y, z; /* darts: the plate; spikes: the min corner; flame: the vent */
+    u8 dir;     /* darts: from the plate toward the wall holding the launcher */
+    u8 len;     /* darts: cells from the plate to that wall; spikes: patch size */
+} Trap;
+
 typedef struct ChunkInfo {
     int cx, cy, cz;
     u8 stratum, flavor;
@@ -53,6 +82,10 @@ typedef struct ChunkInfo {
      * these; height changes go through spiral stairwells. */
     int nlevels;
     int levels[2];
+    /* filled by world_generate_chunk (zero from world_chunk_info) */
+    Vault vault;
+    Trap traps[MAX_TRAPS];
+    int ntraps;
 } ChunkInfo;
 
 enum { P_CORRIDOR, P_NARROW, P_CRAWL, P_GRAND, P_GATE, P_SHAFT, P_TYPE_COUNT };

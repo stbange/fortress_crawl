@@ -43,8 +43,12 @@ for the full plan and [`docs/STORY.md`](docs/STORY.md) for how the stories work.
 | Every character picks a motive | The STORY tab (L): chapter, target, missions, lore |
 | ![Reading](docs/screenshots/story_read.png) | ![Named enemy](docs/screenshots/story_named.png) |
 | An inscription and the tracker | A chapter target with its name plate |
-| ![Golden thread](docs/screenshots/golden_thread.png) | |
-| The Golden Thread leading to the next target (G) | |
+| ![Golden thread](docs/screenshots/golden_thread.png) | ![Vault](docs/screenshots/vault.png) |
+| The Golden Thread leading to the next target (G) | A sealed vault: lamps over the gate, a hoard behind it |
+| ![Light beam puzzle](docs/screenshots/puzzle_beam.png) | ![Statue puzzle](docs/screenshots/puzzle_statues.png) |
+| A light beam puzzle: turn the mirrors toward the lock | The watchers must look at the gate |
+| ![Spike trap](docs/screenshots/trap_spikes.png) | ![Flame vent](docs/screenshots/trap_flames.png) |
+| Spikes stab every few seconds | A flame vent |
 
 ## Build
 
@@ -182,9 +186,19 @@ next to one shows its text; everything read goes into the STORY tab. Each region
 a name, a ruling faction, a past and a lord; entering one shows a banner. See
 [`docs/STORY.md`](docs/STORY.md).
 
+**Traps and vaults:** from danger level 2 on, the floor is not always safe: a loose
+flagstone fires darts from the nearest wall, spike patches stab every few seconds and flame
+vents roar up after a short sputter (all of them hurt monsters too). Lava burns. About one
+chunk in seven hides a **vault**, a small sealed room with a portcullis and a hoard (gold,
+potions, a rare or epic weapon). Stand at its gate for a hint; the lamps above it show how
+far you are. Its puzzle is nearby: **levers** (each pull moves two lamps), marked **plates**
+to step on in order, **statues** that must look at the gate, or a **light beam** to lead over
+mirrors to a crystal lock. Work levers, statues and mirrors by attacking them. An opened
+vault stays open.
+
 **Saving:** each world (seed) has its own save with every character that played in it
-(level, XP, skills, inventory, gold, potions, relics, spells, position and shrine), the chests
-and relics already taken, and the explored map near you. The game saves every 30 seconds,
+(level, XP, skills, inventory, gold, potions, relics, spells, position and shrine), the chests,
+relics and vault hoards already taken, the vaults opened, and the explored map near you. The game saves every 30 seconds,
 when you attune a shrine, when you quit, and in the browser when the tab is hidden or closed.
 The browser keeps it in `localStorage` (a few KB per world); the desktop version writes files
 to the user data folder (`~/.local/share/fortress-crawl/` on Linux,
@@ -252,7 +266,8 @@ fortress_crawl [--seed N] [--pos x y z] [--look yaw pitch] [--fly] [--radius n] 
                [--invert-x] [--invert-y] [--sens s] [--recenter | --no-recenter]
                [--shot file.bmp] [--shot-time seconds]
                [--demo combat|sword|death|skills|map|coop|menu|inventory|spells|loot|magic|bestiary|
-                       motive|story|read|named|storytest]
+                       motive|story|read|named|storytest|vault|levers|plates|statues|beam|
+                       darts|spikes|flames|mechtest]
                [--players n] [--test-pad] [--touch] [--fresh] [--persist] [--fullbright] [--chapter n]
 ```
 
@@ -264,7 +279,11 @@ the `inventory` or `spells` screen, `loot` on the floor, one monster of each kin
 (`bestiary`), the start screen (`menu`), the motive question (`motive`), a story in progress
 (`story` tab, `read` at an inscription, `named` facing a chapter target), or the `skills` or
 `map` screen. `--demo storytest --pos 20 6 0.5 --shot-time 10` plays a scripted story run
-(read a note, kill a chapter target, bring a lost item home) and logs each step. `--players n` starts with n
+(read a note, kill a chapter target, bring a lost item home) and logs each step.
+`vault`, `levers`, `plates`, `statues` and `beam` look at the nearest vault (of that puzzle)
+and `darts`, `spikes` and `flames` at the nearest trap at work; `--demo mechtest` solves the
+nearest vault through the game code, opens it, takes the hoard and logs each step
+(`worldmap mech` lists where they are). `--players n` starts with n
 characters (gamepads take them over with START). `--test-pad` attaches a virtual gamepad
 that joins, walks, turns and attacks, to test the gamepad path without hardware. `--touch`
 shows the touch controls from the start.
@@ -279,6 +298,7 @@ you return to the last attuned shrine and keep everything.
 ./build/worldmap places 0 20 places.ppm        # stratum/flavor map of one chunk layer
 ./build/worldmap section 0 20 section.ppm      # vertical slice through the world
 ./build/worldmap blocks 6 -100 -60 200 floor.ppm  # top-down block map of a world layer
+./build/worldmap mech 6 [cy]                   # vaults (with a --pos to view each) and traps
 ```
 
 ## Code layout

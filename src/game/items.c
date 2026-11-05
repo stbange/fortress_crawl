@@ -207,7 +207,7 @@ void loot_drop(Game *g, vec3 pos, float level, bool elite, float luck) {
 }
 
 static bool standable(Game *g, int x, int y, int z) {
-    return game_solid(g, x, y - 1, z) == 1 && game_solid(g, x, y, z) == 0 && game_solid(g, x, y + 1, z) == 0;
+    return game_solid(g, x, y - 1, z) == 1 && !mech_solid(g, x, y - 1, z) && game_solid(g, x, y, z) == 0 && game_solid(g, x, y + 1, z) == 0;
 }
 
 static bool find_spot(Game *g, Chunk *c, Rng *r, vec3 *out) {
@@ -304,6 +304,19 @@ static bool collect(Game *g, PlayerSlot *ps, Pickup *p) {
         return story_collect_quest(g, ps, p);
     case PK_CHEST:
         looted_add(g, p->key);
+        if (p->amount & CHEST_VAULT) {
+            /* a vault's hoard: gold, potions, a rare weapon at least */
+            int level = p->amount & 0xFFFF;
+            flash_add(g, at, v3(1.2f, 0.95f, 0.5f), 10.0f, 0.7f);
+            particles_burst(g, at, v3(1.0f, 0.85f, 0.35f), 30, 5.0f, 0.06f, true);
+            for (int i = 0; i < 5; i++) loot_drop(g, p->pos, (float)level + 2, false, 0.4f);
+            pickup_spawn(g, PK_GOLD, v3_add(p->pos, v3(0, 0.6f, 0)), 20 + level * 3, NULL, 0, 0);
+            pickup_spawn(g, PK_POTION_HP, v3_add(p->pos, v3(0, 0.6f, 0)), 1, NULL, 0, 0);
+            Item it = item_roll(mix64(p->key ^ 0x7A), (float)level + 3, lrand() < 0.25f ? RAR_EPIC : RAR_RARE);
+            pickup_spawn(g, PK_WEAPON, v3_add(p->pos, v3(0, 0.7f, 0)), 0, &it, 0, 0);
+            game_banner(ps, "THE VAULT'S HOARD");
+            return true;
+        }
         flash_add(g, at, v3(1.0f, 0.8f, 0.4f), 8.0f, 0.4f);
         particles_burst(g, at, v3(1.0f, 0.8f, 0.3f), 18, 4.0f, 0.05f, true);
         for (int i = 0; i < 3; i++) loot_drop(g, p->pos, (float)p->amount, false, 0.25f);

@@ -604,7 +604,10 @@ void world_generate_chunk(const World *w, int cx, int cy, int cz, Block *blocks,
 
     if (g->info.arch == ARCH_EXTERIOR) gen_exterior(g);
     else if (g->info.has_struct) gen_structure(g);
-    else gen_archetype(g);
+    else {
+        gen_archetype(g);
+        gen_mechanisms(g);
+    }
 
     if (g->info.arch != ARCH_EXTERIOR) seal_exterior(g);
     if (info) *info = g->info;

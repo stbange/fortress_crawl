@@ -52,6 +52,7 @@ add_library(fcworld STATIC
   src/world/gen_common.c
   src/world/gen_chunk.c
   src/world/gen_struct.c
+  src/world/gen_mech.c
   src/world/gen_exterior.c
   src/world/mesher.c
   src/world/story.c)
@@ -80,6 +81,7 @@ add_executable(fortress_crawl
   src/game/spells.c
   src/game/save.c
   src/game/quests.c
+  src/game/mech.c
   src/render/renderer.c
   src/render/batch.c
   src/world/chunkmap.c)

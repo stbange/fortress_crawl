@@ -99,6 +99,33 @@ static void structs_dump(const World *w, int radius) {
             }
 }
 
+/* Vaults and traps near the gate: where to stand to look at each gate (for --pos). */
+static void mech_dump(const World *w, int radius, int cy) {
+    static const char *PZ[PZ_COUNT] = { "open", "levers", "plates", "statues", "beam" };
+    static const char *TR[TRAP_COUNT] = { "-", "darts", "spikes", "flame" };
+    Block *b = malloc(CHUNK_VOL);
+    for (int cz = -radius; cz <= radius; cz++)
+        for (int cx = -radius; cx <= radius; cx++) {
+            ChunkInfo ci;
+            world_generate_chunk(w, cx, cy, cz, b, &ci);
+            int ox = cx * CHUNK, oy = cy * CHUNK, oz = cz * CHUNK;
+            const Vault *v = &ci.vault;
+            if (v->y) {
+                int d = v->door;
+                float fx = ox + v->x + 0.5f + DIR_X[d] * 5.5f, fz = oz + v->z + 0.5f + DIR_Z[d] * 5.5f;
+                float yaw = atan2f((float)-DIR_Z[d], (float)-DIR_X[d]) * 180.0f / 3.14159265f;
+                printf("vault %-7s chunk %3d %3d %3d level %2d  --pos %.1f %d %.1f --look %.0f 0\n", PZ[v->puzzle], cx, cy, cz, ci.level, fx,
+                       oy + v->y, fz, yaw);
+            }
+            for (int i = 0; i < ci.ntraps; i++) {
+                const Trap *t = &ci.traps[i];
+                printf("trap  %-7s chunk %3d %3d %3d level %2d  at %d %d %d\n", TR[t->kind], cx, cy, cz, ci.level, ox + t->x, oy + t->y,
+                       oz + t->z);
+            }
+        }
+    free(b);
+}
+
 static void story_dump(const World *w, int chapters, int radius) {
     StoryWorld sw;
     story_world(w->seed, &sw);
@@ -166,9 +193,11 @@ int main(int argc, char **argv) {
         block_map(&w, atoi(argv[2]), atoi(argv[3]), atoi(argv[4]), atoi(argv[5]), argv[6]);
     else if (argc == 4 && strcmp(argv[1], "story") == 0) story_dump(&w, atoi(argv[2]), atoi(argv[3]));
     else if (argc == 3 && strcmp(argv[1], "structs") == 0) structs_dump(&w, atoi(argv[2]));
+    else if (argc >= 3 && strcmp(argv[1], "mech") == 0) mech_dump(&w, atoi(argv[2]), argc > 3 ? atoi(argv[3]) : 0);
     else {
         fprintf(stderr, "usage:\n  worldmap places <cy> <radius> out.ppm\n  worldmap section <cz> <radius> out.ppm\n"
-                        "  worldmap blocks <wy> <wx0> <wz0> <size> out.ppm\n  worldmap story <chapters> <radius>\n  worldmap structs <radius>\n");
+                        "  worldmap blocks <wy> <wx0> <wz0> <size> out.ppm\n  worldmap story <chapters> <radius>\n  worldmap structs <radius>\n"
+                        "  worldmap mech <radius> [cy]\n");
         return 1;
     }
     return 0;

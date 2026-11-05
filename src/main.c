@@ -156,6 +156,27 @@ static void demo_setup(Game *g) {
         for (int i = 0; i < MAX_MONSTERS; i++) g->mons[i].alive = false;
         return;
     }
+    {
+        static const char *PUZ[] = { "vault", "levers", "plates", "statues", "beam" };
+        static const char *TRAPS[] = { "", "darts", "spikes", "flames" };
+        for (int i = 0; i < 5; i++)
+            if (!strcmp(g_demo_kind, PUZ[i])) {
+                if (!mech_demo_view(g, p1, i)) SDL_Log("mech demo: no such vault nearby");
+                for (int k = 0; k < MAX_MONSTERS; k++) g->mons[k].alive = false;
+                return;
+            }
+        for (int i = 1; i < 4; i++)
+            if (!strcmp(g_demo_kind, TRAPS[i])) {
+                if (!mech_demo_trap(g, p1, i)) SDL_Log("mech demo: no such trap nearby");
+                for (int k = 0; k < MAX_MONSTERS; k++) g->mons[k].alive = false;
+                return;
+            }
+        if (!strcmp(g_demo_kind, "mechtest")) {
+            for (int k = 0; k < MAX_MONSTERS; k++) g->mons[k].alive = false;
+            SDL_Log("mechtest: %s", mech_test_solve(g, p1) ? "passed" : "FAILED");
+            return;
+        }
+    }
     if (!strcmp(g_demo_kind, "thread")) {
         /* the golden thread to the first chapter target, from wherever --pos put us */
         s->motive = MOTIVE_REVENGE + 1;

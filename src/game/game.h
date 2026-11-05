@@ -84,6 +84,39 @@ typedef struct Flash {
     float radius, life, max_life;
 } Flash;
 
+/* Mechanisms (mech.c): vaults with their puzzles, and the devices near the players. */
+#define MAX_VAULTS 48
+#define MAX_DEVICES 320
+#define MAX_MECH_CHUNKS 160
+#define MECH_CELLS 2048
+#define CHEST_VAULT 0x100000 /* a chest's amount: level | CHEST_VAULT for the chest in a vault */
+
+typedef struct MechVault {
+    bool alive, solved, beam_on;
+    Vault v;          /* as generated (local cells) */
+    u64 chunk_key;
+    int ox, oy, oz;   /* chunk origin */
+    int cx, cz, y;    /* inner centre (world), feet */
+    int gx, gz;       /* the gate cell (world) */
+    int level;
+    u8 lamps, progress;
+    u8 facing[VAULT_PARTS]; /* statues and mirrors */
+    float open;       /* the gate: 0 shut .. 1 up */
+    int beam[(VAULT_PARTS + 2) * 2], nbeam; /* turning points of the light (local x, z) */
+} MechVault;
+
+typedef struct Device {
+    bool alive;
+    u8 kind, part, dir, size, state;
+    int vault;        /* index in vaults, -1 for traps */
+    int x, y, z;      /* world cell, feet */
+    int level;
+    float t, cool, anim;
+    u8 hit_players;   /* spikes: who was hit this cycle */
+    u64 hit_mons;
+    u64 chunk_key;
+} Device;
+
 /* A task from something found in the dungeon (a bounty board, a dead adventurer's note). */
 enum { MI_BOUNTY = 1, MI_RETRIEVE };
 #define MAX_MISSIONS 6
@@ -266,6 +299,7 @@ typedef struct PlayerSlot {
     char banner[128];
     float banner_time;
     char place[128];
+    float lava_t;
     /* atmosphere of this player's view */
     vec3 fog, ambient;
     float fog_density, stars, openness, openness_timer;
@@ -299,6 +333,14 @@ typedef struct Game {
     /* chests and relics already taken (keys) */
     u64 *looted;
     int looted_cap, looted_count;
+    /* mechanisms near the players */
+    MechVault vaults[MAX_VAULTS];
+    Device devs[MAX_DEVICES];
+    u64 mech_chunks[MAX_MECH_CHUNKS];
+    int nmech_chunks;
+    u64 mech_cells[MECH_CELLS]; /* cells made solid by devices (closed gates, statues) */
+    int mech_ncells;
+    bool mech_dirty;
 
     /* chunks whose monsters and shrines have been placed */
     u64 *spawned;
@@ -437,6 +479,19 @@ bool story_cast_thread(Game *g, PlayerSlot *ps);
 void story_update_threads(Game *g, float dt);
 void story_draw_threads(Game *g, vec3 eye);
 void story_thread_lights(Game *g, vec3 eye, SceneParams *sp);
+
+/* mech.c: vaults, puzzles, traps, lava */
+void mech_update(Game *g, float dt);
+void mech_draw(Game *g, vec3 eye);
+void mech_collect_lights(Game *g, vec3 eye, SceneParams *sp);
+void mech_draw_hud(Game *g, PlayerSlot *ps, int W, int H);
+/* Works the lever, statue or mirror the player faces; false if there is none. */
+bool mech_use(Game *g, PlayerSlot *ps);
+bool mech_solid(const Game *g, int x, int y, int z);
+/* Screenshot demos and the scripted test (--demo levers|plates|statues|beam|spikes|flames|darts|mechtest). */
+bool mech_demo_view(Game *g, PlayerSlot *ps, int puzzle);
+bool mech_demo_trap(Game *g, PlayerSlot *ps, int trap);
+bool mech_test_solve(Game *g, PlayerSlot *ps);
 
 /* spells.c */
 void spells_give_start(Stats *s);

@@ -7,9 +7,12 @@
  *  5b. layers: every chunk has its up and down staircase (structures one each), the
  *     walkable floor of a layer is flat, and the walk from the gate reaches every layer
  *  6. stories: deterministic, and every chapter target and domain lord near the gate
- *     has a floor with room for its size in its home chunk */
+ *     has a floor with room for its size in its home chunk
+ *  7. mechanisms: vault gates open onto a floor reached from the gate, every puzzle can
+ *     be solved and does not start solved, traps stand on the floor */
 #include "world/layout.h"
 #include "world/story.h"
+#include "world/mech.h"
 #include "world/mesher.h"
 #include "world/texgen.h"
 
@@ -47,6 +50,7 @@ static Block get_block(int wx, int wy, int wz) {
 
 static bool solid(int x, int y, int z) { return block_solid(get_block(x, y, z)); }
 static bool standable(int x, int y, int z) { return !solid(x, y, z) && solid(x, y - 1, z); }
+static int test_solid(void *u, int x, int y, int z) { (void)u; return solid(x, y, z); }
 
 /* visited bitmap over the region */
 #define WX (RX * CHUNK)
@@ -430,6 +434,80 @@ int main(int argc, char **argv) {
             }
         printf("story: %d traces on a 17-chunk row\n", traces);
         free(b);
+    }
+
+    /* 7. mechanisms */
+    {
+        g_bx0 = g_by0 = g_bz0 = -(1 << 30);
+        g_bx1 = g_by1 = g_bz1 = 1 << 30;
+        flood(sx, sy, sz);
+        int vaults = 0, by_kind[PZ_COUNT] = { 0 }, front_reached = 0, bad = 0, traps[TRAP_COUNT] = { 0 }, chunks = 0;
+        for (int cy = R_Y0; cy <= R_Y1; cy++)
+            for (int cz = R_Z0; cz <= R_Z1; cz++)
+                for (int cx = R_X0; cx <= R_X1; cx++) {
+                    const ChunkInfo *ci = &g_infos[ci_index(cx, cy, cz)];
+                    int ox = cx * CHUNK, oy = cy * CHUNK, oz = cz * CHUNK;
+                    chunks++;
+                    for (int i = 0; i < ci->ntraps; i++) {
+                        const Trap *t = &ci->traps[i];
+                        traps[t->kind]++;
+                        if (!standable(ox + t->x, oy + t->y, oz + t->z)) { bad++; printf("  trap not on a floor at chunk %d %d %d\n", cx, cy, cz); }
+                    }
+                    const Vault *v = &ci->vault;
+                    if (!v->y) continue;
+                    vaults++;
+                    by_kind[v->puzzle]++;
+                    int gx, gz;
+                    mech_gate_cell(v, &gx, &gz);
+                    int fx = ox + v->x + 3 * DIR_X[v->door], fy = oy + v->y, fz = oz + v->z + 3 * DIR_Z[v->door];
+                    bool gate_open = !solid(ox + gx, fy, oz + gz) && !solid(ox + gx, fy + 1, oz + gz);
+                    bool inside = !solid(ox + v->x, fy, oz + v->z) && solid(ox + v->x, fy - 1, oz + v->z);
+                    if (!gate_open || !inside || !standable(fx, fy, fz)) { bad++; printf("  vault without a gate at chunk %d %d %d\n", cx, cy, cz); }
+                    if (in_region(fx, fy, fz) && g_seen[widx(fx, fy, fz)]) front_reached++;
+                    bool ok = true;
+                    for (int i = 0; i < v->nparts; i++) {
+                        const MechPart *p = &v->parts[i];
+                        int px = ox + p->x, pz = oz + p->z;
+                        if (!standable(px, fy, pz)) ok = false;
+                        if (v->puzzle == PZ_LEVERS && !solid(px + DIR_X[p->dir], fy + 1, pz + DIR_Z[p->dir])) ok = false;
+                    }
+                    if (v->puzzle == PZ_LEVERS) {
+                        /* the lamps can all be lit from the start */
+                        int n = v->nparts;
+                        u8 seen[16] = { 0 }, q[16], qh = 0, qt = 0, all = (u8)((1 << n) - 1);
+                        q[qt++] = v->lamps; seen[v->lamps] = 1;
+                        while (qh < qt) {
+                            u8 st = q[qh++];
+                            for (int i = 0; i < n; i++) {
+                                u8 nx = mech_lever_pull(st, i, n);
+                                if (!seen[nx]) { seen[nx] = 1; q[qt++] = nx; }
+                            }
+                        }
+                        if (!seen[all] || v->lamps == all) ok = false;
+                    } else if (v->puzzle == PZ_STATUES) {
+                        int wrong = 0;
+                        for (int i = 0; i < v->nparts; i++) wrong += v->parts[i].start != mech_statue_goal(v, i);
+                        if (!wrong) ok = false;
+                    } else if (v->puzzle == PZ_BEAM) {
+                        int pts[MECH_BEAM_PTS * 2], np, nm = v->nparts - 1, solved = 0;
+                        u8 f[VAULT_PARTS] = { 0 };
+                        for (int i = 1; i < v->nparts; i++) f[i] = v->parts[i].start;
+                        if (mech_beam(v, f, ox, oy, oz, test_solid, NULL, pts, &np)) ok = false;
+                        for (int combo = 0; combo < (1 << (3 * nm)); combo++) {
+                            for (int i = 0; i < nm; i++) f[i + 1] = (u8)((combo >> (3 * i)) & 7);
+                            solved += mech_beam(v, f, ox, oy, oz, test_solid, NULL, pts, &np);
+                        }
+                        if (!solved) ok = false;
+                    }
+                    if (!ok) { bad++; printf("  puzzle %d cannot be solved or starts solved at chunk %d %d %d\n", v->puzzle, cx, cy, cz); }
+                }
+        printf("mechanisms: %d vaults in %d chunks (levers %d, plates %d, statues %d, beam %d, open %d), %d gates reached from the "
+               "gate; traps: darts %d, spikes %d, flames %d\n",
+               vaults, chunks, by_kind[PZ_LEVERS], by_kind[PZ_PLATES], by_kind[PZ_STATUES], by_kind[PZ_BEAM], by_kind[PZ_NONE],
+               front_reached, traps[TRAP_DARTS], traps[TRAP_SPIKES], traps[TRAP_FLAME]);
+        CHECK(bad == 0, "%d broken vaults or traps", bad);
+        CHECK(vaults >= 8, "too few vaults");
+        CHECK(front_reached * 10 >= vaults * 7, "too many vault gates cannot be reached from the gate");
     }
 
     if (g_fail) printf("%d check(s) failed\n", g_fail);
