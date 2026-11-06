@@ -425,6 +425,7 @@ Known gaps:
 | M9  | Character creation (gameplay), shrines, save/load per world | shrines done |
 | M10 | Atmosphere: audio, particles, polish | sound effects and ambience done |
 | M11 | Local split-screen co-op (up to 4, gamepads) | first version done |
+| M14 | Online co-op with a server (Linux, Windows): see [MULTIPLAYER.md](MULTIPLAYER.md) | planned |
 | M12 | Stories: S1 information, S2 motives, chapters, missions | done |
 | M13 | Stories: S3 camps and people, S4 consequences, S5 choices | |
 
