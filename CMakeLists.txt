@@ -101,8 +101,9 @@ if(EMSCRIPTEN)
     -sMIN_WEBGL_VERSION=2 -sMAX_WEBGL_VERSION=2 -sGL_ENABLE_GET_PROC_ADDRESS=1
     -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=268435456 -sSTACK_SIZE=1048576
     -sENVIRONMENT=web --shell-file ${CMAKE_SOURCE_DIR}/web/shell.html
-    --preload-file ${CMAKE_SOURCE_DIR}/assets/sfx@/sfx
-    --preload-file ${CMAKE_SOURCE_DIR}/assets/music@/music)
+    # SHELL: keeps each flag with its path (CMake drops repeated options otherwise)
+    "SHELL:--preload-file ${CMAKE_SOURCE_DIR}/assets/sfx@/sfx"
+    "SHELL:--preload-file ${CMAKE_SOURCE_DIR}/assets/music@/music")
   set_property(TARGET fortress_crawl APPEND PROPERTY LINK_DEPENDS ${CMAKE_SOURCE_DIR}/web/shell.html)
 endif()
 
