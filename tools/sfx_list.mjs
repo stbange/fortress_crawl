@@ -52,6 +52,79 @@ export const SOUNDS = [
   { id: "bat_hurt", dur: 0.5, text: "bat squeals in pain" },
   { id: "bat_death", dur: 0.9, text: "bat shrieks and falls, last weak wing flutters" },
 
+  // the newer kinds
+  { id: "spider_alert", dur: 1.2, text: "giant spider hisses and rattles its many legs, clicking fangs" },
+  { id: "spider_attack", dur: 0.8, text: "giant spider leaps through the air, skittering legs and a sharp venomous hiss" },
+  { id: "spider_hurt", dur: 0.6, text: "giant spider shrieks, chitin cracking" },
+  { id: "spider_death", dur: 1.4, text: "giant spider dies, legs curling and twitching, wet crunch and fading screech" },
+
+  { id: "wraith_alert", dur: 2.0, text: "ghostly wraith moans, hollow echoing voice and cold wind" },
+  { id: "wraith_attack", dur: 0.9, text: "wraith lunges with an icy ghostly shriek and a cold rushing whoosh" },
+  { id: "wraith_hurt", dur: 0.7, text: "ghost hit, distorted ethereal wail" },
+  { id: "wraith_death", dur: 2.0, text: "wraith dissolves into nothing, long fading ghostly scream and whispering wind" },
+  { id: "wraith_vanish", dur: 0.9, text: "ghost vanishes into thin air, reversed whoosh and fading whisper" },
+
+  { id: "golem_alert", dur: 1.8, text: "stone golem awakens, grinding rock and a deep resonant rumble" },
+  { id: "golem_attack", dur: 1.0, text: "massive stone golem raises its arms, grinding rock and deep groan" },
+  { id: "golem_hurt", dur: 0.7, text: "stone cracking under a heavy blow, chips of rock falling" },
+  { id: "golem_death", dur: 2.5, text: "stone golem crumbles apart, avalanche of rocks crashing to the ground" },
+  { id: "golem_stomp", dur: 1.4, text: "giant stone fist slams the ground, earth-shaking boom and rumbling shockwave" },
+
+  { id: "shaman_alert", dur: 1.6, text: "tribal shaman chants a guttural warning, rattling bones" },
+  { id: "shaman_attack", dur: 0.9, text: "shaman casts a spell, short guttural incantation and a magical whoosh" },
+  { id: "shaman_hurt", dur: 0.6, text: "shaman grunts in pain, a raspy old voice" },
+  { id: "shaman_death", dur: 1.6, text: "shaman dies with a raspy death rattle, a falling staff clattering" },
+
+  { id: "bloater_alert", dur: 1.4, text: "bloated plague monster gurgles and belches wetly" },
+  { id: "bloater_attack", dur: 1.0, text: "bloated monster swelling up, stretching flesh and rising wet gurgle about to burst" },
+  { id: "bloater_hurt", dur: 0.6, text: "squishy bloated flesh punched, wet squelch and groan" },
+  { id: "bloater_death", dur: 1.5, text: "bloated monster bursts open, huge wet splatter and hissing poison gas" },
+
+  { id: "eye_alert", dur: 1.6, text: "giant floating eye monster, eerie low humming drone and a wet blink" },
+  { id: "eye_attack", dur: 1.2, text: "magical laser beam charging up, rising high-pitched energy whine" },
+  { id: "eye_hurt", dur: 0.6, text: "floating eye hit, wet squelch and an alien squeal" },
+  { id: "eye_death", dur: 1.6, text: "floating eye monster pops and collapses, wet burst and dying alien wail" },
+  { id: "eye_beam", dur: 1.0, text: "powerful magical laser beam fires, searing electric blast" },
+
+  { id: "knight_alert", dur: 1.4, text: "armored dark knight draws a sword, steel ringing and a hollow battle shout inside a helmet" },
+  { id: "knight_attack", dur: 0.8, text: "heavy plate-armored knight swings a longsword, armor clanking and steel whoosh" },
+  { id: "knight_hurt", dur: 0.6, text: "blow on plate armor, metallic clang and a muffled grunt" },
+  { id: "knight_death", dur: 2.0, text: "armored knight collapses, heavy plate armor crashing onto stone" },
+  { id: "knight_block", dur: 0.6, text: "sword strike blocked by a heavy steel shield, loud metallic clang" },
+
+  { id: "worm_alert", dur: 1.6, text: "giant worm rumbling underground, earth shifting and a deep guttural growl" },
+  { id: "worm_attack", dur: 1.2, text: "giant worm bursts out of the ground, exploding dirt and rocks and a roar" },
+  { id: "worm_hurt", dur: 0.6, text: "giant worm hit, fleshy thud and a gurgling screech" },
+  { id: "worm_death", dur: 2.0, text: "giant worm dies, long gurgling screech and its body thudding to the ground" },
+  { id: "worm_burrow", dur: 1.2, text: "creature burrowing into the ground, digging through dirt and gravel" },
+
+  { id: "mimic_alert", dur: 1.0, text: "treasure chest suddenly snaps open revealing teeth, wooden creak and a monstrous growl" },
+  { id: "mimic_attack", dur: 0.7, text: "wooden chest monster chomps, heavy lid slamming like jaws" },
+  { id: "mimic_hurt", dur: 0.6, text: "wooden chest monster hit, splintering wood and a growl" },
+  { id: "mimic_death", dur: 1.5, text: "chest monster dies, wood splintering apart and gold coins spilling out" },
+
+  { id: "necro_alert", dur: 1.8, text: "evil necromancer laughs softly, echoing sinister voice and dark whispers" },
+  { id: "necro_attack", dur: 1.2, text: "necromancer chanting a dark incantation, rising ghostly whispers" },
+  { id: "necro_hurt", dur: 0.6, text: "necromancer hisses in pain, raspy old voice" },
+  { id: "necro_death", dur: 2.2, text: "necromancer dies with a long fading scream as dark spirits are released" },
+  { id: "necro_summon", dur: 1.6, text: "the dead rising from the ground, bones rattling and dark magic surging" },
+
+  { id: "harpy_alert", dur: 1.2, text: "harpy screeches, piercing bird-woman cry and flapping wings" },
+  { id: "harpy_attack", dur: 1.0, text: "harpy dives from above, rushing wind, shriek and slashing talons" },
+  { id: "harpy_hurt", dur: 0.6, text: "harpy squawks in pain, feathers flying" },
+  { id: "harpy_death", dur: 1.4, text: "harpy dies with a falling screech, broken wings fluttering down" },
+
+  { id: "hound_alert", dur: 1.4, text: "demonic hound snarls and growls, then barks" },
+  { id: "hound_attack", dur: 0.6, text: "vicious dog lunges and bites, snapping jaws and a snarl" },
+  { id: "hound_hurt", dur: 0.5, text: "hound yelps in pain" },
+  { id: "hound_death", dur: 1.2, text: "hound dies with a whimper and a body falling" },
+
+  { id: "troll_alert", dur: 1.8, text: "huge cave troll roars, deep guttural bellow" },
+  { id: "troll_attack", dur: 1.0, text: "troll grunts and hurls a heavy boulder, deep whoosh" },
+  { id: "troll_hurt", dur: 0.7, text: "troll grunts in pain, deep and angry" },
+  { id: "troll_death", dur: 2.0, text: "troll dies, a deep dying groan and a huge body crashing down" },
+  { id: "boulder_impact", dur: 1.2, text: "heavy boulder smashes into the ground, crashing rocks and rubble" },
+
   { id: "monster_stun", dur: 1.0, text: "heavy creature slams head-first into a stone wall, dull thud and dazed groan" },
   { id: "named_appear", dur: 3.0, text: "ominous deep horn blast and rising dark choir, a powerful enemy champion appears" },
   { id: "named_death", dur: 3.0, text: "powerful villain dies, booming dying roar followed by a dark resonant impact and echo" },

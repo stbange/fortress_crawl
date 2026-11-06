@@ -1,5 +1,8 @@
 # Fortress Crawl
 
+**[▶ Play it in your browser](https://stbange.github.io/fortress_crawl/)** (desktop or phone;
+the first load fetches about 55 MB of sound and music).
+
 An endless, procedurally generated 3D dungeon crawler in C (C11) using SDL3 and OpenGL 3.3.
 You start in front of a huge castle built into a mountain. Everything behind the gate is
 generated on the fly, without end, in every direction including up and down. The farther you
@@ -119,8 +122,8 @@ start screen, and `?args=...` passes command line options, for example `?args=--
 
 ### GitHub Pages
 
-The workflow also publishes the web version to GitHub Pages on every push to the default
-branch: **https://stbange.github.io/fortress_crawl/**. This needs Pages to be switched to
+The workflow also publishes the web version to GitHub Pages on every push to `main`:
+**https://stbange.github.io/fortress_crawl/**. This needs Pages to be switched to
 GitHub Actions once (repository Settings -> Pages -> Build and deployment -> Source:
 *GitHub Actions*). The workflow tries to do that itself; if it is not allowed to, the `pages`
 job only prints a warning until the setting is changed.

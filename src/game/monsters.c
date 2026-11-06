@@ -481,7 +481,7 @@ void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int 
             dmg *= 0.25f;
             vec3 sh = v3_add(monster_centre(m), v3_scale(fw, MONSTERS[m->type].hw * m->scale + 0.1f));
             particles_burst(g, sh, v3(1.0f, 0.85f, 0.5f), 6, 3.0f, 0.03f, true);
-            sfx_at(g, SFX_HIT_WALL, sh, 0.8f);
+            sfx_at(g, SFX_KNIGHT_BLOCK, sh, 1.0f);
         }
     }
     m->hp -= dmg;
@@ -687,8 +687,8 @@ static void ground_blast(Game *g, Monster *m, float r, vec3 col) {
         particles_burst(g, q, col, 1, r * 2.0f, 0.08f, false);
     }
     flash_add(g, c, v3_scale(m->glow, 0.8f), r * 2.5f, 0.3f);
-    sfx_at(g, SFX_MONSTER_STUN, m->pos, 1.0f);
-    sfx_at(g, SFX_HIT_BLUNT, m->pos, 1.0f);
+    if (m->type == MON_GOLEM) sfx_at(g, SFX_GOLEM_STOMP, m->pos, 1.0f);
+    else sfx_at(g, SFX_HIT_BLUNT, m->pos, 1.0f);
 }
 
 /* The bloater bursts: poison for the players, and its neighbours get hurt too. */
@@ -763,7 +763,7 @@ static void eye_beam(Game *g, Monster *m) {
         if (g->nparts < MAX_PARTICLES - 2) particles_burst(g, v3_add(c, v3_scale(dir, t)), m->glow, 1, 0.6f, 0.07f, true);
     flash_add(g, c, m->glow, 7.0f, 0.25f);
     flash_add(g, v3_add(c, v3_scale(dir, len)), m->glow, 6.0f, 0.25f);
-    sfx_at(g, SFX_CHAIN_ZAP, c, 1.0f);
+    sfx_at(g, SFX_EYE_BEAM, c, 1.0f);
 }
 
 /* Raises the dead next to it (up to a few at a time around). */
@@ -790,7 +790,7 @@ static void necro_summon(Game *g, Monster *m, const MCtx *x) {
         particles_burst(g, v3_add(at, v3(0, 0.5f, 0)), m->glow, 12, 2.5f, 0.06f, true);
         around++;
     }
-    sfx_at(g, SFX_RUNE_TRIGGER, m->pos, 1.0f);
+    sfx_at(g, SFX_NECRO_SUMMON, m->pos, 1.0f);
 }
 
 /* What happens when a raised attack comes down. */
@@ -860,7 +860,7 @@ static int behave(Game *g, Monster *m, const MCtx *x, vec3 *want) {
             m->state = MS_WINDUP;
             m->timer = d->windup;
             particles_burst(g, monster_centre(m), m->glow, 16, 3.0f, 0.06f, true);
-            sfx_at(g, SFX_SPELL_BLINK, m->pos, 1.0f);
+            sfx_at(g, SFX_WRAITH_VANISH, m->pos, 1.0f);
             return BH_DONE;
         }
         m->t2 -= x->dt;
@@ -868,7 +868,7 @@ static int behave(Game *g, Monster *m, const MCtx *x, vec3 *want) {
             m->hidden = 1;
             m->t2 = 1.1f;
             particles_burst(g, monster_centre(m), m->glow, 16, 3.0f, 0.06f, true);
-            sfx_at(g, SFX_SPELL_BLINK, m->pos, 0.8f);
+            sfx_at(g, SFX_WRAITH_VANISH, m->pos, 0.9f);
             return BH_MOVED;
         }
         return BH_GENERIC;
@@ -923,7 +923,7 @@ static int behave(Game *g, Monster *m, const MCtx *x, vec3 *want) {
                 m->timer = d->windup;
                 m->t2 = 3.5f;
                 particles_burst(g, v3_add(m->pos, v3(0, 0.3f, 0)), v3(0.45f, 0.35f, 0.25f), 20, 4.0f, 0.08f, false);
-                sfx_at(g, SFX_AMB_ROCKS, m->pos, 1.0f);
+                sfx_monster(g, m, MSFX_ATTACK); /* bursting up */
                 return BH_DONE;
             }
             return BH_MOVED;
@@ -933,6 +933,7 @@ static int behave(Game *g, Monster *m, const MCtx *x, vec3 *want) {
             m->hidden = 1;
             m->cooldown = 1.2f;
             particles_burst(g, v3_add(m->pos, v3(0, 0.3f, 0)), v3(0.45f, 0.35f, 0.25f), 14, 3.0f, 0.07f, false);
+            sfx_at(g, SFX_WORM_BURROW, m->pos, 1.0f);
             return BH_MOVED;
         }
         return BH_GENERIC;

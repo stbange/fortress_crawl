@@ -188,8 +188,7 @@ static void boulder_burst(Game *g, Projectile *p, vec3 at) {
     }
     particles_burst(g, at, v3(0.45f, 0.4f, 0.34f), 24, 6.0f, 0.12f, false);
     particles_burst(g, at, v3(0.6f, 0.55f, 0.48f), 10, 3.0f, 0.2f, false);
-    sfx_at(g, SFX_HIT_BLUNT, at, 1.0f);
-    sfx_at(g, SFX_AMB_ROCKS, at, 0.8f);
+    sfx_at(g, SFX_BOULDER_IMPACT, at, 1.0f);
 }
 
 static void update_projectiles(Game *g, float dt) {
