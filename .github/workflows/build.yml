@@ -53,14 +53,12 @@ jobs:
           npx --yes wrangler@3 pages project create fortress-crawl --production-branch=main || true
           npx --yes wrangler@3 pages deploy build-web/dist --project-name=fortress-crawl --branch="${GITHUB_REF_NAME}" --commit-dirty=true
 
-  # Publishes the web version to GitHub Pages (https://<owner>.github.io/<repo>/) on pushes to
-  # the branch named in PAGES_BRANCH below (the working branch for now; set it back to
-  # github.event.repository.default_branch to publish from the default branch again).
-  # Needs Settings -> Pages -> Source: "GitHub Actions" (the first step tries to switch that
-  # on itself; if it may not, the job only warns).
+  # Publishes the web version to GitHub Pages (https://<owner>.github.io/<repo>/) on every
+  # push to main. Needs Settings -> Pages -> Source: "GitHub Actions" (the first step tries
+  # to switch that on itself; if it may not, the job only warns).
   pages:
     needs: web
-    if: github.event_name != 'pull_request' && github.ref_name == 'claude/quirky-allen-pu5cmi' # PAGES_BRANCH
+    if: github.event_name != 'pull_request' && github.ref_name == 'main'
     runs-on: ubuntu-24.04
     permissions:
       pages: write
