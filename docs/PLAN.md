@@ -57,41 +57,66 @@ Every position in the world gets two independent properties:
 
 ### 3.1 Stratum: chosen by height. Controls *layout and features*.
 
+A new stratum every 10 chunks (320 m) of height, ten up and ten down from the dungeon
+around the gate:
+
 | Chunk y (32 m) | Stratum | Character |
 |---------------:|---------|-----------|
-| 31 and up | **Astral Void** | open space, floating platforms and crystals, stars |
-| 21 to 30 | **Heaven** | bright marble, floating islands with little temples |
-| 14 to 20 | **Cloud Cloisters** | mostly open air, bridges, pale haze |
-| 8 to 13 | **Spires** | towers and open-air bridges, night sky |
-| 3 to 7 | **Castle** | built halls, arenas, great halls with galleries |
+| 90 and up | **Astral Void** | open space, floating platforms and crystals, stars |
+| 80 to 89 | **Celestial Orrery** | violet dark, islands carrying the rings of a great clockwork |
+| 70 to 79 | **Stormcrown** | storm-grey sky, crystal lightning rods on floating rocks |
+| 60 to 69 | **Sun Court** | blinding gold marble halls and temples |
+| 50 to 59 | **Heaven** | bright marble, floating islands with little temples, stained glass |
+| 40 to 49 | **Hanging Gardens** | green haze, islands with grass and trees |
+| 30 to 39 | **Cloud Cloisters** | mostly open air, bridges, pale haze, marble |
+| 20 to 29 | **Eagle Aeries** | open crags with great nests of branches and bones, bats |
+| 10 to 19 | **Spires** | towers and open-air bridges, night sky |
+| 3 to 9 | **Castle** | built halls, arenas, great halls with galleries |
 | -3 to 2 | **Dungeon** | rooms, corridors, cell blocks (start area) |
 | -9 to -4 | **Mines** | timbered tunnels, lanterns, ore veins, chasms |
-| -16 to -10 | **Roots of the Mountain** | caves, giant caverns, roots, glowing fungus |
-| -25 to -17 | **Limbo** (first circle) | grey, bones, cell blocks |
-| -39 to -26 | **Inferno** | lava, red light, chasms |
-| -40 and below | **World Core** | magenta crystal caves, molten core |
+| -19 to -10 | **Roots of the Mountain** | caves, giant caverns, roots, glowing fungus |
+| -29 to -20 | **Ossuary** | catacombs and charnel halls full of bones, skeletons |
+| -39 to -30 | **Fungal Deep** | caverns of glowing fungus, slimes |
+| -49 to -40 | **Limbo** (first circle) | grey, bones, cell blocks |
+| -59 to -50 | **Crystal Abyss** | crystal caverns and chasms in cold blue light |
+| -69 to -60 | **Inferno** | lava, red light, chasms |
+| -79 to -70 | **Iron Hells** | foundries, chains and cells, ore, brutes |
+| -89 to -80 | **the Maw** | red flesh-like caves, sinews, bones |
+| -90 and below | **World Core** | magenta crystal caves, molten core |
 
 Each stratum has weights for the chunk archetypes and megastructures, plus feature
-frequencies (lava, crystals, fungus, roots), fog, ambient light and light colour.
-Boundaries are warped with noise so they are irregular.
+frequencies (lava, crystals, fungus, roots), fog, ambient light and light colour, what stands
+on floating islands (temples, crystals, gardens, orrery rings, nests), an optional wall
+pattern (marble up high), and flags for ore, bones, fiery halls and stained glass. Monster
+families are weighted per stratum too. Boundaries are warped with noise so they are irregular.
 
 ### 3.2 Flavor: chosen by compass direction. Controls *look*.
 
-| Direction | Tier 1 (from ~4 chunks) | Tier 2 (~10) | Tier 3 (~18) |
-|-----------|------------------------|--------------|--------------|
-| North (colder) | Frostbitten | Glacial | Everwinter (aurora light) |
-| South (hotter) | Sandstone | Sunscorched | Ember-forged (lava) |
-| East | Boyar (carved wood, red and gold) | Steppe (felt, earth, bones) | Jade (red lacquer, jade, lanterns) |
-| West | Gothic (stained glass) | Druidic (moss, roots, water) | Drowned (bioluminescent, flooded) |
+A new flavor every 10 chunks out, ten per direction (tier 1 from 4 chunks, tier 10 from 90):
 
-A flavor controls the palette and wall/floor patterns, torch and lantern colours, fog colour,
-typical decoration (cobwebs, bones, roots, lanterns, chains) and fluids (ice, water, lava).
-On diagonals, the dominant axis wins; near the diagonal it is chosen per 3x3x3 region,
-which gives patchy borders.
+| Tier | North (colder) | South (hotter) | East | West |
+|-----:|----------------|----------------|------|------|
+| 1 | Frostbitten | Sandstone | Boyar (carved wood, red and gold) | Gothic (stained glass) |
+| 2 | Glacial | Sunscorched | Steppe (felt, earth, bones) | Druidic (moss, roots, water) |
+| 3 | Everwinter (aurora light) | Ember-forged (lava) | Jade (red lacquer, lanterns) | Drowned (bioluminescent, flooded) |
+| 4 | Rime-iron (frosted iron, grates, chains) | Obsidian (black basalt, lava) | Porcelain (white and blue) | Coral-grown (coral, sand, water) |
+| 5 | Barrow-cold (burial mounds, bones) | Brass-wrought (brass, grates) | Bamboo (green poles, paper lanterns) | Abyssal (black-blue, violet glow) |
+| 6 | Tusk-built (ivory and hide) | Salt-crusted (white-pink salt) | Terracotta (clay soldiers' halls) | Verdigris (green bronze, stained glass) |
+| 7 | Aurora-lit (green runes, mosaics) | Sulphurous (yellow stone, acid pools) | Silk-hung (purple and gold) | Pearlescent (iridescent marble) |
+| 8 | Starfrost (black ice, starlight) | Glass-blown (amber glass) | Dragon-scaled (teal scales, gold) | Leviathan (bone ribs, red) |
+| 9 | Hollow-wintered (bleached white) | Phoenix (red-gold feathers, lava) | Moonlit (indigo and silver) | Brine-rotted (rust, green rot) |
+| 10 | Lifeless (violet basalt, last cold) | Sun-blasted (white-gold, lava) | Imperial (vermilion, gold runes) | Eldritch (glowing green runes) |
 
-**Stratum x flavor = theme.** There are 11 x 13 = 143 combinations, for example
+A flavor controls the palette and wall/floor patterns (brick, big brick, ashlar, logs,
+plaster, ice, marble, basalt columns, runes, scales; flagstone, tiles, planks, dirt, mosaic,
+grate), torch and lantern colours, fog colour, typical decoration (cobwebs, bones, roots,
+lanterns, chains, fungus), fluids (ice, water, lava) and stained glass. On diagonals, the
+dominant axis wins; near the diagonal it is chosen per 3x3x3 region, which gives patchy
+borders.
+
+**Stratum x flavor = theme.** There are 21 x 41 = 861 combinations, for example
 *Frostbitten Mines*, *Jade Heaven*, *Drowned Inferno* or *Everwinter Inferno* (a frozen hell,
-like Dante's Cocytus). Each theme gets its own generated texture set.
+like Dante's Cocytus). Each theme gets its own generated texture set when first seen.
 
 ### 3.3 Danger level
 

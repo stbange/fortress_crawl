@@ -156,23 +156,37 @@ void story_personal(u64 seed, int slot, Personal *out) {
 /* ---------- eras: depth is time, height is power ---------- */
 
 static const char *const ERAS[ST_COUNT] = {
-    [ST_CORE] = "the Sealing",          [ST_INFERNO] = "the War of Fire", [ST_LIMBO] = "the Drowning",
-    [ST_ROOTS] = "the First Hearths",   [ST_MINES] = "the Deep Delving",  [ST_DUNGEON] = "the Last Siege",
-    [ST_CASTLE] = "the reign of {builders}", [ST_SPIRES] = "the Ascent", [ST_CLOUDS] = "the Long Prayer",
-    [ST_HEAVEN] = "the Exaltation",     [ST_ASTRAL] = "the time before stars",
+    [ST_CORE] = "the Sealing",          [ST_MAW] = "the Devouring",      [ST_IRONHELL] = "the Chaining",
+    [ST_INFERNO] = "the War of Fire",   [ST_CRYSTAL] = "the Hardening",  [ST_LIMBO] = "the Drowning",
+    [ST_FUNGAL] = "the Long Rot",       [ST_OSSUARY] = "the Great Burial", [ST_ROOTS] = "the First Hearths",
+    [ST_MINES] = "the Deep Delving",    [ST_DUNGEON] = "the Last Siege",
+    [ST_CASTLE] = "the reign of {builders}", [ST_SPIRES] = "the Ascent", [ST_AERIE] = "the Taming of Wings",
+    [ST_CLOUDS] = "the Long Prayer",    [ST_GARDENS] = "the Green Age",  [ST_HEAVEN] = "the Exaltation",
+    [ST_SUNCOURT] = "the Noon Without End", [ST_STORM] = "the Breaking of the Sky", [ST_ORRERY] = "the Counting of Stars",
+    [ST_ASTRAL] = "the time before stars",
 };
 
 static const char *const PLACE_NOUN[ST_COUNT][4] = {
     [ST_CORE] = { "Heart", "Wound", "Seal", "Pit" },
+    [ST_MAW] = { "Gullet", "Throat", "Teeth", "Belly" },
+    [ST_IRONHELL] = { "Foundry", "Chains", "Anvils", "Racks" },
     [ST_INFERNO] = { "Furnace", "Pits", "Brand", "Kilns" },
+    [ST_CRYSTAL] = { "Geodes", "Prisms", "Shards", "Facets" },
     [ST_LIMBO] = { "Mire", "Grey Reaches", "Fen", "Shallows" },
+    [ST_FUNGAL] = { "Spore Halls", "Caps", "Mycelium", "Rot" },
+    [ST_OSSUARY] = { "Ossuary", "Charnel", "Catacombs", "Bonepits" },
     [ST_ROOTS] = { "Roots", "Hollows", "Grottos", "Burrows" },
     [ST_MINES] = { "Shafts", "Delvings", "Seams", "Workings" },
     [ST_DUNGEON] = { "Cells", "Undercroft", "Galleries", "Vaults" },
     [ST_CASTLE] = { "Keep", "Court", "Bastion", "Ramparts" },
     [ST_SPIRES] = { "Spires", "Belfries", "Needles", "Lanterns" },
+    [ST_AERIE] = { "Aeries", "Eyries", "Roosts", "Crags" },
     [ST_CLOUDS] = { "Cloisters", "Mists", "Gyres", "Bridges" },
+    [ST_GARDENS] = { "Gardens", "Terraces", "Orchards", "Bowers" },
     [ST_HEAVEN] = { "Choir", "Sanctum", "Gardens", "Thrones" },
+    [ST_SUNCOURT] = { "Court", "Dais", "Zenith", "Halls of Noon" },
+    [ST_STORM] = { "Crown", "Thunderheads", "Rods", "Squalls" },
+    [ST_ORRERY] = { "Orrery", "Wheels", "Spheres", "Clockwork" },
     [ST_ASTRAL] = { "Void", "Starfall", "Silence", "Drift" },
 };
 

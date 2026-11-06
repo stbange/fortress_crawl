@@ -46,9 +46,11 @@ int world_flavor(const World *w, int cx, int cy, int cz) {
     else if (ac > ah * 1.25f) use_heat = false;
     else use_heat = hash3(w->seed, floordiv(cx, 3), floordiv(cy, 3), floordiv(cz, 3), 0x77) & 1;
     float m = use_heat ? ah : ac;
-    int tier = m >= 18.0f ? 3 : (m >= 10.0f ? 2 : 1);
-    if (use_heat) return (heat < 0 ? FL_FROST : FL_SANDSTONE) + tier - 1;
-    return (cult > 0 ? FL_BOYAR : FL_GOTHIC) + tier - 1;
+    /* a new flavor every 10 chunks out: tier 1 from 4 chunks, tier 10 from 90 */
+    int tier = (int)(m / 10.0f) + 1;
+    if (tier > FLAVOR_TIERS) tier = FLAVOR_TIERS;
+    int axis = use_heat ? (heat < 0 ? 1 : 2) : (cult > 0 ? 3 : 4);
+    return flavor_first(axis) + tier - 1;
 }
 
 float world_difficulty(int cx, int cy, int cz) {

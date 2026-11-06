@@ -454,6 +454,76 @@ static void spr_grass(u8 *p, u64 seed, RGB base) {
     }
 }
 
+/* Basalt columns: tall narrow stones, joints staggered. */
+static void tex_basalt(u8 *p, u64 seed, RGB base, RGB mortar) {
+    for (int x = 0; x < N; x++) {
+        int col = x / 4, cx = x % 4;
+        int off = (int)(hash3f(seed, col, 0, 0, 31) * N);
+        for (int y = 0; y < N; y++) {
+            int yy = floormod(y + off, N);
+            bool joint = cx == 3 || yy == 0 || (yy == 9 && hash3f(seed, col, 1, 0, 32) < 0.6f);
+            float face = cx == 0 ? 1.15f : (cx == 2 ? 0.85f : 1.0f);
+            float n = 0.88f + 0.22f * hash3f(seed, col, yy / 9, 0, 33) + 0.08f * pn(seed, x, y);
+            put(p, x, y, joint ? rgb_scale(mortar, 0.7f + 0.2f * pn(seed, x, y)) : rgb_scale(base, band(n * face, 7)), 1);
+        }
+    }
+}
+
+/* Big blocks, some carved with a rune that glows in the accent colour. */
+static void tex_runes(u8 *p, u64 seed, RGB base, RGB mortar, RGB accent, int var) {
+    tex_bricks(p, seed, base, mortar, 8, 16, false);
+    if (var != 0 && var != 2) return;
+    static const char *GLYPHS[4] = { "..#..|.###.|..#..|.#.#.|#...#", "#...#|.#.#.|..#..|.#.#.|#...#",
+                                     "####.|#....|###..|#....|#....", ".###.|#...#|#.#.#|#...#|.###." };
+    const char *gl = GLYPHS[(int)(hash3f(seed, 0, 0, 0, 34) * 4) & 3];
+    int ox = 5 + (var == 2 ? 3 : 0) - 2, oy = 1;
+    for (int r = 0, c = 0; *gl; gl++) {
+        if (*gl == '|') { r++; c = 0; continue; }
+        if (*gl == '#') put(p, ox + c, oy + r, accent, 1);
+        c++;
+    }
+}
+
+/* Overlapping scales (or feathers, or shingles). */
+static void tex_scales(u8 *p, u64 seed, RGB base, RGB edge) {
+    for (int y = 0; y < N; y++)
+        for (int x = 0; x < N; x++) {
+            int row = y / 4, off = (row % 2) * 2;
+            int cx = floormod(x + off, 4), cy = y % 4;
+            float dx = cx - 1.5f, dy = cy - 0.0f;
+            float d = sqrtf(dx * dx + dy * dy);
+            bool rim = d > 2.6f && d < 3.4f;
+            float shade = 1.15f - 0.08f * cy;
+            float n = 0.9f + 0.2f * hash3f(seed, floordiv(x + off, 4), row, 0, 35);
+            put(p, x, y, rim ? rgb_scale(edge, 0.9f) : rgb_scale(base, band(n * shade, 7)), 1);
+        }
+}
+
+/* Small square tiles in two colours with thin joints. */
+static void tex_mosaic(u8 *p, u64 seed, RGB base, RGB accent, RGB mortar) {
+    for (int y = 0; y < N; y++)
+        for (int x = 0; x < N; x++) {
+            bool joint = x % 4 == 3 || y % 4 == 3;
+            int tx = x / 4, ty = y / 4;
+            bool acc = ((tx + ty) % 2 == 0 && (tx == 1 || tx == 2) && (ty == 1 || ty == 2)) ||
+                       hash3f(seed, tx, ty, 0, 36) < 0.08f;
+            float n = 0.88f + 0.2f * hash3f(seed, tx, ty, 0, 37) + 0.05f * pn(seed, x, y);
+            RGB c = joint ? rgb_scale(mortar, 0.8f) : rgb_scale(acc ? rgb_mix(base, accent, 0.75f) : base, band(n, 7));
+            put(p, x, y, c, 1);
+        }
+}
+
+/* An iron grate over darkness. */
+static void tex_grate(u8 *p, u64 seed, RGB metal) {
+    for (int y = 0; y < N; y++)
+        for (int x = 0; x < N; x++) {
+            bool bar = x % 4 == 0 || y % 4 == 0;
+            float n = 0.85f + 0.3f * pn(seed, x, y);
+            RGB c = bar ? rgb_scale(metal, band(n * (x % 4 == 0 && y % 4 == 0 ? 1.2f : 1.0f), 6)) : rgb_scale(metal, 0.12f + 0.06f * pn(seed, x, y));
+            put(p, x, y, c, 1);
+        }
+}
+
 void texgen_theme(int theme, u8 *out) {
     ThemeInfo t;
     theme_info(theme, &t);
@@ -476,6 +546,9 @@ void texgen_theme(int theme, u8 *out) {
                 case PAT_PLASTER: tex_plaster(p, seed, base, rgb(t.mat[B_ACCENT]), b == B_WALL ? v : 1); break;
                 case PAT_ICE: tex_ice(p, seed, base); break;
                 case PAT_MARBLE: tex_marble(p, seed, base); break;
+                case PAT_BASALT: tex_basalt(p, seed, base, mortar); break;
+                case PAT_RUNES: tex_runes(p, seed, base, mortar, rgb(t.mat[B_ACCENT]), b == B_WALL ? v : 1); break;
+                case PAT_SCALES: tex_scales(p, seed, base, mortar); break;
                 }
                 break;
             case B_FLOOR:
@@ -484,6 +557,8 @@ void texgen_theme(int theme, u8 *out) {
                 case FP_TILES: tex_tiles(p, seed, base, mortar); break;
                 case FP_PLANKS: tex_planks(p, seed, base, true); break;
                 case FP_DIRT: tex_dirt(p, seed, base); break;
+                case FP_MOSAIC: tex_mosaic(p, seed, base, rgb(t.mat[B_ACCENT]), mortar); break;
+                case FP_GRATE: tex_grate(p, seed, rgb(t.mat[B_METAL])); break;
                 }
                 break;
             case B_PILLAR: tex_pillar(p, seed, base); break;
@@ -496,7 +571,7 @@ void texgen_theme(int theme, u8 *out) {
             case B_CRYSTAL: tex_crystal(p, seed, base); break;
             case B_ICE: tex_ice(p, seed, base); break;
             case B_BRAZIER: tex_brazier(p, seed, base); break;
-            case B_GLASS: tex_glass(p, seed, base, theme_flavor(theme) == FL_GOTHIC || theme_stratum(theme) == ST_HEAVEN); break;
+            case B_GLASS: tex_glass(p, seed, base, FLAVORS[theme_flavor(theme)].stained || STRATA[theme_stratum(theme)].stained); break;
             case B_ROOF: tex_roof(p, seed, base); break;
             case B_SHRINE: tex_shrine(p, seed); break;
             case B_ORE: tex_ore(p, seed, rgb(t.mat[B_ROCK]), rgb(t.mat[B_ACCENT])); break;

@@ -506,7 +506,7 @@ void decorate(GenCtx *g, bool natural) {
                 if (!exposed) continue;
                 float h = hash3f(seed, x, y, z, 0xDEC0);
                 if (st->crystal > 0 && h < st->crystal * (natural ? 0.03f : 0.008f)) g->b[cidx(x, y, z)] = B_CRYSTAL;
-                else if (g->info.stratum == ST_MINES && b == B_ROCK && h > 0.95f) g->b[cidx(x, y, z)] = B_ORE;
+                else if (st->ore && b == B_ROCK && h > 0.95f) g->b[cidx(x, y, z)] = B_ORE;
             }
 
     for (int y = 1; y < CHUNK - 1; y++)
@@ -565,8 +565,7 @@ void decorate(GenCtx *g, bool natural) {
                 if (block_solid(below) && below != B_LAVA) {
                     float fung = fmaxf(st->fungus, natural ? 0.25f : 0.0f);
                     if (fung > 0 && h > 1.0f - 0.04f * fung) { g->b[cidx(x, y, z)] = B_FUNGUS; continue; }
-                    bool bony = fl->decor == B_BONES || g->info.stratum == ST_LIMBO || g->info.stratum == ST_INFERNO ||
-                                g->info.arch == ARCH_CELLS;
+                    bool bony = fl->decor == B_BONES || st->bony || g->info.arch == ARCH_CELLS;
                     if (bony && h < 0.02f) { g->b[cidx(x, y, z)] = B_BONES; continue; }
                 }
             }

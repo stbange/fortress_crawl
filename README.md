@@ -293,6 +293,22 @@ shows the touch controls from the start.
 Shrines (glowing rune stones) are respawn points: walk up to one to attune it. When you die,
 you return to the last attuned shrine and keep everything.
 
+## The world farther out
+
+The fortress changes every 10 chunks (320 m) in every direction, ten times each way. Up and
+down, the layer type changes: castle, spires, eagle aeries, cloud cloisters, hanging gardens,
+heaven, sun court, stormcrown, celestial orrery and the astral void above; mines, roots,
+ossuary, fungal deep, limbo, crystal abyss, inferno, iron hells, the maw and the world core
+below. North, south, east and west, the style changes: ten styles per direction, for example
+north from Frostbitten through Rime-iron, Aurora-lit and Starfrost to the Lifeless cold, or
+west from Gothic through Drowned, Coral, Abyssal and Leviathan to the Eldritch. The two
+combine (a *Phoenix Iron Hells*, a *Porcelain Heaven*). Danger keeps rising with distance.
+See [`docs/PLAN.md`](docs/PLAN.md) section 3 for the full tables.
+
+To look at a far place: `--pos x y z --fly --demo place` puts you on the most open floor of
+that chunk, for example `./build/fortress_crawl --pos 16 8 -3024 --fly --demo place` (90
+chunks north).
+
 ## Weapons
 
 Each of the 12 weapon types has its own model, the same in your hands, in other players'

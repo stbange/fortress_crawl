@@ -199,7 +199,8 @@ static void gen_arena(GenCtx *g) {
 }
 
 /* Open air: islands and bridges over a glass floor (the layer's floor: nobody falls
- * into the layer below). Heaven gets little temples, the void gets crystals. */
+ * into the layer below). What stands on the islands comes from the stratum: temples,
+ * crystals, gardens, the rings of an orrery or great nests. */
 static void gen_void(GenCtx *g) {
     memset(g->b, B_AIR, CHUNK_VOL);
     g_fill(g, 0, LAYER_FLOOR - 1, 0, CHUNK - 1, LAYER_FLOOR - 1, CHUNK - 1, B_GLASS);
@@ -213,16 +214,55 @@ static void gen_void(GenCtx *g) {
             g_fill(g, r->x0 + inset, r->y0 - 1 - d, r->z0 + inset, r->x1 - inset, r->y0 - 1 - d, r->z1 - inset,
                    d == 0 ? B_FLOOR : B_ROCK);
         }
-        if (g->info.stratum == ST_HEAVEN || g->info.stratum == ST_CLOUDS) {
+        int mx = (r->x0 + r->x1) / 2, mz = (r->z0 + r->z1) / 2;
+        switch (STRATA[g->info.stratum].isles) {
+        case ISLE_TEMPLE: {
             /* small open temple */
             int top = r->y0 + 5;
             int px[2] = { r->x0, r->x1 }, pz[2] = { r->z0, r->z1 };
             for (int a = 0; a < 2; a++)
                 for (int b = 0; b < 2; b++) g_fill(g, px[a], r->y0, pz[b], px[a], top - 1, pz[b], B_PILLAR);
             g_fill(g, r->x0, top, r->z0, r->x1, top, r->z1, B_ROOF);
-            g_set(g, (r->x0 + r->x1) / 2, top - 1, (r->z0 + r->z1) / 2, B_LANTERN);
-        } else if (g->info.stratum == ST_ASTRAL) {
+            g_set(g, mx, top - 1, mz, B_LANTERN);
+            break;
+        }
+        case ISLE_CRYSTAL:
             g_fill(g, r->x0 + 1, r->y0, r->z0 + 1, r->x0 + 1, r->y0 + rng_range(&g->rng, 1, 4), r->z0 + 1, B_CRYSTAL);
+            if (rng_chance(&g->rng, 0.5f)) g_fill(g, r->x1 - 1, r->y0, r->z1 - 1, r->x1 - 1, r->y0 + rng_range(&g->rng, 1, 3), r->z1 - 1, B_CRYSTAL);
+            break;
+        case ISLE_GARDEN:
+            /* grass, and a tree of roots with a crown of leaves (fungus glows like fruit) */
+            for (int z = r->z0; z <= r->z1; z++)
+                for (int x = r->x0; x <= r->x1; x++)
+                    if (hash3f(g->info.seed, x, r->y0, z, 0x6A2D) < 0.35f) g_set(g, x, r->y0, z, B_GRASS);
+            g_fill(g, mx, r->y0, mz, mx, r->y0 + 3, mz, B_WOOD);
+            g_fill(g, mx - 2, r->y0 + 4, mz - 2, mx + 2, r->y0 + 5, mz + 2, B_DIRT);
+            g_set(g, mx - 1, r->y0 + 3, mz, B_ROOTS);
+            g_set(g, mx + 1, r->y0 + 3, mz, B_FUNGUS);
+            break;
+        case ISLE_ORRERY: {
+            /* a ring of the accent metal round a crystal: one of the great clockwork's wheels */
+            int rad = MINI(r->x1 - r->x0, r->z1 - r->z0) / 2 - 1;
+            if (rad >= 2) {
+                for (int a = 0; a < 24; a++) {
+                    float an = a * 2.0f * 3.14159265f / 24.0f;
+                    g_set(g, mx + (int)lroundf(cosf(an) * rad), r->y0 + 2, mz + (int)lroundf(sinf(an) * rad), B_ACCENT);
+                }
+                for (int k = -1; k <= 1; k += 2) g_fill(g, mx + k * rad, r->y0, mz, mx + k * rad, r->y0 + 1, mz, B_METAL);
+            }
+            g_fill(g, mx, r->y0, mz, mx, r->y0 + 2, mz, B_CRYSTAL);
+            break;
+        }
+        case ISLE_NEST:
+            /* a ring of branches, bones in it */
+            for (int z = mz - 2; z <= mz + 2; z++)
+                for (int x = mx - 2; x <= mx + 2; x++) {
+                    int d = abs(x - mx) + abs(z - mz);
+                    if (d >= 3) g_set(g, x, r->y0, z, B_WOOD);
+                    else if (d == 1 && hash3f(g->info.seed, x, r->y0, z, 0x4E57) < 0.5f) g_set(g, x, r->y0, z, B_BONES);
+                }
+            break;
+        default: break;
         }
     }
     carve_shafts(g);

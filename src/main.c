@@ -148,6 +148,44 @@ static void demo_weapons(Game *g, PlayerSlot *p1) {
     for (int i = 0; i < MAX_MONSTERS; i++) g->mons[i].alive = false;
 }
 
+/* Moves player 1 to the most open floor spot of the chunk it is in and looks down the
+ * longest view (screenshots of far places: --pos lands anywhere, often in rock). */
+static void demo_place(Game *g, PlayerSlot *p1) {
+    int cx = floordiv((int)floorf(p1->pl.pos.x), CHUNK), cy = floordiv((int)floorf(p1->pl.pos.y), CHUNK),
+        cz = floordiv((int)floorf(p1->pl.pos.z), CHUNK);
+    Rng r = rng_make(0x91ACE ^ (u64)(cx * 73 + cz * 31 + cy));
+    float best = -1.0f;
+    vec3 best_p = p1->pl.pos;
+    for (int tries = 0; tries < 2000; tries++) {
+        int x = cx * CHUNK + rng_range(&r, 1, CHUNK - 2), y = cy * CHUNK + rng_range(&r, 1, CHUNK - 4),
+            z = cz * CHUNK + rng_range(&r, 1, CHUNK - 2);
+        if (game_solid(g, x, y - 1, z) != 1 || game_solid(g, x, y, z) != 0 || game_solid(g, x, y + 1, z) != 0 ||
+            game_solid(g, x, y + 2, z) != 0)
+            continue;
+        bool known;
+        Block under = chunkmap_block(&g->map, x, y - 1, z, &known);
+        if (under == B_LAVA || under == B_GLASS) continue;
+        float open = game_measure_openness(g, v3(x + 0.5f, y + 1.6f, z + 0.5f));
+        if (open > best) { best = open; best_p = v3(x + 0.5f, (float)y, z + 0.5f); }
+    }
+    if (best < 0) { SDL_Log("place demo: no open floor in chunk %d %d %d", cx, cy, cz); return; }
+    p1->pl.pos = best_p;
+    p1->pl.vel = v3(0, 0, 0);
+    p1->pl.fly = true; /* hold still, no weapon in view */
+    /* look down the longest free line */
+    vec3 eye = player_eye(&p1->pl);
+    float far = 0;
+    for (int a = 0; a < 32; a++) {
+        float yaw = a * 2.0f * PI_F / 32.0f;
+        vec3 d = v3(cosf(yaw), 0, sinf(yaw));
+        float t = phys_raycast(eye, d, 60.0f, game_solid, g);
+        if (t > far) { far = t; p1->pl.yaw = yaw; }
+    }
+    p1->pl.pitch = -0.08f;
+    for (int i = 0; i < MAX_MONSTERS; i++) g->mons[i].alive = false;
+    SDL_Log("place demo: chunk %d %d %d, openness %.1f, view %.1f m", cx, cy, cz, best, far);
+}
+
 /* Scripted setups for screenshots of the combat systems. */
 static void demo_setup(Game *g) {
     PlayerSlot *p1 = &g->players[0];
@@ -191,6 +229,7 @@ static void demo_setup(Game *g) {
         if (!strcmp(g_demo_kind, "spells")) { p1->show_skills = true; p1->menu_tab = TAB_SPELLS; return; }
     }
     if (!strcmp(g_demo_kind, "weapons")) { demo_weapons(g, p1); return; }
+    if (!strcmp(g_demo_kind, "place")) { demo_place(g, p1); return; }
     if (!strcmp(g_demo_kind, "impact")) {
         /* one tough monster right ahead, for the hit effects of the weapon in hand */
         for (int i = 0; i < MAX_MONSTERS; i++) g->mons[i].alive = false;

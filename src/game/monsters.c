@@ -18,10 +18,14 @@ const MonsterDef MONSTERS[MON_TYPE_COUNT] = {
 
 /* family weights per stratum: crawler, brute, wisp, horned, skeleton, slime, bat */
 static const float FAMILY[ST_COUNT][MON_TYPE_COUNT] = {
-    [ST_CORE] = { 2, 2, 3, 2, 1, 2, 1 }, [ST_INFERNO] = { 3, 2, 2, 3, 2, 1, 2 }, [ST_LIMBO] = { 3, 1, 3, 1, 3, 1, 2 },
-    [ST_ROOTS] = { 4, 1, 2, 1, 1, 3, 2 }, [ST_MINES] = { 3, 2, 1, 3, 2, 2, 3 }, [ST_DUNGEON] = { 4, 2, 2, 1, 3, 2, 2 },
-    [ST_CASTLE] = { 2, 3, 2, 2, 3, 1, 2 }, [ST_SPIRES] = { 1, 2, 4, 2, 2, 1, 3 }, [ST_CLOUDS] = { 1, 1, 5, 1, 1, 1, 3 },
-    [ST_HEAVEN] = { 1, 2, 4, 1, 1, 1, 2 }, [ST_ASTRAL] = { 1, 1, 5, 2, 1, 2, 2 },
+    [ST_CORE] = { 2, 2, 3, 2, 1, 2, 1 },     [ST_MAW] = { 4, 3, 1, 2, 0, 4, 1 },      [ST_IRONHELL] = { 1, 5, 1, 4, 3, 0, 1 },
+    [ST_INFERNO] = { 3, 2, 2, 3, 2, 1, 2 },  [ST_CRYSTAL] = { 2, 1, 4, 1, 1, 3, 2 },  [ST_LIMBO] = { 3, 1, 3, 1, 3, 1, 2 },
+    [ST_FUNGAL] = { 4, 1, 1, 1, 0, 5, 2 },   [ST_OSSUARY] = { 2, 1, 2, 1, 6, 1, 2 },  [ST_ROOTS] = { 4, 1, 2, 1, 1, 3, 2 },
+    [ST_MINES] = { 3, 2, 1, 3, 2, 2, 3 },    [ST_DUNGEON] = { 4, 2, 2, 1, 3, 2, 2 },
+    [ST_CASTLE] = { 2, 3, 2, 2, 3, 1, 2 },   [ST_SPIRES] = { 1, 2, 4, 2, 2, 1, 3 },   [ST_AERIE] = { 1, 1, 2, 2, 1, 0, 6 },
+    [ST_CLOUDS] = { 1, 1, 5, 1, 1, 1, 3 },   [ST_GARDENS] = { 3, 1, 3, 1, 0, 3, 2 },  [ST_HEAVEN] = { 1, 2, 4, 1, 1, 1, 2 },
+    [ST_SUNCOURT] = { 1, 3, 4, 3, 1, 0, 1 }, [ST_STORM] = { 0, 2, 6, 1, 1, 0, 4 },    [ST_ORRERY] = { 1, 2, 5, 2, 2, 1, 1 },
+    [ST_ASTRAL] = { 1, 1, 5, 2, 1, 2, 2 },
 };
 
 /* ---------- spawned-chunk set ---------- */

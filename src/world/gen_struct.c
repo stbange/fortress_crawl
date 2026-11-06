@@ -342,7 +342,7 @@ static void gen_chasm(GenCtx *g) {
     int X1 = X0 + s->sx * CHUNK - 1, Z1 = Z0 + s->sz * CHUNK - 1, Y1 = Y0 + s->sy * CHUNK - 1;
     Rect r = { X0 + 3, Z0 + 3, X1 - 3, Z1 - 3 };
     int bottom = s->floor_y, top = Y1 - 3;
-    bool fiery = g->info.stratum == ST_INFERNO || g->info.stratum == ST_CORE || g->info.flavor == FL_EMBER;
+    bool fiery = STRATA[g->info.stratum].fiery || FLAVORS[g->info.flavor].fluid == B_LAVA;
 
     for (int ly = 0; ly < CHUNK; ly++)
         for (int lz = 0; lz < CHUNK; lz++)

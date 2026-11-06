@@ -206,10 +206,14 @@ typedef struct Loop {
 } Loop;
 
 static const int STRATUM_LOOP[ST_COUNT] = {
-    [ST_CORE] = SFX_LOOP_CORE, [ST_INFERNO] = SFX_LOOP_INFERNO, [ST_LIMBO] = SFX_LOOP_LIMBO,
-    [ST_ROOTS] = SFX_LOOP_ROOTS, [ST_MINES] = SFX_LOOP_MINES, [ST_DUNGEON] = SFX_LOOP_DUNGEON,
-    [ST_CASTLE] = SFX_LOOP_CASTLE, [ST_SPIRES] = SFX_LOOP_SPIRES, [ST_CLOUDS] = SFX_LOOP_CLOUDS,
-    [ST_HEAVEN] = SFX_LOOP_HEAVEN, [ST_ASTRAL] = SFX_LOOP_ASTRAL,
+    [ST_CORE] = SFX_LOOP_CORE, [ST_MAW] = SFX_LOOP_INFERNO, [ST_IRONHELL] = SFX_LOOP_INFERNO,
+    [ST_INFERNO] = SFX_LOOP_INFERNO, [ST_CRYSTAL] = SFX_LOOP_ASTRAL, [ST_LIMBO] = SFX_LOOP_LIMBO,
+    [ST_FUNGAL] = SFX_LOOP_ROOTS, [ST_OSSUARY] = SFX_LOOP_LIMBO, [ST_ROOTS] = SFX_LOOP_ROOTS,
+    [ST_MINES] = SFX_LOOP_MINES, [ST_DUNGEON] = SFX_LOOP_DUNGEON,
+    [ST_CASTLE] = SFX_LOOP_CASTLE, [ST_SPIRES] = SFX_LOOP_SPIRES, [ST_AERIE] = SFX_LOOP_SPIRES,
+    [ST_CLOUDS] = SFX_LOOP_CLOUDS, [ST_GARDENS] = SFX_LOOP_CLOUDS, [ST_HEAVEN] = SFX_LOOP_HEAVEN,
+    [ST_SUNCOURT] = SFX_LOOP_HEAVEN, [ST_STORM] = SFX_LOOP_SPIRES, [ST_ORRERY] = SFX_LOOP_ASTRAL,
+    [ST_ASTRAL] = SFX_LOOP_ASTRAL,
 };
 
 enum { LP_FIRE, LP_LAVA, LP_WATER, LP_FLAMES, LP_POINT_COUNT };
@@ -315,11 +319,11 @@ static void stingers(Game *g, float dt) {
     int n = 7;
     if (listener_outside) set = OUT, n = 3;
     else switch (listener_stratum) {
-    case ST_MINES: case ST_ROOTS: set = MINES; n = 4; break;
-    case ST_CORE: case ST_INFERNO: set = HELL; n = 4; break;
-    case ST_LIMBO: set = GHOST; n = 4; break;
-    case ST_CASTLE: case ST_SPIRES: set = HIGH; n = 4; break;
-    case ST_CLOUDS: case ST_HEAVEN: case ST_ASTRAL: set = SKY; n = 2; break;
+    case ST_MINES: case ST_ROOTS: case ST_FUNGAL: case ST_CRYSTAL: set = MINES; n = 4; break;
+    case ST_CORE: case ST_INFERNO: case ST_IRONHELL: case ST_MAW: set = HELL; n = 4; break;
+    case ST_LIMBO: case ST_OSSUARY: set = GHOST; n = 4; break;
+    case ST_CASTLE: case ST_SPIRES: case ST_AERIE: case ST_STORM: set = HIGH; n = 4; break;
+    case ST_CLOUDS: case ST_GARDENS: case ST_HEAVEN: case ST_SUNCOURT: case ST_ORRERY: case ST_ASTRAL: set = SKY; n = 2; break;
     default: break;
     }
     int id = set[(int)(frand() * n) % n];

@@ -24,7 +24,7 @@ static Col place_colour(const ChunkInfo *ci) {
     const FlavorDef *f = &FLAVORS[ci->flavor];
     Col c = f->wall;
     /* darker for deep strata, lighter for high ones */
-    float k = 0.6f + 0.06f * (float)ci->stratum;
+    float k = 0.6f + 0.6f * (float)ci->stratum / (float)(ST_COUNT - 1);
     c.r = (u8)clampf(c.r * k, 0, 255);
     c.g = (u8)clampf(c.g * k, 0, 255);
     c.b = (u8)clampf(c.b * k, 0, 255);
