@@ -231,6 +231,7 @@ last and shows what is saved; *New characters* (press twice) deletes the save of
 | F5 / F6 | full-bright (inspect the generator) / player torch |
 | F7 / F8 | invert mouse Y / X |
 | F9 | sound on / off (`--mute` starts without sound) |
+| F10 | music on / off |
 | - / = | mouse sensitivity down / up |
 | F12 | save `screenshot.bmp` (desktop only) |
 | Esc | release the mouse (press again to quit) |
@@ -364,6 +365,14 @@ nothing extra. The game mixes them itself on an SDL3 audio stream (`src/engine/a
   sound from somewhere in the dark (drips, chains, distant screams, a bell) that fits the place.
 - **you**: footsteps by floor (stone, dirt, wood, water, ice), jumps, landings, pain, death,
   level-ups, potions, pickups, chests, shrines, menus, traps and the vault puzzles.
+
+**Music**: five instrumental pieces of 2-3 minutes made with the ElevenLabs music API
+(`assets/music`, about 32 MB): *The Gate* on the start screen and outside, *The Deep* and
+*The Heights* now and then while exploring below or above (with long silences between, so
+the ambience carries the rest), *Battle* when monsters close in and *The Champion* when a
+named enemy is near. They crossfade as the situation changes. Their descriptions are in
+`tools/music_list.mjs`; `npm run music` makes missing pieces (`-- --only=battle --force`
+makes one again).
 
 Sounds are positional: they fade with distance and are panned for the nearest player. The
 list of sounds with their prompts is `tools/sfx_list.mjs`; to change or add sounds, edit it

@@ -2,6 +2,7 @@
 #define FC_SFX_H
 
 #include "core/fmath.h"
+#include "game/music_ids.h"
 #include "game/sfx_ids.h"
 
 /* Game sounds (sfx.c). The files are made by tools/gen_sfx.mjs with ElevenLabs and live in
@@ -33,5 +34,12 @@ int sfx_element_impact(int element);
 
 void sfx_toggle_mute(void);
 bool sfx_muted(void);
+
+/* Music (assets/music, made by tools/gen_music.mjs): the gate theme on the start screen and
+ * outside, battle and champion music when fighting, and now and then, with long silences
+ * between, the deep or the heights while exploring. menu: the start screen is showing. */
+void music_update(struct Game *g, float dt, bool menu);
+void music_toggle(void);
+bool music_on(void);
 
 #endif

@@ -91,7 +91,8 @@ add_executable(fortress_crawl
 target_link_libraries(fortress_crawl PRIVATE fcworld SDL3::SDL3)
 target_compile_options(fortress_crawl PRIVATE ${FC_WARN})
 # Sound effects (made by tools/gen_sfx.mjs): found next to the executable in sfx/, else in the source tree.
-target_compile_definitions(fortress_crawl PRIVATE FC_SFX_DIR="${CMAKE_SOURCE_DIR}/assets/sfx")
+target_compile_definitions(fortress_crawl PRIVATE FC_SFX_DIR="${CMAKE_SOURCE_DIR}/assets/sfx"
+                                                  FC_MUSIC_DIR="${CMAKE_SOURCE_DIR}/assets/music")
 
 if(EMSCRIPTEN)
   # Web build: WebGL 2, single thread, page from web/shell.html. Output: index.html + .js + .wasm
@@ -100,7 +101,8 @@ if(EMSCRIPTEN)
     -sMIN_WEBGL_VERSION=2 -sMAX_WEBGL_VERSION=2 -sGL_ENABLE_GET_PROC_ADDRESS=1
     -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=268435456 -sSTACK_SIZE=1048576
     -sENVIRONMENT=web --shell-file ${CMAKE_SOURCE_DIR}/web/shell.html
-    --preload-file ${CMAKE_SOURCE_DIR}/assets/sfx@/sfx)
+    --preload-file ${CMAKE_SOURCE_DIR}/assets/sfx@/sfx
+    --preload-file ${CMAKE_SOURCE_DIR}/assets/music@/music)
   set_property(TARGET fortress_crawl APPEND PROPERTY LINK_DEPENDS ${CMAKE_SOURCE_DIR}/web/shell.html)
 endif()
 

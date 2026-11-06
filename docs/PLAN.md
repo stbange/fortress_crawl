@@ -390,7 +390,8 @@ Known gaps:
 - Saves do not keep killed monsters, dropped loot lying around or spell effects; a world
   you return to is repopulated.
 - A few chunks still contain an opening that is only reachable from outside the chunk.
-- No music yet, only sound effects and ambience. Sounds are not muffled behind walls.
+- Music is five pieces stored as WAV (about 32 MB, which makes the web version slow to
+  load); a compressed format needs a decoder first. Sounds are not muffled behind walls.
 - Split screen draws the world once per view, so four views cost about four times the GPU
   and draw-call time of one. Gamepad buttons cannot be remapped yet.
 - Touch controls are tested in an emulated phone browser only; feel and real-device speed

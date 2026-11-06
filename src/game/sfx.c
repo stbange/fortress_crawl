@@ -18,6 +18,8 @@ static float frand(void) {
     return (float)(rs >> 40) / (float)(1ULL << 24);
 }
 
+static void music_load(void);
+
 /* ---------- loading ---------- */
 
 static bool try_dir(const char *dir) {
@@ -63,6 +65,7 @@ void sfx_init(Game *g) {
     (void)base;
     (void)dir;
     if (!loaded) SDL_Log("Audio: no sound files found (run `npm run sfx` to make them)");
+    music_load();
 }
 
 void sfx_shutdown(void) { audio_shutdown(); }
@@ -426,4 +429,122 @@ void sfx_update(Game *g, float dt) {
         loop_drive(&point[k], dt, 4.0f);
     }
     stingers(g, dt);
+}
+
+/* ---------- music ---------- */
+
+#define MUSIC_VOL 0.42f
+
+typedef struct Track {
+    int sample;   /* -1: missing */
+    unsigned voice;
+    float vol, want;
+} Track;
+
+static Track tracks[MUS_COUNT];
+static bool music_ready, music_enabled = true;
+static float explore_gap = 20.0f; /* silence before the exploration music (again) */
+static float battle_hold;
+
+static bool music_try_dir(const char *dir) {
+    int n = 0;
+    for (int i = 0; i < MUS_COUNT; i++) {
+        char path[1200];
+        snprintf(path, sizeof path, "%s%s.wav", dir, MUSIC_NAMES[i]);
+        tracks[i].sample = audio_load(path);
+        n += tracks[i].sample >= 0;
+    }
+    if (n) SDL_Log("Audio: %d music pieces from %s", n, dir);
+    return n > 0;
+}
+
+static void music_load(void) {
+    for (int i = 0; i < MUS_COUNT; i++) tracks[i] = (Track){ -1, 0, 0, 0 };
+    if (!audio_ready()) return;
+#ifdef __EMSCRIPTEN__
+    music_ready = music_try_dir("/music/");
+#else
+    char dir[1024];
+    const char *base = SDL_GetBasePath();
+    if (base) snprintf(dir, sizeof dir, "%smusic/", base);
+    music_ready = (base && music_try_dir(dir)) || music_try_dir("assets/music/");
+#ifdef FC_MUSIC_DIR
+    if (!music_ready) music_ready = music_try_dir(FC_MUSIC_DIR "/");
+#endif
+#endif
+    if (!music_ready) SDL_Log("Audio: no music found (run `npm run music` to make it)");
+}
+
+void music_toggle(void) { music_enabled = !music_enabled; }
+bool music_on(void) { return music_enabled; }
+
+/* What the players face: a named enemy close by, or monsters on the hunt. */
+static void music_threat(Game *g, bool *champion, bool *battle) {
+    *champion = *battle = false;
+    for (int i = 0; i < MAX_MONSTERS; i++) {
+        const Monster *m = &g->mons[i];
+        if (!m->alive || !m->awake) continue;
+        for (int k = 0; k < MAX_PLAYERS; k++) {
+            const PlayerSlot *ps = &g->players[k];
+            if (!ps->active || ps->st.dead) continue;
+            float d = v3_len(v3_sub(m->pos, ps->pl.pos));
+            if (m->named_kind && d < 35.0f) *champion = true;
+            if (d < 18.0f) *battle = true;
+        }
+    }
+}
+
+void music_update(Game *g, float dt, bool menu) {
+    if (!music_ready) return;
+    int want = -1;
+    bool looping = true;
+    if (menu) want = MUS_GATE;
+    else {
+        bool champion, battle;
+        music_threat(g, &champion, &battle);
+        if (battle || champion) battle_hold = 6.0f; /* stays a little after the last foe */
+        else battle_hold -= dt;
+        listener_place(g);
+        if (champion) want = MUS_CHAMPION;
+        else if (battle_hold > 0) want = MUS_BATTLE;
+        else if (listener_outside) want = MUS_GATE;
+        else {
+            /* exploring: a piece now and then, silence between */
+            int piece = listener_stratum > ST_DUNGEON ? MUS_HEIGHTS : MUS_DEEP;
+            int other = piece == MUS_HEIGHTS ? MUS_DEEP : MUS_HEIGHTS;
+            looping = false;
+            if (tracks[piece].voice || tracks[other].voice) want = piece; /* one is on: carry on (or cross over) */
+            else if ((explore_gap -= dt) <= 0) {
+                want = piece;
+                explore_gap = 70.0f + frand() * 80.0f;
+            }
+        }
+    }
+    if (!music_enabled) want = -1;
+    for (int i = 0; i < MUS_COUNT; i++) {
+        Track *t = &tracks[i];
+        if (t->sample < 0) continue;
+        /* a piece that played to its end: done until the next gap is over */
+        if (t->voice && !audio_playing(t->voice)) { t->voice = 0; t->vol = 0; }
+        t->want = i == want ? MUSIC_VOL * (i == MUS_BATTLE || i == MUS_CHAMPION ? 1.15f : 1.0f) : 0.0f;
+        if (t->want > 0 && !t->voice) {
+            bool loop = looping || i == MUS_GATE;
+            t->voice = audio_play(t->sample, 0.01f, 0.0f, 1.0f, loop);
+            t->vol = 0.01f;
+            if (log_plays) SDL_Log("music %6.2f start %s", now, MUSIC_NAMES[i]);
+        }
+        /* fade: fights come in fast, everything else drifts */
+        float rate = t->want > t->vol ? (i == MUS_BATTLE || i == MUS_CHAMPION ? 0.8f : 0.15f) : 0.12f;
+        if (t->vol < t->want) t->vol = fminf(t->want, t->vol + rate * dt);
+        else t->vol = fmaxf(t->want, t->vol - rate * dt);
+        if (t->voice) {
+            if (t->vol <= 0.0005f && t->want <= 0) {
+                if (log_plays) SDL_Log("music %6.2f stop %s", now, MUSIC_NAMES[i]);
+                audio_stop(t->voice);
+                t->voice = 0;
+                /* a fight interrupted the exploration music: it comes back after a while */
+                if (i == MUS_DEEP || i == MUS_HEIGHTS) explore_gap = fminf(explore_gap, 25.0f);
+            } else audio_set(t->voice, t->vol, 0.0f);
+        }
+    }
 }

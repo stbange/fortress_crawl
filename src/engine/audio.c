@@ -152,7 +152,9 @@ unsigned audio_play(int sample, float vol, float pan, float pitch, bool loop) {
     float quiet = vol;
     for (int i = 0; i < MAX_VOICES; i++) {
         if (!voices[i].id) { best = i; break; }
-        if (!voices[i].loop && voices[i].want_vol < quiet) { quiet = voices[i].want_vol; best = i; }
+        /* never a loop or a long piece (music) */
+        const Sample *vs = &samples[voices[i].sample];
+        if (!voices[i].loop && vs->frames < vs->rate * 20 && voices[i].want_vol < quiet) { quiet = voices[i].want_vol; best = i; }
     }
     unsigned id = 0;
     if (best >= 0) {

@@ -461,6 +461,7 @@ void game_event(Game *g, const SDL_Event *e) {
         case SDLK_3: ps->st.weapon = WPN_STAFF; break;
         case SDLK_F1: g->hud = !g->hud; break;
         case SDLK_F9: sfx_toggle_mute(); game_banner(ps, sfx_muted() ? "SOUND OFF (F9)" : "SOUND ON (F9)"); break;
+        case SDLK_F10: music_toggle(); game_banner(ps, music_on() ? "MUSIC ON (F10)" : "MUSIC OFF (F10)"); break;
         case SDLK_F2:
             g->res_mode = (g->res_mode + 1) % 3;
             g->r.set.low_w = RES_MODES[g->res_mode][0];

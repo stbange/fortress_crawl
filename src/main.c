@@ -778,6 +778,7 @@ static void menu_frame(App *a, float frame_dt) {
         else menu_event(&a->menu, g, &e);
     }
     menu_draw(&a->menu, g, frame_dt);
+    music_update(g, frame_dt, true);
     if (g->opt.shot) {
         /* screenshot of the start screen */
         save_screenshot(g, g->opt.shot);
@@ -847,6 +848,7 @@ static void frame(void *user) {
     for (int i = 0; i < MAX_PLAYERS; i++)
         if (g->players[i].active) game_update_atmosphere(g, &g->players[i], frame_dt);
     sfx_update(g, frame_dt);
+    music_update(g, frame_dt, false);
     game_render(g);
     if (g->opt.shot) screenshot_step(a, frame_dt);
     SDL_GL_SwapWindow(a->win);

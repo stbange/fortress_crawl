@@ -6,7 +6,8 @@
     "test": "tests"
   },
   "scripts": {
-    "sfx": "node tools/gen_sfx.mjs"
+    "sfx": "node tools/gen_sfx.mjs",
+    "music": "node tools/gen_music.mjs"
   },
   "repository": {
     "type": "git",
