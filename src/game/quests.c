@@ -223,6 +223,7 @@ static Monster *spawn_named(Game *g, const Named *n, u64 chunk_key) {
     m->named_kind = (u8)(n->kind + 1);
     snprintf(m->name, sizeof m->name, "%s", n->name);
     upper(m->name);
+    m->grade = GRADE_BOSS; /* story targets and lords look like their kind's bosses */
     return m;
 }
 
@@ -238,6 +239,7 @@ Monster *story_spawn_named_at(Game *g, const Named *n, vec3 pos) {
     m->named_kind = (u8)(n->kind + 1);
     snprintf(m->name, sizeof m->name, "%s", n->name);
     upper(m->name);
+    m->grade = GRADE_BOSS;
     return m;
 }
 
@@ -576,7 +578,7 @@ void story_draw_plates(Game *g, PlayerSlot *viewer, int W, int H) {
     int n = 0;
     for (int i = 0; i < MAX_MONSTERS && n < 16; i++) {
         Monster *mo = &g->mons[i];
-        if (!mo->alive || !mo->named_kind) continue;
+        if (!mo->alive || (!mo->named_kind && mo->grade != GRADE_BOSS) || mo->hidden) continue;
         vec3 top = v3_add(mo->pos, v3(0, MONSTERS[mo->type].h * mo->scale + 0.5f, 0));
         float d = v3_len(v3_sub(top, eye));
         if (d > 32.0f || !phys_line_of_sight(eye, v3_sub(top, v3(0, 0.6f, 0)), game_solid, g)) continue;

@@ -176,6 +176,22 @@ static void projectile_hit_monster(Game *g, Projectile *p, Monster *m, int index
     else p->alive = false;
 }
 
+/* A troll's boulder lands: it hurts everyone near, more the closer. */
+static void boulder_burst(Game *g, Projectile *p, vec3 at) {
+    for (int k = 0; k < MAX_PLAYERS; k++) {
+        PlayerSlot *ps = &g->players[k];
+        if (!ps->active || ps->st.dead) continue;
+        float d = v3_len(v3_sub(v3_add(ps->pl.pos, v3(0, 0.6f, 0)), at));
+        if (d > p->radius) continue;
+        game_hurt_player(g, ps, p->dmg * (1.0f - 0.5f * d / p->radius), at);
+        if (p->element != EL_NONE) player_element_hit(g, ps, p->element, p->dmg * 0.5f);
+    }
+    particles_burst(g, at, v3(0.45f, 0.4f, 0.34f), 24, 6.0f, 0.12f, false);
+    particles_burst(g, at, v3(0.6f, 0.55f, 0.48f), 10, 3.0f, 0.2f, false);
+    sfx_at(g, SFX_HIT_BLUNT, at, 1.0f);
+    sfx_at(g, SFX_AMB_ROCKS, at, 0.8f);
+}
+
 static void update_projectiles(Game *g, float dt) {
     for (int i = 0; i < MAX_PROJECTILES; i++) {
         Projectile *p = &g->proj[i];
@@ -183,6 +199,7 @@ static void update_projectiles(Game *g, float dt) {
         p->life -= dt;
         if (p->life <= 0) { p->alive = false; continue; }
         if (p->kind == PJ_ARROW || p->kind == PJ_ENEMY_ARROW) p->vel.y -= 5.0f * dt;
+        else if (p->kind == PJ_BOULDER) p->vel.y -= 14.0f * dt;
         p->age += dt;
         float len = v3_len(p->vel) * dt;
         int steps = (int)ceilf(len / 0.25f);
@@ -197,6 +214,7 @@ static void update_projectiles(Game *g, float dt) {
                 case PJ_BOLT: if (!p->explode) sfx_at(g, SFX_BOLT_HIT, back, 0.8f); break;
                 case PJ_SPELL: sfx_at(g, sfx_element_impact(p->element), back, 0.7f); break;
                 case PJ_ENEMY_FIRE: sfx_at(g, SFX_ENEMY_FIRE_HIT, back, 0.8f); break;
+                case PJ_BOULDER: boulder_burst(g, p, back); break;
                 default: break;
                 }
                 if (p->kind == PJ_BOLT && p->explode) explode(g, p->owner, back, p->dmg * 0.6f, 3.0f, NULL);
@@ -204,13 +222,18 @@ static void update_projectiles(Game *g, float dt) {
                 if (p->kind != PJ_ARROW && p->kind != PJ_ENEMY_ARROW) flash_add(g, back, proj_color(p), 5.0f, 0.15f);
                 break;
             }
-            if (p->kind == PJ_ENEMY_FIRE || p->kind == PJ_ENEMY_ARROW) {
+            if (p->kind == PJ_ENEMY_FIRE || p->kind == PJ_ENEMY_ARROW || p->kind == PJ_BOULDER) {
                 for (int k = 0; k < MAX_PLAYERS && p->alive; k++) {
                     PlayerSlot *ps = &g->players[k];
                     vec3 f = ps->pl.pos;
                     if (!ps->active || ps->st.dead) continue;
                     if (fabsf(p->pos.x - f.x) < 0.45f && fabsf(p->pos.z - f.z) < 0.45f && p->pos.y > f.y &&
                         p->pos.y < f.y + player_height(ps->pl.stance) + 0.1f) {
+                        if (p->kind == PJ_BOULDER) {
+                            boulder_burst(g, p, p->pos);
+                            p->alive = false;
+                            continue;
+                        }
                         sfx_at(g, p->kind == PJ_ENEMY_ARROW ? SFX_HIT_ARROW : SFX_ENEMY_FIRE_HIT, p->pos, 1.0f);
                         game_hurt_player(g, ps, p->dmg, v3_sub(p->pos, step));
                         if (p->element != EL_NONE) player_element_hit(g, ps, p->element, p->dmg);
@@ -223,7 +246,7 @@ static void update_projectiles(Game *g, float dt) {
             if (p->kind == PJ_SPELL && p->form == SF_ORB) continue; /* orbs hurt by touch, in spells_update */
             for (int k = 0; k < MAX_MONSTERS; k++) {
                 Monster *m = &g->mons[k];
-                if (!m->alive || k == p->last_hit) continue;
+                if (!m->alive || m->hidden || k == p->last_hit) continue;
                 float hw = MONSTERS[m->type].hw * m->scale + 0.15f, h = MONSTERS[m->type].h * m->scale;
                 if (fabsf(p->pos.x - m->pos.x) < hw && fabsf(p->pos.z - m->pos.z) < hw && p->pos.y > m->pos.y - 0.1f &&
                     p->pos.y < m->pos.y + h + 0.1f) {
@@ -234,7 +257,7 @@ static void update_projectiles(Game *g, float dt) {
         }
         /* trailing sparks for spells */
         bool magic_arrow = p->kind == PJ_ARROW && (p->element != EL_NONE || p->rarity > RAR_COMMON);
-        if (p->alive && (magic_arrow || (p->kind != PJ_ARROW && p->kind != PJ_ENEMY_ARROW)) && g->nparts < MAX_PARTICLES - 1 &&
+        if (p->alive && (magic_arrow || (p->kind != PJ_ARROW && p->kind != PJ_ENEMY_ARROW && p->kind != PJ_BOULDER)) && g->nparts < MAX_PARTICLES - 1 &&
             game_nearest_player(g, p->pos, 40.0f)) {
             Particle *q = &g->parts[g->nparts++];
             q->pos = p->pos;
@@ -267,7 +290,7 @@ static void sword_strike(Game *g, PlayerSlot *ps, bool whirl) {
     int hits = 0;
     for (int i = 0; i < MAX_MONSTERS; i++) {
         Monster *m = &g->mons[i];
-        if (!m->alive) continue;
+        if (!m->alive || m->hidden) continue;
         vec3 c = v3_add(m->pos, v3(0, MONSTERS[m->type].h * m->scale * 0.5f, 0));
         vec3 d = v3_sub(c, eye);
         float dy = d.y;
@@ -491,6 +514,13 @@ void combat_draw_world(Game *g, vec3 eye) {
     for (int i = 0; i < MAX_PROJECTILES; i++) {
         Projectile *p = &g->proj[i];
         if (!p->alive) continue;
+        if (p->kind == PJ_BOULDER) {
+            vec3 light = game_light_at(g, p->pos);
+            vec3 rock = v3(0.45f * light.x + 0.05f, 0.4f * light.y + 0.05f, 0.34f * light.z + 0.05f);
+            batch3d_box(p->pos, v3(0.3f, 0.26f, 0.3f), p->age * 5.0f, rock, false);
+            batch3d_box(v3_add(p->pos, v3(0.1f, 0.12f, 0)), v3(0.18f, 0.16f, 0.2f), -p->age * 4.0f, v3_scale(rock, 0.8f), false);
+            continue;
+        }
         if (p->kind == PJ_ARROW || p->kind == PJ_ENEMY_ARROW) {
             vec3 d = v3_norm(p->vel);
             vec3 light = game_light_at(g, p->pos);
@@ -555,7 +585,7 @@ void combat_collect_lights(Game *g, PlayerSlot *viewer, SceneParams *sp) {
     for (int pass = 0; pass < 2 && sp->ndl < MAX_DLIGHTS; pass++)
         for (int i = 0; i < MAX_PROJECTILES && sp->ndl < MAX_DLIGHTS; i++) {
             Projectile *p = &g->proj[i];
-            if (!p->alive || p->kind == PJ_ENEMY_ARROW) continue;
+            if (!p->alive || p->kind == PJ_ENEMY_ARROW || p->kind == PJ_BOULDER) continue;
             if (p->kind == PJ_ARROW && p->element == EL_NONE) continue; /* only elemental arrows give light */
             if (p->kind == PJ_SPELL && p->form == SF_BREATH && (i & 3)) continue; /* breath: a few lights are enough */
             float d = v3_len(v3_sub(p->pos, eye));

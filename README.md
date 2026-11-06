@@ -305,6 +305,24 @@ north from Frostbitten through Rime-iron, Aurora-lit and Starfrost to the Lifele
 west from Gothic through Drowned, Coral, Abyssal and Leviathan to the Eldritch. The two
 combine (a *Phoenix Iron Hells*, a *Porcelain Heaven*). Danger keeps rising with distance.
 
+**Monsters**: 20 kinds, each with its own look and way of fighting. Crawlers swarm, brutes
+wind up heavy blows, wisps and skeletons shoot from afar, horned beasts charge, slimes hop
+and split, bats dive at your face, spiders leap, wraiths vanish and reappear behind you,
+golems stomp the ground around them, shamans heal their allies, bloaters walk up and burst,
+floating eyes charge a beam you can step out of, knights block blows from the front (go
+round them), worms burrow and burst up under you, mimics are chests until you are next to
+one, necromancers raise the dead, harpies circle high and dive, hounds circle in packs and
+lunge from the side, and trolls throw boulders. Which kinds live where depends on the
+stratum; the tougher ones only appear farther from the gate.
+
+Every kind comes as a normal monster, an **elite** (bigger, armoured shoulders, spines,
+burning eyes) or a **boss** (twice the size, a crown, a burning sign and circling runes, a
+title and a health bar, harder below half health, always a good weapon). Bosses hold great
+halls and caverns now and then, more often farther out; story targets and domain lords are
+bosses too. Their colours come from where they live: the body takes some of the local rock,
+armour and bone the local metal, eyes and markings the region's element or the torch light.
+`--demo portrait --mon n --grade 0|1|2` shows one up close, `--demo duel` fights it.
+
 **Enemies** take on their region. From the second 10-chunk step out, monsters carry its
 element: frost in the north (their hits chill and slow you), fire in the south (they set
 you alight), lightning in the east (a jolt), poison in the west, holy light above (a smite)

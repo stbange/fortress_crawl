@@ -74,6 +74,7 @@ add_executable(fortress_crawl
   src/game/skills.c
   src/game/game.c
   src/game/monsters.c
+  src/game/monster_draw.c
   src/game/combat.c
   src/game/explore.c
   src/game/touch.c

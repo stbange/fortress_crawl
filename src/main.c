@@ -21,6 +21,8 @@
 static const char *g_demo_kind;
 /* --weapon base[:rarity[:affix[:affix]]], e.g. greatsword:epic:fire:keen (screenshots of weapons) */
 static const char *g_demo_weapon;
+static int g_demo_grade; /* --grade 0|1|2: the bestiary demo shows normal, elite or boss monsters */
+static int g_demo_mon = -1; /* --mon n: the portrait demo shows this kind */
 
 static bool parse_args(Options *o, int argc, char **argv) {
     memset(o, 0, sizeof *o);
@@ -71,6 +73,8 @@ static bool parse_args(Options *o, int argc, char **argv) {
         else if (!strcmp(a, "--persist")) o->persist = true;
         else if (!strcmp(a, "--mute")) o->mute = true;
         else if (!strcmp(a, "--weapon") && i + 1 < argc) g_demo_weapon = argv[++i];
+        else if (!strcmp(a, "--grade") && i + 1 < argc) g_demo_grade = atoi(argv[++i]);
+        else if (!strcmp(a, "--mon") && i + 1 < argc) g_demo_mon = atoi(argv[++i]);
         else if (!strcmp(a, "--sound")) o->sound = true;
         else if (!strcmp(a, "--chapter") && i + 1 < argc) o->demo_chapter = atoi(argv[++i]) - 1;
         else {
@@ -351,15 +355,40 @@ static void demo_setup(Game *g) {
         }
         return;
     }
+    if (!strcmp(g_demo_kind, "portrait") || !strcmp(g_demo_kind, "duel")) {
+        /* one monster (--mon n, --grade g) standing in front, at a distance that fits its size */
+        for (int i = 0; i < MAX_MONSTERS; i++) g->mons[i].alive = false;
+        int t = g_demo_mon >= 0 && g_demo_mon < MON_TYPE_COUNT ? g_demo_mon : 0;
+        vec3 f = v3(cosf(p1->pl.yaw), 0, sinf(p1->pl.yaw));
+        float size = MONSTERS[t].h * (g_demo_grade == 2 ? 1.9f : g_demo_grade == 1 ? 1.35f : 1.0f);
+        vec3 at = v3_add(p1->pl.pos, v3_scale(f, 1.6f + size * 1.25f));
+        if (MONSTERS[t].flies) at.y += 0.6f;
+        Monster *m = monster_spawn(g, t, at, 3, g_demo_grade >= 1, v3(0.5f, 0.45f, 0.4f), 777);
+        if (m && g_demo_grade == 2) monster_make_boss(g, m);
+        if (m) {
+            m->yaw = p1->pl.yaw + PI_F + 0.5f; /* a little turned, to show its side */
+            m->awake = t == MON_MIMIC && g_demo_grade > 0; /* show the mimic both ways */
+        }
+        p1->pl.pitch = -atanf((1.6f - size * 0.45f) / (1.6f + size * 1.25f));
+        bool duel = !strcmp(g_demo_kind, "duel");
+        p1->pl.fly = !duel;
+        g->freeze_monsters = !duel;
+        if (duel && m) { m->awake = t != MON_MIMIC; m->state = MS_CHASE; p1->st.hp = p1->st.maxhp = 5000; } /* a fight to watch */
+        return;
+    }
     if (!strcmp(g_demo_kind, "bestiary")) {
-        /* one of each monster in a row, asleep */
+        /* every kind in two rows, asleep (--grade 1 elites, 2 bosses) */
         for (int i = 0; i < MAX_MONSTERS; i++) g->mons[i].alive = false;
         vec3 f = v3(cosf(p1->pl.yaw), 0, sinf(p1->pl.yaw)), r = v3(-sinf(p1->pl.yaw), 0, cosf(p1->pl.yaw));
+        float gap = g_demo_grade == 2 ? 3.0f : 1.8f;
         for (int t = 0; t < MON_TYPE_COUNT; t++) {
-            vec3 at = v3_add(v3_add(p1->pl.pos, v3_scale(f, 6.0f)), v3_scale(r, (t - (MON_TYPE_COUNT - 1) * 0.5f) * 1.5f));
+            int row = t / 10, col = t % 10;
+            vec3 at = v3_add(v3_add(p1->pl.pos, v3_scale(f, 7.0f + row * gap * 1.8f)), v3_scale(r, (col - 4.5f) * gap));
             if (MONSTERS[t].flies) at.y += 1.2f;
-            monster_spawn(g, t, at, 3, false, v3(0.5f, 0.45f, 0.4f), 555 + (u64)t);
+            Monster *m = monster_spawn(g, t, at, 3, g_demo_grade >= 1, v3(0.5f, 0.45f, 0.4f), 555 + (u64)t);
+            if (m && g_demo_grade == 2) monster_make_boss(g, m);
         }
+        g->freeze_monsters = true;
         for (int i = 0; i < MAX_MONSTERS; i++)
             if (g->mons[i].alive) { g->mons[i].yaw = p1->pl.yaw + PI_F; g->mons[i].awake = false; }
         return;

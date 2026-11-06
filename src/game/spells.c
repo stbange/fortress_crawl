@@ -127,7 +127,7 @@ int element_opposite(int e) {
 }
 
 void element_hit(Game *g, Monster *m, int element, float dmg, vec3 from, float knock, int attacker) {
-    if (!m->alive) return;
+    if (!m->alive || m->hidden) return;
     /* monsters of a region shrug off their own element and fear its opposite */
     if (m->element != EL_NONE && element != EL_NONE) {
         if (element == m->element) dmg *= 0.5f;
@@ -146,7 +146,7 @@ void element_hit(Game *g, Monster *m, int element, float dmg, vec3 from, float k
         break;
     case EL_ARCANE: dmg *= 1.15f; break;
     case EL_HOLY:
-        if (m->type == MON_SKELETON || m->type == MON_WISP) dmg *= 1.5f;
+        if (m->type == MON_SKELETON || m->type == MON_WISP || m->type == MON_WRAITH || m->type == MON_NECRO) dmg *= 1.5f; /* the undead */
         heal_player(g, attacker, dmg * 0.08f);
         break;
     case EL_SHADOW: dmg *= 1.05f; heal_player(g, attacker, dmg * 0.12f); break;

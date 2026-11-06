@@ -27,16 +27,38 @@
 #define FLOW_W (2 * FLOW_R)
 #define FLOW_Y (2 * FLOW_H)
 
-enum { MON_CRAWLER, MON_BRUTE, MON_WISP, MON_HORNED, MON_SKELETON, MON_SLIME, MON_BAT, MON_TYPE_COUNT };
+/* 20 kinds, each with its own look and way of fighting (monsters.c, monster_draw.c). */
+enum {
+    MON_CRAWLER, MON_BRUTE, MON_WISP, MON_HORNED, MON_SKELETON, MON_SLIME, MON_BAT,
+    MON_SPIDER,  /* leaps at you */
+    MON_WRAITH,  /* vanishes and comes back behind you */
+    MON_GOLEM,   /* stomps the ground around it */
+    MON_SHAMAN,  /* heals its allies, throws orbs */
+    MON_BLOATER, /* walks up and bursts */
+    MON_EYE,     /* charges a beam you can step out of */
+    MON_KNIGHT,  /* shield in front, two blows */
+    MON_WORM,    /* burrows, bursts up under you */
+    MON_MIMIC,   /* a chest until you are next to it */
+    MON_NECRO,   /* raises the dead */
+    MON_HARPY,   /* circles high and dives */
+    MON_HOUND,   /* circles in packs, lunges from the side */
+    MON_TROLL,   /* throws boulders */
+    MON_TYPE_COUNT
+};
+/* Monster grade: the same kind as a normal monster, an elite or a boss. */
+enum { GRADE_NORMAL, GRADE_ELITE, GRADE_BOSS };
 enum { MS_IDLE, MS_CHASE, MS_WINDUP, MS_CHARGE, MS_STUN };
 enum { WPN_SWORD, WPN_BOW, WPN_STAFF, WPN_COUNT };
-enum { PJ_ARROW, PJ_BOLT, PJ_NOVA, PJ_ENEMY_FIRE, PJ_SPELL, PJ_ENEMY_ARROW };
+enum { PJ_ARROW, PJ_BOLT, PJ_NOVA, PJ_ENEMY_FIRE, PJ_SPELL, PJ_ENEMY_ARROW, PJ_BOULDER };
 
 typedef struct MonsterDef {
     const char *name;
     float hw, h, hp, dmg, speed, reach, attack_time, xp;
     bool flies;
     vec3 color;
+    float windup;      /* seconds between raising an attack and landing it */
+    int min_level;     /* not met before this danger level */
+    const char *boss;  /* title of its bosses */
 } MonsterDef;
 extern const MonsterDef MONSTERS[MON_TYPE_COUNT];
 
@@ -57,6 +79,11 @@ typedef struct Monster {
     /* its region: rank = 10-chunk steps from the gate (0..10), element = the region's,
      * carried by its attacks, resisted, and weak to the opposite one */
     u8 rank, element;
+    u8 grade;        /* GRADE_* */
+    u8 hidden;       /* vanished (wraith) or underground (worm): cannot be hit */
+    u8 aux;          /* per-kind state: knight combo, troll throw, bloater burst, summoned */
+    float t2;        /* per-kind timer */
+    vec3 color2, glow; /* armour / bone colour and the glow of eyes and markings, from the world */
     /* named enemies (chapter targets and domain lords) */
     u64 story_key;
     u8 named_kind;   /* 0 none, else NK_* + 1 */
@@ -365,6 +392,7 @@ typedef struct Game {
     LoreEntry lore[MAX_LORE];
     int nlore;
     bool world_started;
+    bool freeze_monsters; /* screenshot demos: monsters stand still */
     float play_time, autosave_timer;
 
     bool mouse; /* player 1's mouse is captured */
@@ -407,6 +435,8 @@ void monsters_update(Game *g, float dt);
 void monsters_draw(Game *g, vec3 eye);
 void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int attacker);
 Monster *monster_spawn(Game *g, int type, vec3 pos, int level, bool elite, vec3 tint, u64 key);
+/* Makes a monster its kind's boss: bigger, much tougher, a title and a health bar. */
+void monster_make_boss(Game *g, Monster *m);
 Monster *monster_nearest(Game *g, vec3 p, float max_dist, const Monster *exclude);
 /* The element of a region (REG_*): frost north, fire south, lightning east, poison west,
  * holy up, shadow down. */

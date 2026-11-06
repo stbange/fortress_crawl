@@ -129,6 +129,17 @@ armour from tier 4, speed from tier 6, regeneration from tier 8. Loot rolls bett
 per tier, legendary weapons from tier 6, at least magic from tier 4 and rare from tier 8,
 and the first affix leans to the region's element.
 
+### 3.2c Monsters
+
+20 kinds (`MONSTERS` in monsters.c): crawler, brute, wisp, horned, skeleton, slime, bat,
+spider, wraith, golem, shaman, bloater, eye, knight, worm, mimic, necromancer, harpy, hound
+and troll, each with its own model (monster_draw.c) and behaviour (`behave` and
+`windup_release` in monsters.c). Weights per stratum pick the pack's kind; each kind has a
+minimum danger level. Grades: normal, elite (x3 health, x1.5 damage) and boss (x10 health,
+x1.8 damage, about twice the size, a title, enrages below half health, guaranteed weapon).
+Colours come from the theme (rock, metal, accent, torch) and the region's element. The
+newer kinds borrow the older kinds' sounds for now.
+
 ### 3.3 Danger level
 
 `danger = sqrt(dx^2 + dz^2) + 1.5 * |dy|` in chunks from the gate. Today it already reduces
