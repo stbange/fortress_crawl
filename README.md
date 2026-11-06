@@ -293,6 +293,26 @@ shows the touch controls from the start.
 Shrines (glowing rune stones) are respawn points: walk up to one to attune it. When you die,
 you return to the last attuned shrine and keep everything.
 
+## Weapons
+
+Each of the 12 weapon types has its own model, the same in your hands, in other players'
+hands and on the ground: daggers, swords, greatswords with swept guards, axes with a bearded
+bit, flanged maces, leaf-bladed spears, recurved shortbows, longbows, crossbows with a prod and
+a bolt on the rail, wands, staves with a forked head holding a gem, and scepters with a crown of
+prongs around an orb. Axes and maces chop down from above, spears thrust.
+
+The rarity sets the materials: iron and plain leather (common), bright steel (magic), gilded
+fittings and red leather (rare), blackened metal with a glowing edge and a slowly turning rune
+(epic). Magical weapons glow in the colour of their affix and give off motes: embers rise from
+fire weapons, frost drifts from frost ones, sparks jump along shock weapons, venom drips, and
+a blood-red mist circles vampiric ones. Where they hit, the element bursts too: fire sprays
+embers, frost throws shards, lightning arcs out, venom leaves a lingering cloud, and vampiric
+hits draw blood back to you. Magical arrows and bolts glow and trail sparks.
+
+Screenshots of them: `--demo weapons` (a rack of all 12) and `--demo impact` (a hit on a
+monster), with `--weapon base[:rarity[:affix[:affix]]]` to choose what you hold, for example
+`--weapon greatsword:epic:vampiric`.
+
 ## Sound
 
 All sound effects are generated with the [ElevenLabs](https://elevenlabs.io) sound effects

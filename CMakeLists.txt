@@ -84,6 +84,7 @@ add_executable(fortress_crawl
   src/game/quests.c
   src/game/mech.c
   src/game/sfx.c
+  src/game/weapons.c
   src/render/renderer.c
   src/render/batch.c
   src/world/chunkmap.c)

@@ -71,6 +71,7 @@ typedef struct Projectile {
     int owner; /* player slot that fired it, -1 for monsters */
     u8 element; /* EL_* effect on hit, EL_NONE for none */
     u8 form;    /* SF_* for spells */
+    u8 rarity;  /* of the bow or staff that shot it (glow and impact effects) */
     float radius, tick, age;
 } Projectile;
 
@@ -513,6 +514,14 @@ void spell_collect_lights(Game *g, vec3 eye, SceneParams *sp);
 void element_hit(Game *g, Monster *m, int element, float dmg, vec3 from, float knock, int attacker);
 /* Learn a spell or raise its rank; returns the new rank. */
 int spell_learn(PlayerSlot *ps, int id);
+
+/* weapons.c: weapon models, their glow and their impact effects */
+vec3 weapon_glow_color(const Item *it);
+void weapon_draw_view(Game *g, PlayerSlot *ps, vec3 light);
+void weapon_draw_held(const Item *it, vec3 hand, vec3 dir, vec3 side, vec3 light, float time, float seed);
+void weapon_draw_ground(const Item *it, vec3 c, float yaw, vec3 light, float time, float seed);
+/* Sparks, frost, arcs, venom or a blood mist where a magical weapon hits (rarity > common or an element). */
+void weapon_impact_fx(Game *g, int element, int rarity, bool vampiric, vec3 at, int owner);
 
 /* items.c */
 void items_give_start(Stats *s);
