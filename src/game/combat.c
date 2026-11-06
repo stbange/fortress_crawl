@@ -114,7 +114,7 @@ static vec3 proj_color(const Projectile *p) {
     case PJ_NOVA: return v3(1.0f, 0.5f, 0.15f);
     case PJ_SPELL: return element_color(p->element);
     case PJ_ENEMY_ARROW: return v3(0.85f, 0.82f, 0.7f);
-    default: return v3(1.0f, 0.4f, 0.15f);
+    default: return p->element != EL_NONE ? element_color(p->element) : v3(1.0f, 0.4f, 0.15f);
     }
 }
 
@@ -213,6 +213,7 @@ static void update_projectiles(Game *g, float dt) {
                         p->pos.y < f.y + player_height(ps->pl.stance) + 0.1f) {
                         sfx_at(g, p->kind == PJ_ENEMY_ARROW ? SFX_HIT_ARROW : SFX_ENEMY_FIRE_HIT, p->pos, 1.0f);
                         game_hurt_player(g, ps, p->dmg, v3_sub(p->pos, step));
+                        if (p->element != EL_NONE) player_element_hit(g, ps, p->element, p->dmg);
                         particles_burst(g, p->pos, proj_color(p), 10, 3.0f, 0.05f, true);
                         p->alive = false;
                     }
@@ -448,6 +449,14 @@ void combat_update(Game *g, float dt) {
         if (s->ward_t > 0 && (s->ward_t -= dt) <= 0) s->ward = 0;
         if (s->haste_t > 0) s->haste_t -= dt;
         ps->pl.speed_mult = (1.0f + 0.12f * s->ranks[SK_FLEET_FOOT]) * (1.0f + relic_bonus(s, RB_SPEED)) * (s->haste_t > 0 ? 1.4f : 1.0f);
+        /* monsters' elements: burning and poison eat health, a chill slows */
+        if (s->chill_t > 0) { s->chill_t -= dt; ps->pl.speed_mult *= 0.6f; }
+        if (s->burn_t > 0) {
+            s->burn_t -= dt;
+            game_dot_player(g, ps, s->burn_dps * dt);
+            if (fmodf(s->burn_t, 0.25f) < dt) particles_burst(g, v3_add(ps->pl.pos, v3(0, 0.8f, 0)), element_color(EL_FIRE), 1, 1.5f, 0.04f, true);
+        }
+        if (s->poison_t > 0) { s->poison_t -= dt; game_dot_player(g, ps, s->poison_dps * dt); }
         if (s->dead) continue;
         s->mana = fminf(s->maxmana, s->mana + (3.0f + 0.1f * s->level) * dt);
         if (s->since_hurt > 4.0f) s->hp = fminf(s->maxhp, s->hp + (1.5f + 2.0f * s->ranks[SK_SECOND_WIND]) * dt);
@@ -479,7 +488,8 @@ void combat_draw_world(Game *g, vec3 eye) {
         if (p->kind == PJ_ARROW || p->kind == PJ_ENEMY_ARROW) {
             vec3 d = v3_norm(p->vel);
             vec3 light = game_light_at(g, p->pos);
-            vec3 tint = p->kind == PJ_ENEMY_ARROW ? v3(0.85f, 0.82f, 0.7f) : p->element != EL_NONE ? element_color(p->element) : v3(0.6f, 0.5f, 0.35f);
+            vec3 tint = p->kind == PJ_ENEMY_ARROW ? (p->element != EL_NONE ? element_color(p->element) : v3(0.85f, 0.82f, 0.7f))
+                                                  : p->element != EL_NONE ? element_color(p->element) : v3(0.6f, 0.5f, 0.35f);
             bool magic = p->kind == PJ_ARROW && (p->element != EL_NONE || p->rarity > RAR_COMMON);
             if (p->element == EL_SHADOW) tint = v3(0.95f, 0.15f, 0.2f);
             else if (magic && p->element == EL_NONE) tint = rarity_color(p->rarity);

@@ -28,7 +28,7 @@ static const char *AFFIX_SUFFIX[AF_COUNT] = { "", "of Embers", "of Winter", "of 
 static const char *AFFIX_DESC[AF_COUNT] = { "", "hits burn", "hits chill and slow", "hits arc to a nearby foe",
                                             "hits poison", "hits steal life", "attacks 20% faster", "+15% damage",
                                             "+25% damage and knockback, 10% slower" };
-static const char *RARITY_NAMES[RAR_COUNT] = { "COMMON", "MAGIC", "RARE", "EPIC" };
+static const char *RARITY_NAMES[RAR_COUNT] = { "COMMON", "MAGIC", "RARE", "EPIC", "LEGENDARY" };
 
 const RelicDef RELICS[RELIC_COUNT] = {
     { "Ember Heart", RB_HEALTH }, { "Horn of the Pit", RB_DAMAGE }, { "Root Amulet", RB_MANA }, { "Miner's Lamp", RB_SPEED },
@@ -38,14 +38,15 @@ const RelicDef RELICS[RELIC_COUNT] = {
 static const char *RELIC_BONUS_TEXT[4] = { "+6% health", "+5% damage", "+8% mana", "+3% speed" };
 
 vec3 rarity_color(int r) {
-    static const vec3 C[RAR_COUNT] = { { 0.8f, 0.78f, 0.72f }, { 0.45f, 0.65f, 1.0f }, { 1.0f, 0.85f, 0.3f }, { 1.0f, 0.5f, 0.15f } };
+    static const vec3 C[RAR_COUNT] = { { 0.8f, 0.78f, 0.72f }, { 0.45f, 0.65f, 1.0f }, { 1.0f, 0.85f, 0.3f }, { 1.0f, 0.5f, 0.15f },
+                                       { 0.35f, 1.0f, 0.65f } };
     return C[r < 0 || r >= RAR_COUNT ? 0 : r];
 }
 
 bool item_has_affix(const Item *it, int affix) { return it->affix[0] == affix || it->affix[1] == affix; }
 
 float item_damage_mult(const Item *it) {
-    static const float RAR[RAR_COUNT] = { 1.0f, 1.12f, 1.28f, 1.5f };
+    static const float RAR[RAR_COUNT] = { 1.0f, 1.12f, 1.28f, 1.5f, 1.8f };
     float m = WEAPON_BASES[it->base].dmg * (1.0f + 0.06f * it->level) * RAR[it->rarity];
     if (item_has_affix(it, AF_KEEN)) m *= 1.15f;
     if (item_has_affix(it, AF_HEAVY)) m *= 1.25f;
@@ -71,30 +72,65 @@ int item_affix_element(const Item *it) {
     return EL_NONE;
 }
 
-void item_name(const Item *it, char *out, int n) {
-    const char *base = WEAPON_BASES[it->base].name;
-    if (it->affix[0] && it->affix[1]) snprintf(out, (size_t)n, "%s %s %s", AFFIX_ADJ[it->affix[0]], base, AFFIX_SUFFIX[it->affix[1]]);
-    else if (it->affix[0]) snprintf(out, (size_t)n, "%s %s", AFFIX_ADJ[it->affix[0]], base);
-    else snprintf(out, (size_t)n, "%s", base);
+/* Every 15 item levels the craft gets better. */
+const char *item_grade(int level) {
+    static const char *GRADE[] = { "", "Fine", "Tempered", "Masterwork", "Runed", "Starmetal", "Mythic" };
+    int g = level / 15;
+    return GRADE[g < 0 ? 0 : g > 6 ? 6 : g];
 }
 
-Item item_roll(u64 seed, float level, int min_rarity) {
+void item_name(const Item *it, char *out, int n) {
+    const char *base = WEAPON_BASES[it->base].name;
+    const char *gr = item_grade(it->level);
+    char tmp[96];
+    if (it->affix[0] && it->affix[1]) snprintf(tmp, sizeof tmp, "%s %s %s", AFFIX_ADJ[it->affix[0]], base, AFFIX_SUFFIX[it->affix[1]]);
+    else if (it->affix[0]) snprintf(tmp, sizeof tmp, "%s %s", AFFIX_ADJ[it->affix[0]], base);
+    else snprintf(tmp, sizeof tmp, "%s", base);
+    if (gr[0]) snprintf(out, (size_t)n, "%s %s", gr, tmp);
+    else snprintf(out, (size_t)n, "%s", tmp);
+}
+
+/* The affix a region favours: its element, or speed up high and life-stealing down deep. */
+static int region_affix(int region) {
+    static const int A[] = { [REG_NONE] = AF_NONE, [REG_NORTH] = AF_FROST, [REG_SOUTH] = AF_FIRE, [REG_EAST] = AF_SHOCK,
+                             [REG_WEST] = AF_VENOM, [REG_UP] = AF_SWIFT, [REG_DOWN] = AF_VAMPIRIC };
+    return region >= 0 && region <= REG_DOWN ? A[region] : AF_NONE;
+}
+
+Item item_roll_region(u64 seed, float level, int min_rarity, int tier, int region) {
     Rng r = rng_make(seed);
     Item it = { 0 };
     it.used = 1;
     it.base = (u8)rng_range(&r, 0, WB_COUNT - 1);
     float u = rng_float(&r) - fminf(0.15f, level * 0.004f); /* deeper: better odds */
-    int rar = u < 0.03f ? RAR_EPIC : u < 0.13f ? RAR_RARE : u < 0.45f ? RAR_MAGIC : RAR_COMMON;
+    /* every 10-chunk step out shifts the odds; legendaries only from step 6 */
+    float t = (float)tier;
+    float pl = tier >= 6 ? 0.02f * (t - 5.0f) : 0.0f;
+    float pe = pl + 0.03f + 0.012f * t, pr = pe + 0.10f + 0.02f * t, pm = pr + 0.32f + 0.02f * t;
+    int rar = u < pl ? RAR_LEGENDARY : u < pe ? RAR_EPIC : u < pr ? RAR_RARE : u < pm ? RAR_MAGIC : RAR_COMMON;
+    if (tier >= 8) min_rarity = MAXI(min_rarity, RAR_RARE);
+    else if (tier >= 4) min_rarity = MAXI(min_rarity, RAR_MAGIC);
     it.rarity = (u8)MAXI(rar, min_rarity);
     it.level = (u8)clampf(level + rng_range(&r, -1, 2), 0, 250);
     int naff = it.rarity == RAR_COMMON ? 0 : it.rarity == RAR_MAGIC ? 1 : 2;
+    int ra = tier > 0 ? region_affix(region) : AF_NONE;
     for (int i = 0; i < naff; i++) {
         int a;
-        do a = rng_range(&r, 1, AF_COUNT - 1);
-        while (i == 1 && a == it.affix[0]);
+        if (i == 0 && ra && rng_chance(&r, 0.5f)) a = ra;
+        else {
+            do a = rng_range(&r, 1, AF_COUNT - 1);
+            while (i == 1 && a == it.affix[0]);
+        }
         it.affix[i] = (u8)a;
     }
     return it;
+}
+
+Item item_roll(u64 seed, float level, int min_rarity) { return item_roll_region(seed, level, min_rarity, 0, REG_NONE); }
+
+/* The region of a world position. */
+static int region_at(Game *g, vec3 p, int *tier) {
+    return world_region(&g->world, floordiv((int)floorf(p.x), CHUNK), floordiv((int)floorf(p.y), CHUNK), floordiv((int)floorf(p.z), CHUNK), tier);
 }
 
 static Item start_weapon(int base) {
@@ -200,8 +236,9 @@ void loot_drop(Game *g, vec3 pos, float level, bool elite, float luck) {
     if (lrand() < 0.55f + luck) pickup_spawn(g, PK_GOLD, p, (int)((1 + level * 0.6f + lrand() * 5.0f) * k), NULL, 0, 0);
     if (lrand() < 0.08f + (elite ? 0.4f : 0.0f) + luck) pickup_spawn(g, lrand() < 0.6f ? PK_POTION_HP : PK_POTION_MP, p, 1, NULL, 0, 0);
     if (lrand() < 0.035f + (elite ? 0.35f : 0.0f) + luck * 0.6f) pickup_spawn(g, PK_SCROLL, p, random_scroll(level), NULL, 0, 0);
-    if (lrand() < 0.045f + (elite ? 0.5f : 0.0f) + luck) {
-        Item it = item_roll(mix64((u64)(lrand() * 1e9f)), level, elite ? RAR_MAGIC : RAR_COMMON);
+    int tier, region = region_at(g, pos, &tier);
+    if (lrand() < 0.045f + 0.004f * tier + (elite ? 0.5f : 0.0f) + luck) {
+        Item it = item_roll_region(mix64((u64)(lrand() * 1e9f)), level, elite ? RAR_MAGIC : RAR_COMMON, tier, region);
         pickup_spawn(g, PK_WEAPON, p, 0, &it, 0, 0);
     }
 }
@@ -317,7 +354,8 @@ static bool collect(Game *g, PlayerSlot *ps, Pickup *p) {
             for (int i = 0; i < 5; i++) loot_drop(g, p->pos, (float)level + 2, false, 0.4f);
             pickup_spawn(g, PK_GOLD, v3_add(p->pos, v3(0, 0.6f, 0)), 20 + level * 3, NULL, 0, 0);
             pickup_spawn(g, PK_POTION_HP, v3_add(p->pos, v3(0, 0.6f, 0)), 1, NULL, 0, 0);
-            Item it = item_roll(mix64(p->key ^ 0x7A), (float)level + 3, lrand() < 0.25f ? RAR_EPIC : RAR_RARE);
+            int tier, region = region_at(g, p->pos, &tier);
+            Item it = item_roll_region(mix64(p->key ^ 0x7A), (float)level + 3, lrand() < 0.25f ? RAR_EPIC : RAR_RARE, tier, region);
             pickup_spawn(g, PK_WEAPON, v3_add(p->pos, v3(0, 0.7f, 0)), 0, &it, 0, 0);
             game_banner(ps, "THE VAULT'S HOARD");
             sfx_at(g, SFX_HOARD_OPEN, at, 1.0f);
@@ -328,7 +366,8 @@ static bool collect(Game *g, PlayerSlot *ps, Pickup *p) {
         particles_burst(g, at, v3(1.0f, 0.8f, 0.3f), 18, 4.0f, 0.05f, true);
         for (int i = 0; i < 3; i++) loot_drop(g, p->pos, (float)p->amount, false, 0.25f);
         {
-            Item it = item_roll(mix64(p->key ^ 0x77), (float)p->amount + 1, lrand() < 0.5f ? RAR_MAGIC : RAR_COMMON);
+            int tier, region = region_at(g, p->pos, &tier);
+            Item it = item_roll_region(mix64(p->key ^ 0x77), (float)p->amount + 1, lrand() < 0.5f ? RAR_MAGIC : RAR_COMMON, tier, region);
             pickup_spawn(g, PK_WEAPON, v3_add(p->pos, v3(0, 0.6f, 0)), 0, &it, 0, 0);
         }
         return true;

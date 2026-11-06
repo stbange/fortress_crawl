@@ -54,6 +54,9 @@ typedef struct Monster {
     /* status effects from elements */
     float burn_t, burn_dps, poison_t, poison_dps, slow_t;
     float level;     /* danger level it was made for (loot quality) */
+    /* its region: rank = 10-chunk steps from the gate (0..10), element = the region's,
+     * carried by its attacks, resisted, and weak to the opposite one */
+    u8 rank, element;
     /* named enemies (chapter targets and domain lords) */
     u64 story_key;
     u8 named_kind;   /* 0 none, else NK_* + 1 */
@@ -162,6 +165,8 @@ typedef struct Stats {
     int spell;      /* selected spell */
     float spell_cd;
     float ward, ward_t, haste_t;
+    /* what monsters' elements did to you */
+    float burn_t, burn_dps, poison_t, poison_dps, chill_t;
     /* story (per character) */
     u8 motive;       /* 0: not chosen yet, else MOTIVE_* + 1 */
     int chapter;
@@ -385,6 +390,10 @@ void game_banner(PlayerSlot *ps, const char *text);
 void game_banner_all(Game *g, const char *text);
 void game_add_xp(Game *g, PlayerSlot *ps, float xp);
 void game_hurt_player(Game *g, PlayerSlot *ps, float dmg, vec3 from);
+/* Damage without a blow (burning, poison): no push. */
+void game_dot_player(Game *g, PlayerSlot *ps, float dmg);
+/* A monster's element on a player it hit: burn, chill, a jolt, poison, a smite or a drain. */
+void player_element_hit(Game *g, PlayerSlot *ps, int element, float dmg);
 float game_measure_openness(Game *g, vec3 eye);
 void game_update_atmosphere(Game *g, PlayerSlot *ps, float dt);
 /* Light at a world position as linear brightness, including ambient, torches and flashes. */
@@ -399,6 +408,12 @@ void monsters_draw(Game *g, vec3 eye);
 void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int attacker);
 Monster *monster_spawn(Game *g, int type, vec3 pos, int level, bool elite, vec3 tint, u64 key);
 Monster *monster_nearest(Game *g, vec3 p, float max_dist, const Monster *exclude);
+/* The element of a region (REG_*): frost north, fire south, lightning east, poison west,
+ * holy up, shadow down. */
+int region_element(int region);
+/* The element that hurts a monster of element e most (fire-frost, lightning-earth,
+ * poison-arcane, holy-shadow). */
+int element_opposite(int e);
 void flow_update(Game *g, PlayerSlot *ps, float dt);
 /* Forget that a chunk was populated: monsters and loot are placed again on return. */
 void chunk_forget(Game *g, u64 chunk_key);

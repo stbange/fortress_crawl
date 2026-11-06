@@ -303,6 +303,22 @@ below. North, south, east and west, the style changes: ten styles per direction,
 north from Frostbitten through Rime-iron, Aurora-lit and Starfrost to the Lifeless cold, or
 west from Gothic through Drowned, Coral, Abyssal and Leviathan to the Eldritch. The two
 combine (a *Phoenix Iron Hells*, a *Porcelain Heaven*). Danger keeps rising with distance.
+
+**Enemies** take on their region. From the second 10-chunk step out, monsters carry its
+element: frost in the north (their hits chill and slow you), fire in the south (they set
+you alight), lightning in the east (a jolt), poison in the west, holy light above (a smite)
+and shadow below (they drain your mana and feed on your blood). They glow in its colour,
+take half damage from it and half again from its opposite (fire and frost, lightning and
+earth, poison and arcane, holy and shadow). Every step out they are a little tougher and
+bigger, elites are more common, and from step 4 they wear armour, from step 6 they are
+faster, from step 8 they mend their wounds.
+
+**Weapons** get better the farther out you find them: the item level follows the danger
+(shown as Fine, Tempered, Masterwork, Runed, Starmetal, Mythic), the odds of magic, rare and
+epic weapons climb with every step (from step 4 nothing common drops, from step 8 nothing
+below rare), and from step 6 on there are **legendary** weapons of white starmetal with a
+green glow. Their first affix leans to the region: frost weapons in the north, fire in the
+south, shock in the east, venom in the west, swift ones above and vampiric ones below.
 See [`docs/PLAN.md`](docs/PLAN.md) section 3 for the full tables.
 
 To look at a far place: `--pos x y z --fly --demo place` puts you on the most open floor of
@@ -327,7 +343,8 @@ hits draw blood back to you. Magical arrows and bolts glow and trail sparks.
 
 Screenshots of them: `--demo weapons` (a rack of all 12) and `--demo impact` (a hit on a
 monster), with `--weapon base[:rarity[:affix[:affix]]]` to choose what you hold, for example
-`--weapon greatsword:epic:vampiric`.
+`--weapon greatsword:legendary:vampiric`. `--demo placefight` shows one monster of each kind
+in the region you start in.
 
 ## Sound
 

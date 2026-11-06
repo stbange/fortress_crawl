@@ -107,7 +107,7 @@ static int name_index(const char *s, int len, const char *const *names, int n) {
 static bool parse_weapon(const char *spec, Item *out) {
     static const char *BASES[WB_COUNT] = { "dagger", "sword", "axe", "mace", "spear", "greatsword",
                                            "shortbow", "longbow", "crossbow", "wand", "staff", "scepter" };
-    static const char *RARS[RAR_COUNT] = { "common", "magic", "rare", "epic" };
+    static const char *RARS[RAR_COUNT] = { "common", "magic", "rare", "epic", "legendary" };
     static const char *AFF[AF_COUNT] = { "none", "fire", "frost", "shock", "venom", "vampiric", "swift", "keen", "heavy" };
     Item it = { 0 };
     it.used = 1;
@@ -229,7 +229,21 @@ static void demo_setup(Game *g) {
         if (!strcmp(g_demo_kind, "spells")) { p1->show_skills = true; p1->menu_tab = TAB_SPELLS; return; }
     }
     if (!strcmp(g_demo_kind, "weapons")) { demo_weapons(g, p1); return; }
-    if (!strcmp(g_demo_kind, "place")) { demo_place(g, p1); return; }
+    if (!strcmp(g_demo_kind, "place") || !strcmp(g_demo_kind, "placefight")) {
+        demo_place(g, p1);
+        if (!strcmp(g_demo_kind, "placefight")) {
+            /* one of each kind down the view, to see the region's monsters */
+            vec3 f = v3(cosf(p1->pl.yaw), 0, sinf(p1->pl.yaw)), r = v3(-sinf(p1->pl.yaw), 0, cosf(p1->pl.yaw));
+            for (int t = 0; t < MON_TYPE_COUNT; t++) {
+                vec3 at = v3_add(v3_add(p1->pl.pos, v3_scale(f, 4.0f + t * 1.3f)), v3_scale(r, (t % 2 ? -1.0f : 1.0f) * (0.6f + (t % 3) * 0.5f)));
+                at.y += MONSTERS[t].flies ? 1.2f : 0.0f;
+                if (!phys_box_free(at, MONSTERS[t].hw, MONSTERS[t].h, game_solid, g)) at = v3_add(p1->pl.pos, v3_scale(f, 3.0f + t * 0.8f));
+                Monster *m = monster_spawn(g, t, at, 40, t == MON_BRUTE, v3(0.5f, 0.45f, 0.4f), 9000 + (u64)t);
+                if (m) { m->yaw = p1->pl.yaw + PI_F; m->awake = false; }
+            }
+        }
+        return;
+    }
     if (!strcmp(g_demo_kind, "impact")) {
         /* one tough monster right ahead, for the hit effects of the weapon in hand */
         for (int i = 0; i < MAX_MONSTERS; i++) g->mons[i].alive = false;

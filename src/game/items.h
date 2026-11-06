@@ -37,7 +37,8 @@ vec3 element_color(int element);
 
 /* ---------- items ---------- */
 
-enum { RAR_COMMON, RAR_MAGIC, RAR_RARE, RAR_EPIC, RAR_COUNT };
+/* Legendary weapons are only found far out (region tier 6 and beyond). */
+enum { RAR_COMMON, RAR_MAGIC, RAR_RARE, RAR_EPIC, RAR_LEGENDARY, RAR_COUNT };
 
 /* Weapon bases: each belongs to one of the three weapon classes (WPN_SWORD = blades,
  * WPN_BOW = bows, WPN_STAFF = staves) and plays differently. */
@@ -69,6 +70,11 @@ typedef struct Item {
 float item_damage_mult(const Item *it);
 float item_speed_mult(const Item *it); /* cooldown factor, < 1 is faster */
 void item_name(const Item *it, char *out, int n);
+/* The quality word of an item level ("", "Fine" ... "Mythic"). */
+const char *item_grade(int level);
+/* A weapon found in a region (REG_*) tier steps out: better rarity the farther out, and
+ * the first affix leans to the region's element. tier 0 is the same as item_roll. */
+Item item_roll_region(u64 seed, float level, int min_rarity, int tier, int region);
 vec3 rarity_color(int rarity);
 int item_affix_element(const Item *it); /* EL_* of its first elemental affix or EL_NONE */
 bool item_has_affix(const Item *it, int affix);

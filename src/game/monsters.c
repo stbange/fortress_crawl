@@ -77,6 +77,12 @@ void chunk_forget(Game *g, u64 chunk_key) { spawned_remove(g, chunk_key); }
 
 /* ---------- spawning ---------- */
 
+int region_element(int region) {
+    static const int E[] = { [REG_NONE] = EL_NONE, [REG_NORTH] = EL_FROST, [REG_SOUTH] = EL_FIRE, [REG_EAST] = EL_LIGHTNING,
+                             [REG_WEST] = EL_POISON, [REG_UP] = EL_HOLY, [REG_DOWN] = EL_SHADOW };
+    return region >= 0 && region <= REG_DOWN ? E[region] : EL_NONE;
+}
+
 Monster *monster_spawn(Game *g, int type, vec3 pos, int level, bool elite, vec3 tint, u64 key) {
     Monster *m = NULL;
     for (int i = 0; i < MAX_MONSTERS && !m; i++)
@@ -102,6 +108,17 @@ Monster *monster_spawn(Game *g, int type, vec3 pos, int level, bool elite, vec3 
     m->target = 0;
     m->last_hitter = -1;
     m->level = (float)level;
+    /* the region shapes it: every 10-chunk step out a little tougher and bigger; from the
+     * second step it takes the region's element (colour, attacks, resistance) */
+    int tier, region = world_region(&g->world, floordiv((int)floorf(pos.x), CHUNK), floordiv((int)floorf(pos.y), CHUNK),
+                                    floordiv((int)floorf(pos.z), CHUNK), &tier);
+    m->rank = (u8)tier;
+    m->element = (u8)(tier >= 2 ? region_element(region) : EL_NONE);
+    m->maxhp = m->hp = m->maxhp * (1.0f + 0.06f * tier);
+    m->dmg *= 1.0f + 0.04f * tier;
+    m->xp *= 1.0f + 0.05f * tier;
+    m->scale *= 1.0f + 0.02f * tier;
+    if (m->element != EL_NONE) m->color = v3_lerp(m->color, element_color(m->element), fminf(0.6f, 0.12f + 0.05f * tier));
     m->yaw = (float)((key + (u64)g->mons_anim_seed * 97) % 628) * 0.01f;
     m->anim = (float)((key + (u64)g->mons_anim_seed * 31) % 100) * 0.1f;
     return m;
@@ -140,13 +157,15 @@ static void spawn_chunk(Game *g, Chunk *c) {
     if (level > 1 && ci->has_struct && rng_chance(&r, 0.6f)) n += 3 + (int)(rng_float(&r) * 3.0f);
     const float *w = FAMILY[ci->stratum];
     int main_type = level <= 1 ? MON_CRAWLER : pick_weighted(rng_float(&r), w, MON_TYPE_COUNT);
+    int tier;
+    world_region(&g->world, c->cx, c->cy, c->cz, &tier);
     if (main_type == MON_BAT) n += 3; /* bats come in swarms */
     ThemeInfo ti;
     theme_info(ci->theme, &ti);
     vec3 tint = v3(ti.mat[B_ACCENT].r / 255.0f, ti.mat[B_ACCENT].g / 255.0f, ti.mat[B_ACCENT].b / 255.0f);
     for (int i = 0; i < n; i++) {
         int type = (level > 1 && rng_chance(&r, 0.3f)) ? pick_weighted(rng_float(&r), w, MON_TYPE_COUNT) : main_type;
-        bool elite = level > 2 && rng_chance(&r, 0.04f + 0.004f * level);
+        bool elite = level > 2 && rng_chance(&r, 0.04f + 0.004f * level + 0.015f * tier);
         int head = (int)ceilf(MONSTERS[type].h * (elite ? 1.35f : 1.0f)) + (MONSTERS[type].flies ? 1 : 0);
         for (int attempt = 0; attempt < 40; attempt++) {
             int x = rng_range(&r, 1, 30), z = rng_range(&r, 1, 30);
@@ -339,6 +358,7 @@ static void wake_neighbours(Game *g, Monster *m) {
 
 void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int attacker) {
     if (!m->alive) return;
+    if (m->rank >= 4) dmg *= 0.85f; /* armoured, far out */
     m->hp -= dmg;
     m->flash = 0.15f;
     if (attacker >= 0 && attacker < MAX_PLAYERS && g->players[attacker].active) {
@@ -399,6 +419,15 @@ void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int 
     }
 }
 
+/* A monster's blow lands: the damage, then its element (shadow ones feed on it). */
+static void monster_strike(Game *g, Monster *m, PlayerSlot *ps, float dmg, vec3 from) {
+    bool was_dead = ps->st.dead;
+    game_hurt_player(g, ps, dmg, from);
+    if (m->element == EL_NONE || was_dead) return;
+    player_element_hit(g, ps, m->element, dmg);
+    if (m->element == EL_SHADOW) m->hp = fminf(m->maxhp, m->hp + dmg * 0.5f);
+}
+
 static void enemy_fire(Game *g, Monster *m, vec3 target) {
     for (int i = 0; i < MAX_PROJECTILES; i++) {
         Projectile *p = &g->proj[i];
@@ -407,7 +436,7 @@ static void enemy_fire(Game *g, Monster *m, vec3 target) {
         p->alive = true;
         bool arrow = m->type == MON_SKELETON;
         p->kind = arrow ? PJ_ENEMY_ARROW : PJ_ENEMY_FIRE;
-        p->element = EL_NONE;
+        p->element = m->element;
         p->owner = -1;
         p->pos = v3_add(monster_centre(m), v3(0, arrow ? 0.4f : 0.0f, 0));
         p->vel = v3_scale(v3_norm(v3_sub(target, p->pos)), arrow ? 20.0f : 11.0f);
@@ -500,6 +529,11 @@ void monsters_update(Game *g, float dt) {
         if (m->burn_t > 0) { m->burn_t -= dt; dot += m->burn_dps * dt; }
         if (m->poison_t > 0) { m->poison_t -= dt; dot += m->poison_dps * dt; }
         if (m->slow_t > 0) m->slow_t -= dt;
+        /* far out they mend their wounds */
+        if (m->rank >= 8 && m->burn_t <= 0 && m->poison_t <= 0 && m->hp < m->maxhp) m->hp = fminf(m->maxhp, m->hp + m->maxhp * 0.008f * dt);
+        /* and give off their element */
+        if (m->element != EL_NONE && m->rank >= 3 && dist < 30.0f && fmodf(m->anim * 0.7f + (float)i * 0.37f, 1.0f) < dt * 1.5f)
+            particles_burst(g, c, element_color(m->element), 1, 0.7f, 0.035f, true);
         if (dot > 0) {
             m->hp -= dot;
             if (((int)(m->anim * 10.0f)) % 4 == 0)
@@ -527,7 +561,7 @@ void monsters_update(Game *g, float dt) {
             m->state = MS_IDLE;
         }
         vec3 want = v3(0, 0, 0);
-        float speed = d->speed * (m->elite ? 1.1f : 1.0f) * (m->slow_t > 0 ? 0.45f : 1.0f);
+        float speed = d->speed * (m->elite ? 1.1f : 1.0f) * (m->slow_t > 0 ? 0.45f : 1.0f) * (m->rank >= 6 ? 1.15f : 1.0f);
         vec3 hdir = v3_norm(v3(feet.x - m->pos.x, 0, feet.z - m->pos.z));
         if (m->awake) {
             switch (m->state) {
@@ -539,7 +573,7 @@ void monsters_update(Game *g, float dt) {
                 m->timer -= dt;
                 m->yaw = atan2f(hdir.z, hdir.x);
                 if (m->timer <= 0) {
-                    if (hdist < d->reach + d->hw * m->scale + 0.6f && fabsf(dy) < 2.0f) game_hurt_player(g, tp, m->dmg, c);
+                    if (hdist < d->reach + d->hw * m->scale + 0.6f && fabsf(dy) < 2.0f) monster_strike(g, m, tp, m->dmg, c);
                     m->cooldown = d->attack_time;
                     m->state = MS_CHASE;
                 }
@@ -548,7 +582,7 @@ void monsters_update(Game *g, float dt) {
                 m->timer -= dt;
                 want = v3_scale(m->charge_dir, 12.0f);
                 if (hdist < d->hw * m->scale + 0.7f && fabsf(dy) < 1.5f) {
-                    game_hurt_player(g, tp, m->dmg * 1.3f, c);
+                    monster_strike(g, m, tp, m->dmg * 1.3f, c);
                     m->state = MS_STUN;
                     m->timer = 0.6f;
                 } else if (m->timer <= 0) {
@@ -579,7 +613,7 @@ void monsters_update(Game *g, float dt) {
                     want.y = (eye.y - 0.4f - c.y) * 3.0f + sinf(m->anim * 3.0f);
                     if (dist < 1.4f && m->cooldown <= 0) {
                         sfx_monster(g, m, MSFX_ATTACK);
-                        game_hurt_player(g, tp, m->dmg, c);
+                        monster_strike(g, m, tp, m->dmg, c);
                         m->cooldown = d->attack_time;
                         m->vel = v3_scale(dir3, -5.0f); /* bounce off */
                     }

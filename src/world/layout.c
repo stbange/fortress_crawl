@@ -53,6 +53,15 @@ int world_flavor(const World *w, int cx, int cy, int cz) {
     return flavor_first(axis) + tier - 1;
 }
 
+int world_region(const World *w, int cx, int cy, int cz, int *tier) {
+    int fl = world_flavor(w, cx, cy, cz), st = world_stratum(w, cx, cy, cz);
+    int ht = fl == FL_OLD ? 0 : FLAVORS[fl].tier, hax = fl == FL_OLD ? REG_NONE : FLAVORS[fl].axis; /* axis 1-4 = REG_NORTH.. */
+    int vt = abs(st - ST_DUNGEON), vax = st > ST_DUNGEON ? REG_UP : st < ST_DUNGEON ? REG_DOWN : REG_NONE;
+    if (vt > ht) { *tier = vt; return vax; }
+    *tier = ht;
+    return hax;
+}
+
 float world_difficulty(int cx, int cy, int cz) {
     float dx = (float)cx, dz = (float)cz, dy = (float)cy;
     return sqrtf(dx * dx + dz * dz) + 1.5f * fabsf(dy);

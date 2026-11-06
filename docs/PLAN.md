@@ -118,6 +118,17 @@ borders.
 *Frostbitten Mines*, *Jade Heaven*, *Drowned Inferno* or *Everwinter Inferno* (a frozen hell,
 like Dante's Cocytus). Each theme gets its own generated texture set when first seen.
 
+### 3.2b Regions: enemies and loot by direction
+
+`world_region` gives a place its region (north, south, east, west, up or down: whichever of
+compass flavor tier and stratum distance from the dungeon is larger) and its tier (0-10).
+Monsters take the region's element from tier 2 (frost, fire, lightning, poison, holy,
+shadow), resist it, are weak to its opposite, and pass it on with their hits (chill, burn,
+jolt, poison, smite, mana drain). Per tier: +6% health, +4% damage, +2% size, more elites;
+armour from tier 4, speed from tier 6, regeneration from tier 8. Loot rolls better rarity
+per tier, legendary weapons from tier 6, at least magic from tier 4 and rare from tier 8,
+and the first affix leans to the region's element.
+
 ### 3.3 Danger level
 
 `danger = sqrt(dx^2 + dz^2) + 1.5 * |dy|` in chunks from the gate. Today it already reduces

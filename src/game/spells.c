@@ -112,8 +112,27 @@ static void heal_player(Game *g, int who, float hp) {
     s->hp = fminf(s->maxhp, s->hp + hp);
 }
 
+int element_opposite(int e) {
+    switch (e) {
+    case EL_FIRE: return EL_FROST;
+    case EL_FROST: return EL_FIRE;
+    case EL_LIGHTNING: return EL_EARTH;
+    case EL_EARTH: return EL_LIGHTNING;
+    case EL_POISON: return EL_ARCANE;
+    case EL_ARCANE: return EL_POISON;
+    case EL_HOLY: return EL_SHADOW;
+    case EL_SHADOW: return EL_HOLY;
+    default: return EL_NONE;
+    }
+}
+
 void element_hit(Game *g, Monster *m, int element, float dmg, vec3 from, float knock, int attacker) {
     if (!m->alive) return;
+    /* monsters of a region shrug off their own element and fear its opposite */
+    if (m->element != EL_NONE && element != EL_NONE) {
+        if (element == m->element) dmg *= 0.5f;
+        else if (element == element_opposite(m->element)) dmg *= 1.5f;
+    }
     switch (element) {
     case EL_FIRE:
         m->burn_dps = fmaxf(m->burn_t > 0 ? m->burn_dps : 0.0f, dmg * 0.25f);

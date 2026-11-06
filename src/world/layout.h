@@ -114,6 +114,11 @@ bool world_is_exterior(int cx, int cy, int cz);
 int world_stratum(const World *w, int cx, int cy, int cz);
 int world_flavor(const World *w, int cx, int cy, int cz);
 float world_difficulty(int cx, int cy, int cz);
+/* Which way from the gate a place lies, by whichever has changed more there: the compass
+ * direction (its flavor tier) or the height (its stratum, counted from the dungeon). */
+enum { REG_NONE, REG_NORTH, REG_SOUTH, REG_EAST, REG_WEST, REG_UP, REG_DOWN };
+/* Returns REG_*; *tier gets how many 10-chunk steps out it is (0 near the gate, up to 10). */
+int world_region(const World *w, int cx, int cy, int cz, int *tier);
 bool world_structure_at(const World *w, int cx, int cy, int cz, Structure *out);
 void world_chunk_info(const World *w, int cx, int cy, int cz, ChunkInfo *out);
 

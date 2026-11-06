@@ -156,6 +156,42 @@ void game_hurt_player(Game *g, PlayerSlot *ps, float dmg, vec3 from) {
     }
 }
 
+void game_dot_player(Game *g, PlayerSlot *ps, float dmg) {
+    Stats *s = &ps->st;
+    if (s->dead || ps->pl.fly || s->invuln > 0 || dmg <= 0) return;
+    s->hp -= dmg;
+    s->since_hurt = 0;
+    if (s->hp <= 0) {
+        s->hp = 0;
+        sfx_player(g, ps, SFX_PLAYER_DEATH, 1.0f);
+        s->dead = true;
+        s->dead_t = 0;
+        game_banner(ps, "YOU HAVE FALLEN");
+    }
+}
+
+void player_element_hit(Game *g, PlayerSlot *ps, int el, float dmg) {
+    Stats *s = &ps->st;
+    if (s->dead || ps->pl.fly || s->invuln > 0 || el < 0 || el >= EL_COUNT) return;
+    switch (el) {
+    case EL_FIRE: /* set alight */
+        s->burn_dps = s->burn_t > 0 ? fmaxf(s->burn_dps, dmg * 0.15f) : dmg * 0.15f;
+        s->burn_t = 3.0f;
+        break;
+    case EL_FROST: s->chill_t = 2.5f; break; /* slowed */
+    case EL_LIGHTNING: game_dot_player(g, ps, dmg * 0.25f); s->chill_t = fmaxf(s->chill_t, 0.4f); break; /* a jolt */
+    case EL_POISON:
+        s->poison_dps = s->poison_t > 0 ? fmaxf(s->poison_dps, dmg * 0.1f) : dmg * 0.1f;
+        s->poison_t = 5.0f;
+        break;
+    case EL_HOLY: game_dot_player(g, ps, dmg * 0.2f); break; /* smitten */
+    case EL_SHADOW: s->mana = fmaxf(0.0f, s->mana - dmg * 0.4f); break; /* drained */
+    default: break;
+    }
+    particles_burst(g, player_eye(&ps->pl), element_color(el), 6, 2.0f, 0.04f, true);
+    sfx_player(g, ps, sfx_element_impact(el), 0.5f);
+}
+
 vec3 game_light_at(Game *g, vec3 p) {
     u8 l[4];
     vec3 out = g->players[0].ambient;
@@ -598,6 +634,7 @@ static void update_player(Game *g, PlayerSlot *ps, const PlayerInput *in, float 
             s->hp = s->maxhp;
             s->mana = s->maxmana;
             s->hurt = 0;
+            s->burn_t = s->poison_t = s->chill_t = 0;
             /* a safe return: whatever was waiting at the shrine is gone, and a short grace period */
             for (int i = 0; i < MAX_MONSTERS; i++)
                 if (g->mons[i].alive && v3_len(v3_sub(g->mons[i].pos, s->respawn)) < 16.0f) g->mons[i].alive = false;
@@ -853,7 +890,17 @@ static void draw_hud(Game *g, PlayerSlot *ps, int W, int H) {
         if (small) snprintf(buf, sizeof buf, "%d/%d %dG", s->potions_hp, s->potions_mp, s->gold);
         else snprintf(buf, sizeof buf, "POTIONS %d/%d  GOLD %d", s->potions_hp, s->potions_mp, s->gold);
         font_text(6, touch ? H - 56 : H - 36, buf, 0.75f, 0.68f, 0.5f);
-        if (s->haste_t > 0) font_text((int)bw + 12, H - 35, "HASTE", 1.0f, 0.9f, 0.4f);
+        /* what is on you: haste, and what monsters' elements did */
+        int sx = (int)bw + 12;
+        struct { bool on; const char *t; vec3 c; } ST[4] = {
+            { s->haste_t > 0, "HASTE", { 1.0f, 0.9f, 0.4f } }, { s->burn_t > 0, "BURNING", { 1.0f, 0.5f, 0.15f } },
+            { s->chill_t > 0, "CHILLED", { 0.6f, 0.85f, 1.0f } }, { s->poison_t > 0, "POISONED", { 0.45f, 1.0f, 0.3f } },
+        };
+        for (int k = 0; k < 4; k++)
+            if (ST[k].on && !(small && sx > W / 2)) {
+                font_text(sx, H - 35, ST[k].t, ST[k].c.x, ST[k].c.y, ST[k].c.z);
+                sx += font_text_width(ST[k].t) + 6;
+            }
     }
     if (touch) {
         /* the lower right belongs to the buttons */

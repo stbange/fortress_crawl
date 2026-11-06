@@ -36,16 +36,20 @@ vec3 weapon_glow_color(const Item *it) {
 }
 
 static WLook look_of(const Item *it, vec3 light, float time) {
-    static const vec3 METAL[RAR_COUNT] = { { 0.5f, 0.5f, 0.53f }, { 0.74f, 0.77f, 0.85f }, { 0.8f, 0.8f, 0.82f }, { 0.3f, 0.28f, 0.36f } };
-    static const vec3 ACCENT[RAR_COUNT] = { { 0.42f, 0.32f, 0.2f }, { 0.62f, 0.68f, 0.8f }, { 1.0f, 0.78f, 0.3f }, { 0.95f, 0.6f, 0.22f } };
-    static const vec3 GRIP[RAR_COUNT] = { { 0.3f, 0.19f, 0.1f }, { 0.22f, 0.2f, 0.32f }, { 0.45f, 0.1f, 0.08f }, { 0.12f, 0.1f, 0.13f } };
-    static const float GLOW[RAR_COUNT] = { 0.0f, 0.55f, 0.8f, 1.0f };
+    /* common iron, magic steel, rare gilded, epic blackened, legendary white starmetal */
+    static const vec3 METAL[RAR_COUNT] = { { 0.5f, 0.5f, 0.53f }, { 0.74f, 0.77f, 0.85f }, { 0.8f, 0.8f, 0.82f }, { 0.3f, 0.28f, 0.36f },
+                                           { 0.92f, 0.95f, 0.98f } };
+    static const vec3 ACCENT[RAR_COUNT] = { { 0.42f, 0.32f, 0.2f }, { 0.62f, 0.68f, 0.8f }, { 1.0f, 0.78f, 0.3f }, { 0.95f, 0.6f, 0.22f },
+                                            { 0.4f, 1.0f, 0.7f } };
+    static const vec3 GRIP[RAR_COUNT] = { { 0.3f, 0.19f, 0.1f }, { 0.22f, 0.2f, 0.32f }, { 0.45f, 0.1f, 0.08f }, { 0.12f, 0.1f, 0.13f },
+                                          { 0.1f, 0.3f, 0.22f } };
+    static const float GLOW[RAR_COUNT] = { 0.0f, 0.55f, 0.8f, 1.0f, 1.25f };
     int r = it->rarity < RAR_COUNT ? it->rarity : 0;
     WLook L;
     L.rarity = r;
     L.metal = mulv(METAL[r], light);
     L.edge = mulv(v3_add(METAL[r], v3(0.15f, 0.15f, 0.15f)), light);
-    L.wood = mulv(r == RAR_EPIC ? v3(0.34f, 0.2f, 0.17f) : v3(0.45f, 0.29f, 0.15f), light);
+    L.wood = mulv(r == RAR_EPIC ? v3(0.34f, 0.2f, 0.17f) : r == RAR_LEGENDARY ? v3(0.85f, 0.82f, 0.74f) : v3(0.45f, 0.29f, 0.15f), light);
     L.grip = mulv(GRIP[r], light);
     L.accent = mulv(ACCENT[r], light);
     L.element = item_affix_element(it);
@@ -101,7 +105,7 @@ static void mote(vec3 p, float size, vec3 col) { batch3d_box(p, v3(size, size, s
 /* Motes along the weapon from a0 to a1 (frame units). */
 static void weapon_motes(const WF *f, const WLook *L, float a0, float a1, float time, float seed) {
     if (L->glow_amt <= 0) return;
-    int n = L->rarity == RAR_EPIC ? 9 : L->rarity == RAR_RARE ? 7 : 5;
+    int n = L->rarity == RAR_LEGENDARY ? 12 : L->rarity == RAR_EPIC ? 9 : L->rarity == RAR_RARE ? 7 : 5;
     float sz = 0.007f * f->s;
     for (int i = 0; i < n; i++) {
         float k = (i + 0.5f) / n, h = hashf(seed + i * 7.31f);
@@ -151,9 +155,13 @@ static void weapon_motes(const WF *f, const WLook *L, float a0, float a1, float 
         }
     }
     /* epic weapons carry a rune that slowly turns about them */
-    if (L->rarity == RAR_EPIC) {
+    if (L->rarity >= RAR_EPIC) {
         float ang = time * 1.3f;
         O(f, a0 + (a1 - a0) * 0.55f, cosf(ang) * 0.09f, sinf(ang) * 0.09f, 0.012f, 0.018f, time * 3.0f, L->glow, true);
+        /* legendaries carry a second rune the other way round, in their own green-white */
+        if (L->rarity == RAR_LEGENDARY)
+            O(f, a0 + (a1 - a0) * 0.35f, cosf(-ang * 1.4f) * 0.11f, sinf(-ang * 1.4f) * 0.11f, 0.014f, 0.02f, -time * 3.0f,
+              v3(0.6f, 1.0f, 0.8f), true);
     }
 }
 
@@ -581,7 +589,7 @@ void weapon_impact_fx(Game *g, int element, int rarity, bool vampiric, vec3 at, 
         break;
     }
     }
-    if (rarity == RAR_EPIC) {
+    if (rarity >= RAR_EPIC) {
         /* epic weapons also leave a flat shock ring */
         for (int i = 0; i < 18; i++) {
             float a = i * 2.0f * PI_F / 18.0f;
