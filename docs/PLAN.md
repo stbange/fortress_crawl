@@ -137,8 +137,9 @@ and troll, each with its own model (monster_draw.c) and behaviour (`behave` and
 `windup_release` in monsters.c). Weights per stratum pick the pack's kind; each kind has a
 minimum danger level. Grades: normal, elite (x3 health, x1.5 damage) and boss (x10 health,
 x1.8 damage, about twice the size, a title, enrages below half health, guaranteed weapon).
-Colours come from the theme (rock, metal, accent, torch) and the region's element. The
-newer kinds borrow the older kinds' sounds for now.
+Colours come from the theme (rock, metal, accent, torch) and the region's element. Every kind
+has its own alert, attack, hurt and death sounds, and the special moves (stomp, beam,
+vanishing, burrowing, raising the dead, boulders, shield blocks) their own.
 
 ### 3.3 Danger level
 
