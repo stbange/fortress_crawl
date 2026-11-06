@@ -66,6 +66,7 @@ static WLook look_of(const Item *it, vec3 light, float time) {
  * (for motes that rise or fall); s: scale. */
 typedef struct WF {
     vec3 o, u, v, w, up;
+    vec3 aim; /* bows: where a nocked arrow points (0: away from the string, -w) */
     float s;
 } WF;
 
@@ -242,34 +243,48 @@ static void model_melee(const WF *f, const WLook *L, int base, float time, bool 
     }
 }
 
-/* Bows: u along the limbs (up), w toward the archer (the string side). draw 0..1. */
+/* Bows: u along the limbs (up), w toward the archer (the string side). The grip is in the
+ * hand (w = 0) and the limbs curve back toward the archer, so the bow bulges away from them;
+ * the string runs straight from tip to tip and is pulled back by draw 0..1. arrow: one rests
+ * on the string. */
+static float bow_curve(int base, float t, float bend) {
+    float c = bend * t * t;
+    if (base == WB_SHORTBOW && fabsf(t) > 0.75f) c -= (fabsf(t) - 0.75f) * 0.3f; /* recurved tips flick forward */
+    return c;
+}
+
 static void model_bow(const WF *f, const WLook *L, int base, float draw, float time, bool fx, float seed, bool arrow) {
     float half = base == WB_LONGBOW ? 0.44f : 0.28f;
-    float bend = base == WB_LONGBOW ? 0.06f : 0.08f;
+    float bend = base == WB_LONGBOW ? 0.07f : 0.1f;
     float thick = base == WB_LONGBOW ? 0.014f : 0.018f;
-    float pa = -half, pc = 0;
-    for (int i = 1; i <= 10; i++) {
-        float t = (i / 10.0f - 0.5f) * 2.0f;
-        float a = t * half, c = bend * (1.0f - t * t);
-        if (base == WB_SHORTBOW && fabsf(t) > 0.8f) c -= (fabsf(t) - 0.8f) * 0.25f; /* recurved tips */
-        bool g = L->glow_amt > 0 && (i == 1 || i == 10);
+    float pa = -half, pc = bow_curve(base, -1.0f, bend);
+    for (int i = 1; i <= 12; i++) {
+        float t = (i / 12.0f - 0.5f) * 2.0f;
+        float a = t * half, c = bow_curve(base, t, bend);
+        bool g = L->glow_amt > 0 && (i == 1 || i == 12);
         SEG(f, pa, 0, pc, a, 0, c, thick, g ? L->glow : L->wood, g);
         pa = a;
         pc = c;
     }
-    float tipc = base == WB_SHORTBOW ? -0.05f : 0.0f;
-    B(f, 0, 0, bend, 0.06f, thick * 1.4f, thick * 1.4f, L->grip, false); /* grip */
-    if (L->glow_amt > 0) O(f, 0.075f, 0, bend, 0.012f, 0.016f, time * 2.0f, L->glow, true);
-    else B(f, 0.07f, 0, bend, 0.01f, thick * 1.5f, thick * 1.5f, L->accent, false);
-    float nock = bend + 0.04f + 0.09f * draw;
+    float tipc = bow_curve(base, 1.0f, bend);
+    B(f, 0, 0, 0, 0.06f, thick * 1.4f, thick * 1.4f, L->grip, false); /* grip */
+    if (L->glow_amt > 0) O(f, 0.075f, 0, 0, 0.012f, 0.016f, time * 2.0f, L->glow, true);
+    else B(f, 0.07f, 0, 0, 0.01f, thick * 1.5f, thick * 1.5f, L->accent, false);
+    float nock = tipc + 0.16f * draw; /* straight string at rest */
     vec3 sc = L->glow_amt > 0 ? v3_lerp(v3(0.8f, 0.8f, 0.75f), v3_scale(L->glow, 1.0f / fmaxf(0.3f, L->glow_amt)), 0.5f) : v3(0.8f, 0.8f, 0.75f);
     SEG(f, half, 0, tipc, 0, 0, nock, 0.003f, sc, L->glow_amt > 0);
     SEG(f, -half, 0, tipc, 0, 0, nock, 0.003f, sc, L->glow_amt > 0);
-    if (arrow && draw > 0.6f) {
-        /* the nocked arrow, pointing away from the archer */
-        SEG(f, 0, 0.0f, nock, 0, 0, nock - 0.62f, 0.006f, mulv(v3(0.55f, 0.45f, 0.3f), v3(1, 1, 1)), false);
+    if (arrow) {
+        /* the nocked arrow, along the aim (away from the archer unless told otherwise) */
+        vec3 aim = v3_len(f->aim) > 0.1f ? v3_norm(f->aim) : v3_scale(f->w, -1.0f);
+        vec3 p0 = P(f, 0, 0, nock), p1 = v3_add(p0, v3_scale(aim, 0.62f * f->s));
+        vec3 d = v3_scale(v3_sub(p1, p0), 0.5f);
+        vec3 sx = v3_scale(v3_norm(v3_cross(aim, f->u)), 0.006f * f->s), sy = v3_scale(v3_norm(v3_cross(sx, aim)), 0.006f * f->s);
+        batch3d_obox(v3_add(p0, d), d, sx, sy, v3(0.55f, 0.45f, 0.3f), false);
         vec3 head = L->element != EL_NONE || L->vampiric ? L->glow : L->metal;
-        SP(f, 0, 0, nock - 0.62f, v3_scale(f->w, -1.0f), 0.014f, 0.05f, head, L->glow_amt > 0);
+        batch3d_spike(p1, aim, 0.014f * f->s, 0.05f * f->s, head, L->glow_amt > 0);
+        batch3d_obox(v3_add(p0, v3_scale(aim, 0.04f * f->s)), v3_scale(sx, 3.0f), v3_scale(sy, 0.6f), v3_scale(aim, 0.03f * f->s),
+                     L->glow_amt > 0 ? L->glow : v3(0.75f, 0.7f, 0.6f), L->glow_amt > 0); /* fletching */
     }
     if (fx) weapon_motes(f, L, -half * 0.9f, half * 0.9f, time, seed);
 }
@@ -354,7 +369,7 @@ static void model(const WF *f, const Item *it, vec3 light, float time, bool fx, 
     const WeaponBase *wb = &WEAPON_BASES[it->base < WB_COUNT ? it->base : WB_SWORD];
     if (wb->wclass == WPN_SWORD) model_melee(f, &L, it->base, time, fx, seed);
     else if (it->base == WB_CROSSBOW) model_crossbow(f, &L, draw, time, fx, seed);
-    else if (wb->wclass == WPN_BOW) model_bow(f, &L, it->base, draw, time, fx, seed, true);
+    else if (wb->wclass == WPN_BOW) model_bow(f, &L, it->base, draw, time, fx, seed, charge > 0); /* charge: an arrow on the string */
     else model_staff(f, &L, it->base, charge, gem, time, fx, seed);
 }
 
@@ -365,7 +380,7 @@ static float model_len(int base) {
 }
 
 void weapon_draw_ground(const Item *it, vec3 c, float yaw, vec3 light, float time, float seed) {
-    WF f;
+    WF f = { 0 };
     f.u = v3(cosf(yaw), 0, sinf(yaw));
     f.s = 0.9f;
     int wc = WEAPON_BASES[it->base].wclass;
@@ -386,11 +401,11 @@ void weapon_draw_ground(const Item *it, vec3 c, float yaw, vec3 light, float tim
         f.o = v3_sub(c, v3_scale(f.u, model_len(it->base) * 0.45f * f.s));
     }
     f.up = v3(0, 1, 0);
-    model(&f, it, light, time, true, seed, 1.0f, 0.0f, v3(0.55f, 0.6f, 1.0f));
+    model(&f, it, light, time, true, seed, it->base == WB_CROSSBOW ? 1.0f : 0.0f, 0.0f, v3(0.55f, 0.6f, 1.0f));
 }
 
 void weapon_draw_held(const Item *it, vec3 hand, vec3 dir, vec3 side, vec3 light, float time, float seed) {
-    WF f;
+    WF f = { 0 };
     f.o = hand;
     f.u = v3_norm(dir);
     f.v = v3_norm(side);
@@ -409,7 +424,7 @@ void weapon_draw_held(const Item *it, vec3 hand, vec3 dir, vec3 side, vec3 light
         f.w = v3(0, 1, 0);
         f.v = v3_cross(f.u, f.w);
     }
-    model(&f, it, light, time, true, seed, 1.0f, 0.0f, v3(0.55f, 0.6f, 1.0f));
+    model(&f, it, light, time, true, seed, it->base == WB_CROSSBOW ? 1.0f : 0.0f, 1.0f, v3(0.55f, 0.6f, 1.0f));
 }
 
 /* ---------- the weapon in your hands ---------- */
@@ -422,7 +437,7 @@ void weapon_draw_view(Game *g, PlayerSlot *ps, vec3 light) {
     float walk = sinf(ps->pl.bob * 2.0f) * 0.015f;
     float time = g->time;
     float seed = (float)ps->index * 17.0f;
-    WF f;
+    WF f = { 0 };
     f.up = v3(0, 1, 0);
     f.s = 1.0f;
     switch (s->weapon) {
@@ -463,7 +478,7 @@ void weapon_draw_view(Game *g, PlayerSlot *ps, vec3 light) {
         break;
     }
     case WPN_BOW: {
-        float draw = attacking ? (t < 0.3f ? 0.0f : (t - 0.3f) / 0.7f) : 1.0f; /* re-drawing after a shot */
+        float draw = attacking ? (t < 0.3f ? 0.0f : (t - 0.3f) / 0.7f) : 1.0f; /* crossbow: cocking again after a shot */
         if (it->base == WB_CROSSBOW) {
             float kick = attacking && t < 0.2f ? (0.2f - t) * 0.4f : 0.0f;
             f.o = v3(0.2f + walk, -0.2f + fabsf(walk) + kick * 0.5f, -0.5f + kick);
@@ -473,12 +488,18 @@ void weapon_draw_view(Game *g, PlayerSlot *ps, vec3 light) {
             f.w = v3_cross(f.v, f.u);
             model(&f, it, light, time, true, seed, draw, 0, v3(0, 0, 0));
         } else {
-            f.o = v3(-0.12f + walk, -0.15f, -0.55f);
-            f.u = v3(0, 1, 0);
-            f.w = v3_norm(v3(-0.1f, 0, 1.0f)); /* the arrow points at the crosshair */
+            /* held turned well to the side and tilted, so the curve of the limbs shows;
+             * the arrow still points at the crosshair */
+            f.o = v3(-0.22f + walk, -0.14f, -0.58f);
+            f.u = v3_norm(v3(0.18f, 1.0f, 0.0f));
+            f.w = v3_norm(v3(0.85f, 0, 0.55f));
+            f.w = v3_norm(v3_sub(f.w, v3_scale(f.u, v3_dot(f.w, f.u))));
             f.v = v3_cross(f.u, f.w);
+            f.aim = v3_norm(v3(0.3f, 0.12f, -1.0f));
             f.s = it->base == WB_LONGBOW ? 0.8f : 1.0f;
-            model(&f, it, light, time, true, seed, draw, 0, v3(0, 0, 0));
+            /* at rest the string is straight with an arrow on it; right after a shot it is empty */
+            bool nocked = !attacking || t > 0.5f;
+            model(&f, it, light, time, true, seed, 0.0f, nocked ? 1.0f : 0.0f, v3(0, 0, 0));
         }
         break;
     }

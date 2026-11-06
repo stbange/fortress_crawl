@@ -22,6 +22,8 @@ void sfx_update(struct Game *g, float dt);
 void sfx_at(struct Game *g, int id, vec3 pos, float vol);
 /* A sound of a player's own (their weapon, their pain): full volume near them. */
 void sfx_player(struct Game *g, const struct PlayerSlot *ps, int id, float vol);
+/* The same at a given pitch (heavy weapons sound deeper). */
+void sfx_player_pitch(struct Game *g, const struct PlayerSlot *ps, int id, float vol, float pitch);
 /* Not in the world (menus, fanfares). */
 void sfx_ui(int id, float vol);
 

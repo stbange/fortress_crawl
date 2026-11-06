@@ -58,12 +58,12 @@ export const SOUNDS = [
   { id: "enemy_fire_hit", dur: 0.8, text: "magic fireball explodes against stone, fiery whoomp" },
 
   // ---------------- weapons ----------------
-  { id: "swing_dagger", dur: 0.5, v: 2, text: "quick light dagger slash through the air, sharp swish" },
-  { id: "swing_sword", dur: 0.6, v: 2, text: "steel sword swing through the air, metallic whoosh" },
-  { id: "swing_axe", dur: 0.7, v: 2, text: "heavy battle axe swing, deep whoosh" },
-  { id: "swing_mace", dur: 0.7, v: 2, text: "heavy iron mace swung through the air, low heavy whoosh" },
-  { id: "swing_spear", dur: 0.6, v: 2, text: "spear thrust, fast piercing whoosh" },
-  { id: "swing_greatsword", dur: 0.9, v: 2, text: "huge two-handed greatsword swing, long heavy metallic whoosh" },
+  { id: "swing_dagger", dur: 0.5, v: 2, text: "quick slash of a steel dagger, sharp metallic swish with a short bright ring of steel" },
+  { id: "swing_sword", dur: 0.6, v: 2, text: "steel longsword swung hard through the air, deep metallic whoosh with the low ringing hum of a heavy blade" },
+  { id: "swing_axe", dur: 0.7, v: 2, text: "heavy iron battle axe swung through the air, deep low whoosh with a dull metallic hum of the iron head" },
+  { id: "swing_mace", dur: 0.7, v: 2, text: "heavy flanged iron mace swung through the air, very deep low whoosh with a weighty metallic drone" },
+  { id: "swing_spear", dur: 0.6, v: 2, text: "steel-tipped spear thrust forward, fast deep whoosh with a short metallic ring of the spearhead" },
+  { id: "swing_greatsword", dur: 0.9, v: 2, text: "huge two-handed greatsword swung in a wide arc, very deep heavy whoosh with a low resonant metallic hum, bass-heavy, no high-pitched ringing" },
   { id: "whirlwind", dur: 1.2, text: "warrior spins with a sword in a whirlwind attack, rapid circling whooshes of steel" },
   { id: "shoot_shortbow", dur: 0.6, v: 2, text: "short bow string release, light twang and arrow whoosh" },
   { id: "shoot_longbow", dur: 0.8, v: 2, text: "longbow draw and powerful release, deep bowstring twang and arrow whoosh" },

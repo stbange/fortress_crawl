@@ -432,7 +432,13 @@ static void try_attack(Game *g, PlayerSlot *ps, bool alt) {
         [WB_STAFF] = SFX_CAST_STAFF, [WB_SCEPTER] = SFX_CAST_SCEPTER,
     };
     static const int ALT[WPN_COUNT] = { SFX_WHIRLWIND, SFX_ARROW_STORM, SFX_STAFF_NOVA };
-    sfx_player(g, ps, alt ? ALT[s->weapon] : SWING[it->base < WB_COUNT ? it->base : WB_SWORD], 1.0f);
+    /* metal weapons a little lower the heavier they are */
+    static const float PITCH[WB_COUNT] = { [WB_DAGGER] = 1.0f, [WB_SWORD] = 0.85f, [WB_AXE] = 0.82f, [WB_MACE] = 0.75f,
+                                           [WB_SPEAR] = 0.9f, [WB_GREATSWORD] = 0.72f, [WB_SHORTBOW] = 1.0f, [WB_LONGBOW] = 0.95f,
+                                           [WB_CROSSBOW] = 0.95f, [WB_WAND] = 1.0f, [WB_STAFF] = 1.0f, [WB_SCEPTER] = 0.95f };
+    int b = it->base < WB_COUNT ? it->base : WB_SWORD;
+    if (alt) sfx_player(g, ps, ALT[s->weapon], 1.0f);
+    else sfx_player_pitch(g, ps, SWING[b], 1.0f, PITCH[b]);
 }
 
 void combat_update(Game *g, float dt) {

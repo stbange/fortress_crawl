@@ -160,6 +160,13 @@ void sfx_player(Game *g, const PlayerSlot *ps, int id, float vol) {
     audio_play(pick(id), vol * base_vol(id), 0.0f, 0.95f + frand() * 0.1f, false);
 }
 
+void sfx_player_pitch(Game *g, const PlayerSlot *ps, int id, float vol, float pitch) {
+    (void)g;
+    (void)ps;
+    if (!may_play(id)) return;
+    audio_play(pick(id), vol * base_vol(id), 0.0f, pitch * (0.96f + frand() * 0.08f), false);
+}
+
 void sfx_ui(int id, float vol) {
     if (!may_play(id)) return;
     audio_play(pick(id), vol * base_vol(id), 0.0f, 1.0f, false);
