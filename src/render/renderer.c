@@ -107,9 +107,22 @@ static const char *SKY_FS =
     "uniform mat4 u_inv_vp;\n"
     "uniform vec3 u_fog;\n"
     "uniform float u_stars;\n"
+    "uniform float u_moons;\n"
     "uniform float u_time;\n"
     "out vec4 frag;\n"
     "float hash(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }\n"
+    /* a moon: a disc of size cr (cosine of its radius), lit from the side 'lit' (a crescent
+       or a gibbous phase), with a soft halo */
+    "vec3 moon(vec3 col, vec3 dir, vec3 m, float cr, vec3 c, vec3 lit, float amt) {\n"
+    "  float d = dot(dir, m);\n"
+    "  if (d > cr) {\n"
+    "    vec3 side = normalize(m + lit * sqrt(2.0 * (1.0 - cr)) * 0.85);\n"
+    "    float shade = dot(dir, side) > cr ? 1.0 : 0.18;\n"
+    "    float spot = 0.85 + 0.15 * fract(sin(dot(floor(dir * 900.0), vec3(12.9, 78.2, 37.7))) * 43758.5);\n"
+    "    return mix(col, c * shade * spot, amt);\n"
+    "  }\n"
+    "  return col + c * 0.12 * amt * pow(max(d, 0.0), 300.0 * (1.0 - cr) + 40.0);\n"
+    "}\n"
     "void main() {\n"
     "  vec4 a = u_inv_vp * vec4(v_uv * 2.0 - 1.0, -1.0, 1.0);\n"
     "  vec4 b = u_inv_vp * vec4(v_uv * 2.0 - 1.0, 1.0, 1.0);\n"
@@ -119,10 +132,29 @@ static const char *SKY_FS =
     "    vec3 cell = floor(dir * 160.0);\n"
     "    float h = hash(cell);\n"
     "    if (h > 0.9975) col += vec3(0.55, 0.55, 0.65) * u_stars * (0.6 + 0.4 * sin(u_time * 2.0 + h * 90.0)) * smoothstep(-0.05, 0.25, dir.y);\n"
-    "    vec3 moon = normalize(vec3(0.35, 0.8, -0.45));\n"
-    "    float m = dot(dir, moon);\n"
-    "    if (m > 0.9985) col = mix(col, vec3(0.78, 0.8, 0.85), u_stars);\n"
-    "    else col += vec3(0.07, 0.08, 0.1) * u_stars * pow(max(m, 0.0), 60.0);\n"
+    "    if (u_moons <= 0.0) {\n"
+    "      vec3 moon = normalize(vec3(0.35, 0.8, -0.45));\n"
+    "      float m = dot(dir, moon);\n"
+    "      if (m > 0.9985) col = mix(col, vec3(0.78, 0.8, 0.85), u_stars);\n"
+    "      else col += vec3(0.07, 0.08, 0.1) * u_stars * pow(max(m, 0.0), 60.0);\n"
+    "    }\n"
+    "  }\n"
+    /* the Sanctum's sky: three moons in different shades and now and then a falling star */
+    "  if (u_moons > 0.0) {\n"
+    "    col = moon(col, dir, normalize(vec3(0.42, 0.52, -0.74)), 0.9978, vec3(0.9, 0.92, 0.98), normalize(vec3(-1.0, 0.2, 0.0)), u_moons);\n"
+    "    col = moon(col, dir, normalize(vec3(-0.66, 0.38, -0.42)), 0.9991, vec3(1.0, 0.72, 0.42), normalize(vec3(0.3, -1.0, 0.2)), u_moons);\n"
+    "    col = moon(col, dir, normalize(vec3(0.12, 0.72, 0.68)), 0.99955, vec3(0.6, 0.9, 0.85), normalize(vec3(1.0, 0.1, -0.3)), u_moons);\n"
+    "    float P = 7.0, k = floor(u_time / P), f = u_time - k * P;\n"
+    "    if (f < 0.9) {\n"
+    "      vec3 s0 = normalize(vec3(hash(vec3(k, 1.0, 3.0)) * 2.0 - 1.0, 0.45 + 0.4 * hash(vec3(k, 2.0, 5.0)), hash(vec3(k, 4.0, 7.0)) * 2.0 - 1.0));\n"
+    "      vec3 t = normalize(cross(s0, vec3(0.0, 1.0, 0.0)) * (hash(vec3(k, 9.0, 1.0)) > 0.5 ? 1.0 : -1.0) - vec3(0.0, 0.35, 0.0));\n"
+    "      vec3 head = normalize(s0 + t * f * 0.45), tail = normalize(s0 + t * max(0.0, f * 0.45 - 0.14));\n"
+    "      vec3 ab = head - tail; float h = clamp(dot(dir - tail, ab) / max(dot(ab, ab), 1e-6), 0.0, 1.0);\n"
+    "      float dist = length(dir - (tail + ab * h));\n"
+    "      float fade = (1.0 - f / 0.9) * h;\n"
+    "      if (dist < 0.0045) col += vec3(1.0, 0.97, 0.9) * fade * u_moons;\n"
+    "      else col += vec3(0.6, 0.65, 0.8) * fade * 0.3 * u_moons * smoothstep(0.014, 0.0045, dist);\n"
+    "    }\n"
     "  }\n"
     "  frag = vec4(col, 1.0);\n"
     "}\n";
@@ -203,6 +235,7 @@ bool renderer_init(Renderer *r, int win_w, int win_h) {
     r->s_inv_vp = U(r->sky_prog, "u_inv_vp");
     r->s_fog = U(r->sky_prog, "u_fog");
     r->s_stars = U(r->sky_prog, "u_stars");
+    r->s_moons = U(r->sky_prog, "u_moons");
     r->s_time = U(r->sky_prog, "u_time");
     r->p_tex = U(r->post_prog, "u_tex");
     r->p_dither = U(r->post_prog, "u_dither");
@@ -357,6 +390,7 @@ void renderer_begin(Renderer *r, const SceneParams *sp) {
     glUniformMatrix4fv(r->s_inv_vp, 1, GL_FALSE, inv.m);
     glUniform3f(r->s_fog, sp->fog.x, sp->fog.y, sp->fog.z);
     glUniform1f(r->s_stars, sp->stars);
+    glUniform1f(r->s_moons, sp->moons);
     glUniform1f(r->s_time, sp->time);
     glBindVertexArray(r->empty_vao);
     glDrawArrays(GL_TRIANGLES, 0, 3);

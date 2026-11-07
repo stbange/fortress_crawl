@@ -87,7 +87,7 @@ void gen_pocket(GenCtx *g) {
         for (int x = 59; x <= 69; x++) {
             float d = sqrtf((x - 64.0f) * (x - 64.0f) + (z - 24.0f) * (z - 24.0f));
             if (d <= 5.4f && d > 4.4f) g_set_w(g, x, G, z, B_PILLAR);
-            else if (d <= 4.4f) g_set_w(g, x, F, z, B_WATER);
+            else if (d <= 4.4f) g_set_w(g, x, G, z, B_WATER); /* a raised basin: one step out from anywhere in it */
         }
     box(g, 64, G, 24, 64, G + 2, 24, B_PILLAR);
     g_set_w(g, 64, G + 3, 24, B_LANTERN);

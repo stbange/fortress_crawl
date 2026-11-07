@@ -299,7 +299,7 @@ void game_update_atmosphere(Game *g, PlayerSlot *ps, float dt) {
     theme_info(ci.theme, &ti);
     vec3 fog = v3(ti.fog[0], ti.fog[1], ti.fog[2]);
     vec3 amb = v3(ti.ambient[0], ti.ambient[1], ti.ambient[2]);
-    float stars = ti.sky ? 0.6f : 0.0f;
+    float stars = ti.sky ? 0.6f : 0.0f, moons = 0.0f;
     float density = ti.fog_density;
     if (ci.arch == ARCH_EXTERIOR) {
         fog = v3(0.045f, 0.05f, 0.075f);
@@ -307,11 +307,12 @@ void game_update_atmosphere(Game *g, PlayerSlot *ps, float dt) {
         stars = 1.0f;
         density = 0.012f;
     } else if (ci.arch == ARCH_POCKET) {
-        /* the pocket realm: a warm evening sky, the first stars */
-        fog = v3(0.36f, 0.3f, 0.27f);
-        amb = v3(0.3f, 0.27f, 0.24f);
-        stars = 0.35f;
-        density = 0.0025f;
+        /* the pocket realm: a clear night, three moons and a sky full of stars */
+        fog = v3(0.035f, 0.045f, 0.09f);
+        amb = v3(0.17f, 0.18f, 0.24f);
+        stars = 1.0f;
+        moons = 1.0f;
+        density = 0.0018f;
     }
     ps->openness_timer -= dt;
     if (ps->openness_timer <= 0) {
@@ -325,6 +326,7 @@ void game_update_atmosphere(Game *g, PlayerSlot *ps, float dt) {
     ps->ambient = v3_lerp(ps->ambient, amb, k);
     ps->fog_density = lerpf(ps->fog_density, density, k);
     ps->stars = lerpf(ps->stars, stars, k);
+    ps->moons = lerpf(ps->moons, moons, k);
 
     char name[128];
     world_place_name(&ci, name, sizeof name);
@@ -1149,6 +1151,7 @@ static void render_view(Game *g, PlayerSlot *ps, int vx, int vy, int vw, int vh)
     sp.fog_density = ps->fog_density;
     sp.ambient = ps->ambient;
     sp.stars = ps->stars;
+    sp.moons = ps->moons;
     sp.time = g->time;
     combat_collect_lights(g, ps, &sp);
     mech_collect_lights(g, eye, &sp);

@@ -28,6 +28,7 @@ typedef struct SceneParams {
     float fog_density;
     vec3 ambient;
     float stars;  /* 0..1 night sky visibility */
+    float moons;  /* 0..1: the Sanctum's three moons and falling stars */
     float time;
     /* dynamic point lights (spells, explosions) */
     int ndl;
@@ -52,7 +53,7 @@ typedef struct Renderer {
     /* uniform locations */
     GLint u_vp, u_origin, u_snap, u_res, u_cam, u_fog, u_fog_density, u_ambient, u_torch, u_torch_radius, u_time,
         u_fullbright, u_atlas, u_ndl, u_dl_pos, u_dl_col;
-    GLint s_inv_vp, s_fog, s_stars, s_time;
+    GLint s_inv_vp, s_fog, s_stars, s_moons, s_time;
     GLint p_tex, p_dither, p_low, p_time;
     mat4 vp;
     int view_x, view_y, view_w, view_h; /* current view inside the low-res target (GL coordinates) */

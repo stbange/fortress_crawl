@@ -12,14 +12,15 @@
 #define POCKET_Y0 (POCKET_CY * 32)    /* CHUNK = 32 */
 #define POCKET_G (POCKET_Y0 + 8)      /* feet height on the ground floor */
 
-/* Every chunk of the realm and the empty sky around it. */
+/* Every chunk of the realm and the empty sky around it, far enough that no ordinary
+ * chunk is ever in view from the island (the island is chunks 0..3; views reach 10 out). */
 static inline bool world_is_pocket(int cx, int cy, int cz) {
-    return cx >= -1 && cx <= 4 && cz >= -1 && cz <= 4 && cy >= POCKET_CY - 1 && cy <= POCKET_CY + 3;
+    return cx >= -10 && cx <= 13 && cz >= -10 && cz <= 13 && cy >= POCKET_CY - 6 && cy <= POCKET_CY + 6;
 }
 
 /* Where you arrive (in the garden, looking at the keep) and the door back. */
 #define POCKET_ARRIVE_X 64.5f
-#define POCKET_ARRIVE_Z 20.5f
+#define POCKET_ARRIVE_Z 34.5f /* between the fountain (z 19..29) and the keep */
 #define POCKET_EXIT_X 64.5f
 #define POCKET_EXIT_Z 11.5f
 

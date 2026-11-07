@@ -78,8 +78,8 @@ static void compute_light(const MeshInput *in, MeshScratch *s) {
                 const ChunkInfo *ci = in->info[chunk_of(px) + chunk_of(py) * 3 + chunk_of(pz) * 9];
                 if (!ci || (ci->arch != ARCH_EXTERIOR && ci->arch != ARCH_POCKET)) continue;
                 u8 *l = &s->light[i * 4];
-                if (ci->arch == ARCH_POCKET) { /* a warm late afternoon in the pocket realm */
-                    l[0] = (u8)MAXI(l[0], 13); l[1] = (u8)MAXI(l[1], 12); l[2] = (u8)MAXI(l[2], 10);
+                if (ci->arch == ARCH_POCKET) { /* the light of three moons in the pocket realm */
+                    l[0] = (u8)MAXI(l[0], 10); l[1] = (u8)MAXI(l[1], 11); l[2] = (u8)MAXI(l[2], 14);
                 } else {
                     l[0] = (u8)MAXI(l[0], 7); l[1] = (u8)MAXI(l[1], 8); l[2] = (u8)MAXI(l[2], 12);
                 }

@@ -381,7 +381,7 @@ typedef struct PlayerSlot {
     float lava_t;
     /* atmosphere of this player's view */
     vec3 fog, ambient;
-    float fog_density, stars, openness, openness_timer;
+    float fog_density, stars, moons, openness, openness_timer;
     float explore_timer;
     /* flow field toward this player, followed by the monsters chasing them */
     u16 *flow;
