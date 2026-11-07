@@ -145,6 +145,8 @@ typedef struct Effect {
 } Effect;
 
 #define BAG_SIZE 18
+#define POTION_HP_MAX 5 /* few, so each one counts */
+#define POTION_MP_MAX 9
 #define MAX_PICKUPS 384
 #define MAX_EFFECTS 64
 

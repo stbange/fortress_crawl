@@ -29,7 +29,7 @@ static const FormDef FORMS[SF_COUNT] = {
     [SF_AURA] = { 12, 25, 7.0f, 3, "hurts everything near you for 6 seconds" },
 };
 static const struct { const char *name, *desc; float mana, cooldown; int tier; } UTILITY[SU_COUNT] = {
-    [SU_HEAL] = { "Heal", "restores a third of your health", 25, 6.0f, 0 },
+    [SU_HEAL] = { "Heal", "restores a fifth of your health", 25, 12.0f, 1 },
     [SU_BLINK] = { "Blink", "teleports you 10 m ahead", 15, 2.5f, 1 },
     [SU_WARD] = { "Ward", "a shield that absorbs damage for 20 s", 20, 12.0f, 1 },
     [SU_HASTE] = { "Haste", "faster moves and attacks for 10 s", 20, 15.0f, 2 },
@@ -122,7 +122,6 @@ int spell_learn(PlayerSlot *ps, int id) {
 
 void spells_give_start(Stats *s) {
     s->spell_rank[spell_attack_id(EL_FIRE, SF_BOLT)] = 1;
-    s->spell_rank[SPELL_ATTACK_COUNT + SU_HEAL] = 1;
     s->spell_rank[SPELL_ATTACK_COUNT + SU_THREAD] = 1;
     s->spell_rank[SPELL_ATTACK_COUNT + SU_SANCTUM] = 1; /* everyone has a home */
     s->spell = spell_attack_id(EL_FIRE, SF_BOLT);
@@ -368,7 +367,7 @@ static bool cast_utility_do(Game *g, PlayerSlot *ps, int u, int rank) {
     switch (u) {
     case SU_HEAL:
         if (s->hp >= s->maxhp) return false;
-        s->hp = fminf(s->maxhp, s->hp + s->maxhp * (0.3f + 0.05f * rank));
+        s->hp = fminf(s->maxhp, s->hp + s->maxhp * (0.2f + 0.04f * rank));
         particles_burst(g, eye, v3(0.5f, 1.0f, 0.5f), 16, 2.0f, 0.05f, true);
         flash_add(g, eye, v3(0.4f, 1.0f, 0.5f), 6.0f, 0.4f);
         return true;

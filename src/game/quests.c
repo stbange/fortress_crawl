@@ -392,7 +392,7 @@ static void read_trace(Game *g, PlayerSlot *ps, Pickup *p) {
 static void mission_reward(Game *g, PlayerSlot *ps, const Mission *m, const char *what) {
     ps->st.gold += m->reward;
     game_add_xp(g, ps, 25.0f + m->reward * 0.6f);
-    if (m->type == MI_RETRIEVE) ps->st.potions_hp = MINI(9, ps->st.potions_hp + 1);
+    if (m->type == MI_RETRIEVE) ps->st.potions_hp = MINI(POTION_HP_MAX, ps->st.potions_hp + 1);
     char buf[128];
     snprintf(buf, sizeof buf, "%s - %d GOLD", what, m->reward);
     upper(buf);

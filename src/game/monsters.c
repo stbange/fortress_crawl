@@ -170,7 +170,7 @@ Monster *monster_spawn(Game *g, int type, vec3 pos, int level, bool elite, vec3 
     for (int i = 0; i < MAX_PLAYERS; i++) np += g->players[i].active;
     float party = 1.0f + 0.5f * (float)MAXI(0, np - 1);
     m->maxhp = m->hp = d->hp * (1.0f + 0.18f * level) * (elite ? 3.0f : 1.0f) * party;
-    m->dmg = d->dmg * (1.0f + 0.10f * level) * (elite ? 1.5f : 1.0f);
+    m->dmg = d->dmg * (1.0f + 0.14f * level) * (elite ? 1.6f : 1.0f);
     m->xp = d->xp * (1.0f + 0.15f * level) * (elite ? 4.0f : 1.0f);
     m->grade = elite ? GRADE_ELITE : GRADE_NORMAL;
     m->state = MS_IDLE;
@@ -185,7 +185,7 @@ Monster *monster_spawn(Game *g, int type, vec3 pos, int level, bool elite, vec3 
     m->rank = (u8)tier;
     m->element = (u8)(tier >= 2 ? region_element(region) : EL_NONE);
     m->maxhp = m->hp = m->maxhp * (1.0f + 0.06f * tier);
-    m->dmg *= 1.0f + 0.04f * tier;
+    m->dmg *= 1.0f + 0.08f * tier;
     m->xp *= 1.0f + 0.05f * tier;
     m->scale *= 1.0f + 0.02f * tier;
     monster_palette(g, m, pos, tint);
@@ -240,7 +240,7 @@ static void spawn_chunk(Game *g, Chunk *c) {
     int level = ci->level;
     /* most chunks hold a pack, structures two; packs grow with danger */
     int n = 0;
-    if (level <= 1) n = rng_chance(&r, 0.75f) ? rng_range(&r, 1, 3) : 0;
+    if (level <= 1) n = rng_range(&r, 2, 3); /* something to fight within a minute of the gate */
     else if (rng_chance(&r, ci->has_struct ? 1.0f : 0.8f)) n = MINI(10, 3 + (int)(level * 0.1f + rng_float(&r) * 3.0f));
     if (level > 1 && ci->has_struct && rng_chance(&r, 0.6f)) n += 3 + (int)(rng_float(&r) * 3.0f);
     /* the stratum's mix, without the kinds not met at this danger yet */
@@ -551,12 +551,15 @@ void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int 
         for (int i = 0; i < MAX_PLAYERS; i++) {
             PlayerSlot *ps = &g->players[i];
             if (!ps->active) continue;
+            /* one kill is never worth more than 30% of a level (no jumps of several levels
+             * from a pack far above you) */
+            float cap = ps->st.xp_next * 0.3f;
             if (i == killer) {
                 ps->st.kills++;
                 g_tele.kills[m->type & 31][m->grade % 3]++;
-                game_add_xp(g, ps, m->xp);
+                game_add_xp(g, ps, fminf(m->xp, cap));
             } else if (v3_len(v3_sub(ps->pl.pos, m->pos)) < 30.0f) {
-                game_add_xp(g, ps, m->xp * 0.5f);
+                game_add_xp(g, ps, fminf(m->xp * 0.5f, cap));
             }
         }
     }
@@ -824,6 +827,24 @@ static void necro_summon(Game *g, Monster *m, const MCtx *x) {
     sfx_at(g, SFX_NECRO_SUMMON, m->pos, 1.0f);
 }
 
+/* A wide blow: every living player in front within r (half-angle in degrees), with a shove. */
+static void sweep(Game *g, Monster *m, float r, float half_deg, float mult, float shove) {
+    vec3 fw = v3(cosf(m->yaw), 0, sinf(m->yaw));
+    if (m->alt_kind) { utility_monster_strike(g, m, m->dmg * mult); return; }
+    for (int k = 0; k < MAX_PLAYERS; k++) {
+        PlayerSlot *ps = &g->players[k];
+        if (!ps->active || ps->st.dead) continue;
+        vec3 to = v3_sub(ps->pl.pos, m->pos);
+        to.y = 0;
+        float dd = v3_len(to);
+        if (dd > r || fabsf(ps->pl.pos.y - m->pos.y) > 1.8f) continue;
+        if (dd > 0.3f && v3_dot(v3_scale(to, 1.0f / dd), fw) < cosf(half_deg * PI_F / 180.0f)) continue;
+        monster_strike(g, m, ps, m->dmg * mult, m->pos);
+        if (dd > 0.01f) ps->pl.vel = v3_add(ps->pl.vel, v3_scale(to, shove / dd));
+    }
+    sfx_at(g, SFX_HIT_BLUNT, m->pos, 1.1f);
+}
+
 /* What happens when a raised attack comes down. */
 static void windup_release(Game *g, Monster *m, const MCtx *x) {
     const MonsterDef *d = &MONSTERS[m->type];
@@ -850,8 +871,18 @@ static void windup_release(Game *g, Monster *m, const MCtx *x) {
         break;
     case MON_TROLL:
         if (m->aux == 1) troll_throw(g, m, m->charge_dir);
-        else if (in_reach) monster_strike(g, m, x->tp, m->dmg, x->c);
+        else sweep(g, m, d->reach + d->hw * m->scale + 1.0f, 80.0f, 1.2f, 6.0f);
         m->aux = 0;
+        break;
+    case MON_BRUTE:
+        if (m->aux == 1) { /* the slam: it has had enough of you standing there */
+            float dmg = m->dmg;
+            m->dmg *= 1.2f;
+            ground_blast(g, m, 2.5f, v3(0.55f, 0.45f, 0.35f));
+            m->dmg = dmg;
+            m->aux = 0;
+            m->close_t = 0;
+        } else if (in_reach) monster_strike(g, m, x->tp, m->dmg, x->c);
         break;
     default:
         if (in_reach) monster_strike(g, m, x->tp, m->dmg, x->c);
@@ -1191,6 +1222,7 @@ void monsters_update(Game *g, float dt) {
                 want = v3_scale(m->charge_dir, 12.0f);
                 if (hdist < d->hw * m->scale + 0.7f && fabsf(dy) < 1.5f) {
                     monster_strike(g, m, tp, m->dmg * 1.3f, c);
+                    if (!m->alt_kind) tp->st.chill_t = fmaxf(tp->st.chill_t, 0.8f); /* staggered */
                     m->state = MS_STUN;
                     m->timer = 0.6f;
                 } else if (m->timer <= 0) {
@@ -1248,11 +1280,23 @@ void monsters_update(Game *g, float dt) {
                     if (m->type == MON_HORNED && los && hdist > 4.0f && hdist < 14.0f && fabsf(dy) < 1.5f && m->cooldown <= 0) {
                         sfx_at(g, SFX_HORNED_CHARGE, c, 1.0f);
                         m->state = MS_CHARGE;
-                        m->charge_dir = hdir;
+                        /* aimed where you will be */
+                        vec3 lead = v3_add(feet, v3_scale(tp->pl.vel, 0.4f));
+                        m->charge_dir = v3_norm(v3(lead.x - m->pos.x, 0, lead.z - m->pos.z));
                         m->timer = 1.3f;
                         m->cooldown = 3.0f;
                         m->yaw = atan2f(hdir.z, hdir.x);
                         break;
+                    }
+                    if (m->type == MON_BRUTE) {
+                        m->close_t = hdist < 2.5f && fabsf(dy) < 1.5f ? m->close_t + dt : 0.0f;
+                        if (m->close_t > 1.5f && m->cooldown <= 0) {
+                            sfx_monster(g, m, MSFX_ATTACK);
+                            m->state = MS_WINDUP;
+                            m->timer = d->windup * 1.4f;
+                            m->aux = 1;
+                            break;
+                        }
                     }
                     if (hdist < d->reach + d->hw * m->scale + 0.2f && fabsf(dy) < 1.8f && m->cooldown <= 0) {
                         sfx_monster(g, m, MSFX_ATTACK);

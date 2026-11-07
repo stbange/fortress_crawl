@@ -234,7 +234,7 @@ void loot_drop(Game *g, vec3 pos, float level, bool elite, float luck) {
     float k = elite ? 4.0f : 1.0f;
     vec3 p = v3_add(pos, v3(0, 0.5f, 0));
     if (lrand() < 0.55f + luck) pickup_spawn(g, PK_GOLD, p, (int)((1 + level * 0.6f + lrand() * 5.0f) * k), NULL, 0, 0);
-    if (lrand() < 0.08f + (elite ? 0.4f : 0.0f) + luck) pickup_spawn(g, lrand() < 0.6f ? PK_POTION_HP : PK_POTION_MP, p, 1, NULL, 0, 0);
+    if (lrand() < (level < 3 ? 0.04f : 0.08f) + (elite ? 0.4f : 0.0f) + luck) pickup_spawn(g, lrand() < 0.6f ? PK_POTION_HP : PK_POTION_MP, p, 1, NULL, 0, 0);
     if (lrand() < 0.035f + (elite ? 0.35f : 0.0f) + luck * 0.6f) pickup_spawn(g, PK_SCROLL, p, random_scroll(level), NULL, 0, 0);
     int tier, region = region_at(g, pos, &tier);
     if (lrand() < 0.045f + 0.004f * tier + (elite ? 0.5f : 0.0f) + luck) {
@@ -303,7 +303,7 @@ static bool collect(Game *g, PlayerSlot *ps, Pickup *p) {
     case PK_POTION_HP:
     case PK_POTION_MP: {
         int *n = p->kind == PK_POTION_HP ? &s->potions_hp : &s->potions_mp;
-        if (*n >= 9) return false;
+        if (*n >= (p->kind == PK_POTION_HP ? POTION_HP_MAX : POTION_MP_MAX)) return false;
         (*n)++;
         sfx_player(g, ps, SFX_PICKUP_POTION, 1.0f);
         return true;

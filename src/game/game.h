@@ -83,6 +83,7 @@ typedef struct Monster {
     /* a target it cannot get to: how long without getting closer, the closest it got, and
      * how long it then leaves you alone */
     float giveup_t, giveup_d, sulk_t;
+    float close_t;   /* brute: how long you have stood within its reach */
     i16 charmer;     /* player slot it fights for */
     u8 alt_kind;     /* this tick's target: 0 a player, 1 a decoy or lure, 2 a monster, 3 follows its charmer */
     i16 alt_idx;     /* that decoy (effect) or monster */
@@ -456,6 +457,7 @@ int game_solid(void *user, int x, int y, int z);
 void game_banner(PlayerSlot *ps, const char *text);
 void game_banner_all(Game *g, const char *text);
 void game_add_xp(Game *g, PlayerSlot *ps, float xp);
+float xp_for_level(int level); /* XP from this level to the next */
 void game_hurt_player(Game *g, PlayerSlot *ps, float dmg, vec3 from);
 /* Damage without a blow (burning, poison): no push. */
 void game_dot_player(Game *g, PlayerSlot *ps, float dmg);

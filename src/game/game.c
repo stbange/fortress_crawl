@@ -50,7 +50,7 @@ static void stats_init(PlayerSlot *ps) {
     Stats *s = &ps->st;
     memset(s, 0, sizeof *s);
     s->level = 1;
-    s->xp_next = 60.0f;
+    s->xp_next = xp_for_level(1);
     s->weapon = WPN_SWORD;
     items_give_start(s);
     spells_give_start(s);
@@ -106,6 +106,13 @@ PlayerSlot *game_add_player(Game *g) {
     return NULL;
 }
 
+/* XP from level L to L+1: grows 1.4 times per level, 1.3 from level 10 on (late levels
+ * would otherwise take far longer than the monsters' XP grows). */
+float xp_for_level(int level) {
+    if (level < 10) return 90.0f * powf(1.4f, (float)(level - 1));
+    return 90.0f * powf(1.4f, 8.0f) * powf(1.3f, (float)(level - 9));
+}
+
 void game_add_xp(Game *g, PlayerSlot *ps, float xp) {
     Stats *s = &ps->st;
     s->xp += xp;
@@ -113,7 +120,7 @@ void game_add_xp(Game *g, PlayerSlot *ps, float xp) {
         s->xp -= s->xp_next;
         s->level++;
         s->points++;
-        s->xp_next = 60.0f * powf(1.4f, (float)(s->level - 1));
+        s->xp_next = xp_for_level(s->level);
         stats_refresh(ps);
         s->hp = s->maxhp;
         s->mana = s->maxmana;
@@ -656,8 +663,13 @@ static void update_player(Game *g, PlayerSlot *ps, const PlayerInput *in, float 
             ps->pl.pos = s->respawn;
             ps->pl.yaw = s->respawn_yaw;
             ps->pl.vel = v3(0, 0, 0);
-            s->hp = s->maxhp;
-            s->mana = s->maxmana;
+            /* death costs: a fifth of the gold carried, and the shrine gives back only half
+             * your health and mana; the Sanctum bed restores fully */
+            bool home = realm_has(s->respawn);
+            int lost = s->gold / 5;
+            s->gold -= lost;
+            s->hp = s->maxhp * (home ? 1.0f : 0.5f);
+            s->mana = s->maxmana * (home ? 1.0f : 0.5f);
             s->hurt = 0;
             s->burn_t = s->poison_t = s->chill_t = 0;
             s->fall_speed = 0;
@@ -665,7 +677,10 @@ static void update_player(Game *g, PlayerSlot *ps, const PlayerInput *in, float 
             for (int i = 0; i < MAX_MONSTERS; i++)
                 if (g->mons[i].alive && v3_len(v3_sub(g->mons[i].pos, s->respawn)) < 16.0f) g->mons[i].alive = false;
             s->invuln = 2.0f;
-            game_banner(ps, "THE SHRINE RESTORES YOU");
+            char buf[96];
+            if (home) snprintf(buf, sizeof buf, "YOU WAKE IN YOUR OWN BED (-%d GOLD)", lost);
+            else snprintf(buf, sizeof buf, "THE SHRINE BRINGS YOU BACK, WEAKENED (-%d GOLD)", lost);
+            game_banner(ps, buf);
         }
         return;
     }

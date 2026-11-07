@@ -230,8 +230,8 @@ static bool want_pickup(const PlayerSlot *ps, const Pickup *p) {
     const Stats *s = &ps->st;
     switch (p->kind) {
     case PK_GOLD: case PK_SCROLL: case PK_RELIC: case PK_CHEST: case PK_QUEST: return true;
-    case PK_POTION_HP: return s->potions_hp < 9;
-    case PK_POTION_MP: return s->potions_mp < 9;
+    case PK_POTION_HP: return s->potions_hp < POTION_HP_MAX;
+    case PK_POTION_MP: return s->potions_mp < POTION_MP_MAX;
     case PK_WEAPON: {
         for (int i = 0; i < BAG_SIZE; i++) if (!s->bag[i].used) return true;
         return false;
@@ -324,6 +324,8 @@ static void plan(PlayerSlot *ps) {
         cell_of(i, &x, &y, &z);
         int v = visit_count(x, y, z);
         float sc = 6.0f / (1.0f + v) - dist_[i] * 0.01f;
+        /* the courtyard before the gates holds nothing: a player heads inside */
+        if (world_is_exterior(floordiv(x, CHUNK), floordiv(y, CHUNK), floordiv(z, CHUNK))) sc -= 3.0f;
         vec3 c = v3(x + 0.5f, (float)y, z + 0.5f);
         if (B.style == BS_DELVER) sc += 0.08f * (gate_dist(c) - here_gate);
         if (has_tgt) sc += 0.1f * (v3_len(v3_sub(feet, tgt)) - v3_len(v3_sub(c, tgt)));

@@ -502,7 +502,14 @@ void combat_update(Game *g, float dt) {
         if (s->poison_t > 0) { s->poison_t -= dt; game_dot_player(g, ps, s->poison_dps * dt); }
         if (s->dead) continue;
         s->mana = fminf(s->maxmana, s->mana + (3.0f + 0.1f * s->level) * (s->refreshed_t > 0 ? 2.0f : 1.0f) * dt);
-        if (s->since_hurt > 4.0f) s->hp = fminf(s->maxhp, s->hp + (1.5f + 2.0f * s->ranks[SK_SECOND_WIND]) * dt);
+        /* wounds close only out of a fight: some time unhurt and nothing awake close by */
+        if (s->since_hurt > 6.0f) {
+            bool calm = true;
+            for (int k = 0; k < MAX_MONSTERS && calm; k++)
+                calm = !(g->mons[k].alive && g->mons[k].awake && g->mons[k].charm_t <= 0 &&
+                         v3_len(v3_sub(g->mons[k].pos, ps->pl.pos)) < 12.0f);
+            if (calm) s->hp = fminf(s->maxhp, s->hp + (1.5f + 2.0f * s->ranks[SK_SECOND_WIND]) * dt);
+        }
         if (s->well_fed_t > 0) s->hp = fminf(s->maxhp, s->hp + s->maxhp * 0.004f * dt); /* well fed: slowly, even in a fight */
         bool mouse = ps->keyboard && (g->mouse || g->opt.demo);
         bool touch = ps->keyboard && g->touch.active;
