@@ -16,6 +16,8 @@ void stats_refresh(PlayerSlot *ps) {
     ps->st.maxhp = stats_max_hp(&ps->st) * (1.0f + relic_bonus(&ps->st, RB_HEALTH));
     ps->st.maxmana = stats_max_mana(&ps->st) * (1.0f + relic_bonus(&ps->st, RB_MANA));
     ps->pl.speed_mult = (1.0f + 0.12f * ps->st.ranks[SK_FLEET_FOOT]) * (1.0f + relic_bonus(&ps->st, RB_SPEED));
+    if (ps->st.well_fed_t > 0) ps->st.maxhp *= 1.2f; /* a feast in the Sanctum */
+    ps->st.hp = fminf(ps->st.hp, ps->st.maxhp);
 }
 
 /* Damage factor of the equipped weapon of a class, with relics. */
@@ -191,10 +193,13 @@ static void boulder_burst(Game *g, Projectile *p, vec3 at) {
     sfx_at(g, SFX_BOULDER_IMPACT, at, 1.0f);
 }
 
-static void update_projectiles(Game *g, float dt) {
+static void update_projectiles(Game *g, float dt0) {
     for (int i = 0; i < MAX_PROJECTILES; i++) {
         Projectile *p = &g->proj[i];
         if (!p->alive) continue;
+        /* Time Slip slows what the monsters threw */
+        bool enemy = p->kind == PJ_ENEMY_FIRE || p->kind == PJ_ENEMY_ARROW || p->kind == PJ_BOULDER;
+        float dt = enemy ? dt0 * utility_time_scale(g) : dt0;
         p->life -= dt;
         if (p->life <= 0) { p->alive = false; continue; }
         if (p->kind == PJ_ARROW || p->kind == PJ_ENEMY_ARROW) p->vel.y -= 5.0f * dt;
@@ -402,6 +407,7 @@ static float mana_cost(const Stats *s, float base) { return base * (1.0f - 0.15f
 static void try_attack(Game *g, PlayerSlot *ps, bool alt) {
     Stats *s = &ps->st;
     if (s->cooldown > 0 || s->dead) return;
+    utility_player_attacked(ps);
     const Item *it = &s->equipped[s->weapon];
     const WeaponBase *wb = &WEAPON_BASES[it->base];
     float speed = item_speed_mult(it) * (s->haste_t > 0 ? 0.7f : 1.0f);
@@ -479,6 +485,8 @@ void combat_update(Game *g, float dt) {
         ps->pl.speed_mult = (1.0f + 0.12f * s->ranks[SK_FLEET_FOOT]) * (1.0f + relic_bonus(s, RB_SPEED)) * (s->haste_t > 0 ? 1.4f : 1.0f);
         /* monsters' elements: burning and poison eat health, a chill slows */
         if (s->chill_t > 0) { s->chill_t -= dt; ps->pl.speed_mult *= 0.6f; }
+        if (s->stoneskin_t > 0) ps->pl.speed_mult *= 0.75f;
+        if (s->steed_t > 0) ps->pl.speed_mult *= 1.9f;
         if (s->burn_t > 0) {
             s->burn_t -= dt;
             game_dot_player(g, ps, s->burn_dps * dt);
@@ -486,8 +494,9 @@ void combat_update(Game *g, float dt) {
         }
         if (s->poison_t > 0) { s->poison_t -= dt; game_dot_player(g, ps, s->poison_dps * dt); }
         if (s->dead) continue;
-        s->mana = fminf(s->maxmana, s->mana + (3.0f + 0.1f * s->level) * dt);
+        s->mana = fminf(s->maxmana, s->mana + (3.0f + 0.1f * s->level) * (s->refreshed_t > 0 ? 2.0f : 1.0f) * dt);
         if (s->since_hurt > 4.0f) s->hp = fminf(s->maxhp, s->hp + (1.5f + 2.0f * s->ranks[SK_SECOND_WIND]) * dt);
+        if (s->well_fed_t > 0) s->hp = fminf(s->maxhp, s->hp + s->maxhp * 0.004f * dt); /* well fed: slowly, even in a fight */
         bool mouse = ps->keyboard && (g->mouse || g->opt.demo);
         bool touch = ps->keyboard && g->touch.active;
         bool attack = (mouse && ps->attack_held) || ps->pad_attack || (touch && g->touch.held[TB_ATTACK]);
@@ -558,7 +567,7 @@ void combat_draw_world(Game *g, vec3 eye) {
 }
 
 void combat_collect_lights(Game *g, PlayerSlot *viewer, SceneParams *sp) {
-    vec3 eye = player_eye(&viewer->pl);
+    vec3 eye = game_view_eye(viewer);
     sp->ndl = 0;
     /* the other players' torches (the viewer's own torch is part of the scene lighting) */
     for (int i = 0; i < MAX_PLAYERS && sp->ndl < MAX_DLIGHTS; i++) {

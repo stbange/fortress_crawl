@@ -371,6 +371,33 @@ in `src/world/mech.h`.
   Darts are fired by anyone stepping on the plate, monsters included.
 - **Lava** burns anyone standing on it.
 
+### 6.10 Utility spells and the Sanctum (v0.9)
+
+- **31 more utility spells** (`src/game/utility.c`), 38 in all: moving (levitate, wings,
+  feather fall, spider climb, strider's grace, phase step, anchor, twin gates, stairway of
+  light), safe places (warden's keep, wall of stone, hut of rest, sanctuary, mirror image,
+  stoneskin), knowing (clairvoyance, reveal the hidden, map of the mind, dowsing, speak with
+  the dead), bending monsters (invisibility, lure, charm, fear, time slip, gravity well),
+  changing the world (stone shape, bridge of light, quench, spectral steed) and the Sanctum
+  Door. Rank raises duration and size by 20% per rank.
+- **Timed world edits**: conjured structures are real blocks (`chunkmap_set_block`, a remesh
+  flag per chunk). A list of edits puts them into loaded chunks, again when a chunk comes
+  back, and reverts them when their time is up and nobody stands in the cell. The gate of a
+  keep is a cell only monsters cannot pass.
+- **Monsters** can be drawn off the player: a lure, a mirror image, or for a charmed monster
+  the nearest other monster (or following its charmer). Invisible players are only found by
+  bumping into them; frightened monsters run. Time Slip scales the monsters', the devices' and
+  the enemy projectiles' time.
+- **Fall damage** above about 9 m of free fall, unless something slows the fall or you land
+  in water.
+- **The Sanctum** (`src/world/gen_pocket.c`, `src/game/realm.c`, `src/world/pocket.h`): a
+  castle on a floating island at chunk layer 300, built by hand from fills: garden, great
+  hall, bath hall, dining hall, library with a shrine, bedchamber, four towers. No monsters,
+  no loot, no traces; its own warm palette (flavor `FL_SANCTUM`, arch `ARCH_POCKET`). The bath
+  gives *Refreshed* (mana x2), the feast *Well Fed* (+20% health, regeneration), the bed sets
+  the respawn and saves. The door home is kept in the save (version 4).
+- **Food and cooking** are planned in [`FOOD.md`](FOOD.md).
+
 ## 7. Status
 
 Done:
@@ -386,9 +413,10 @@ Done:
 - Saving per world (6.7).
 - Stories S1 + S2: motives, metaplot chapters, named enemies, domains, traces, missions (6.8).
 - Traps, puzzles (levers, plates, statues, light beams) and vaults; lava burns (6.9).
+- 38 utility spells and the Sanctum, a castle in a pocket realm (6.10).
 - Screenshot and demo modes (`--shot`, `--demo combat|sword|death|skills|map|coop|menu|
   inventory|spells|loot|magic|bestiary|motive|story|read|named|storytest|vault|levers|plates|
-  statues|beam|darts|spikes|flames|mechtest`, `--shot-time`,
+  statues|beam|darts|spikes|flames|mechtest|cast|realmtest`, `--shot-time`,
   `--players n`, `--test-pad` with a scripted virtual gamepad).
 
 Known gaps:

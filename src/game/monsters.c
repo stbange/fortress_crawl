@@ -232,7 +232,7 @@ static void spawn_chunk(Game *g, Chunk *c) {
             for (int k = 0; k < g->nshrines && !known; k++) known = v3_len(v3_sub(g->shrines[k], sp)) < 0.5f;
             if (!known) g->shrines[g->nshrines++] = sp;
         }
-    if (ci->arch == ARCH_EXTERIOR) return;
+    if (ci->arch == ARCH_EXTERIOR || ci->arch == ARCH_POCKET) return; /* nothing hostile outside or at home */
 
     loot_place_in_chunk(g, c);
     story_spawn_lord(g, c);
@@ -559,6 +559,7 @@ void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int 
 
 /* A monster's blow lands: the damage, then its element (shadow ones feed on it). */
 static void monster_strike(Game *g, Monster *m, PlayerSlot *ps, float dmg, vec3 from) {
+    if (m->alt_kind && utility_monster_strike(g, m, dmg)) return; /* a decoy, a lure, or a charmed foe's enemy */
     bool was_dead = ps->st.dead;
     game_hurt_player(g, ps, dmg, from);
     if (m->element == EL_NONE || was_dead) return;
@@ -576,13 +577,24 @@ static void enemy_fire(Game *g, Monster *m, vec3 target) {
         p->kind = arrow ? PJ_ENEMY_ARROW : PJ_ENEMY_FIRE;
         p->element = m->element;
         p->owner = -1;
+        if (m->charm_t > 0 && m->charmer >= 0) { /* charmed: it shoots for its friend */
+            p->kind = PJ_BOLT;
+            p->owner = m->charmer;
+        }
         p->pos = v3_add(monster_centre(m), v3(0, arrow ? 0.4f : 0.0f, 0));
         p->vel = v3_scale(v3_norm(v3_sub(target, p->pos)), arrow ? 20.0f : 11.0f);
         p->dmg = m->dmg;
         p->life = 4.0f;
-        p->last_hit = -1;
+        p->last_hit = p->owner >= 0 ? (int)(m - g->mons) : -1;
         return;
     }
+}
+
+/* Monsters also stop at a Warden's Keep's gate (utility.c). */
+static int monster_solid(void *user, int x, int y, int z) {
+    Game *g = user;
+    int s = game_solid(g, x, y, z);
+    return s == 0 && g->nbarriers && utility_barrier(g, x, y, z) ? 1 : s;
 }
 
 static void monster_physics(Game *g, Monster *m, vec3 want, float dt) {
@@ -592,7 +604,7 @@ static void monster_physics(Game *g, Monster *m, vec3 want, float dt) {
         m->vel = v3_lerp(m->vel, want, fminf(1.0f, 4.0f * dt));
         for (int a = 0; a < 3; a++) {
             float v = a == 0 ? m->vel.x : (a == 1 ? m->vel.y : m->vel.z);
-            if (!phys_move_axis(&m->pos, a, v * dt, hw, h, game_solid, g)) {
+            if (!phys_move_axis(&m->pos, a, v * dt, hw, h, monster_solid, g)) {
                 if (a == 0) m->vel.x = 0; else if (a == 1) m->vel.y = 0; else m->vel.z = 0;
             }
         }
@@ -607,11 +619,11 @@ static void monster_physics(Game *g, Monster *m, vec3 want, float dt) {
     for (int a = 0; a < 3; a += 2) {
         float v = a == 0 ? m->vel.x : m->vel.z;
         vec3 before = m->pos;
-        if (phys_move_axis(&m->pos, a, v * dt, hw, h, game_solid, g)) continue;
+        if (phys_move_axis(&m->pos, a, v * dt, hw, h, monster_solid, g)) continue;
         vec3 up = v3_add(before, v3(0, 1.01f, 0));
-        if (m->on_ground && phys_box_free(up, hw, h, game_solid, g)) {
+        if (m->on_ground && phys_box_free(up, hw, h, monster_solid, g)) {
             m->pos = up;
-            phys_move_axis(&m->pos, a, v * dt, hw, h, game_solid, g);
+            phys_move_axis(&m->pos, a, v * dt, hw, h, monster_solid, g);
         } else {
             blocked = true;
             if (a == 0) m->vel.x = 0; else m->vel.z = 0;
@@ -619,7 +631,7 @@ static void monster_physics(Game *g, Monster *m, vec3 want, float dt) {
     }
     bool falling = m->vel.y < 0;
     m->on_ground = false;
-    if (!phys_move_axis(&m->pos, 1, m->vel.y * dt, hw, h, game_solid, g)) {
+    if (!phys_move_axis(&m->pos, 1, m->vel.y * dt, hw, h, monster_solid, g)) {
         if (falling) m->on_ground = true;
         m->vel.y = 0;
     }
@@ -632,11 +644,22 @@ static void monster_physics(Game *g, Monster *m, vec3 want, float dt) {
 }
 
 /* Keep chasing the current target unless another living player is clearly closer. */
+/* An invisible player is only found by bumping into them. */
+static bool can_see_player(const PlayerSlot *ps, vec3 c) {
+    if (!ps->active || ps->st.dead) return false;
+    return ps->st.invis_t <= 0 || v3_len(v3_sub(player_eye(&ps->pl), c)) < 1.6f;
+}
+
 static PlayerSlot *monster_target(Game *g, Monster *m, vec3 c) {
     PlayerSlot *cur = NULL;
-    if (m->target >= 0 && m->target < MAX_PLAYERS && g->players[m->target].active && !g->players[m->target].st.dead)
-        cur = &g->players[m->target];
-    PlayerSlot *near = game_nearest_player(g, c, 1e9f);
+    if (m->target >= 0 && m->target < MAX_PLAYERS && can_see_player(&g->players[m->target], c)) cur = &g->players[m->target];
+    PlayerSlot *near = NULL;
+    float bd = 1e9f;
+    for (int i = 0; i < MAX_PLAYERS; i++) {
+        PlayerSlot *ps = &g->players[i];
+        float d = v3_len(v3_sub(player_eye(&ps->pl), c));
+        if (can_see_player(ps, c) && d < bd) { bd = d; near = ps; }
+    }
     if (!near) return NULL;
     if (!cur || v3_len(v3_sub(player_eye(&near->pl), c)) + 4.0f < v3_len(v3_sub(player_eye(&cur->pl), c)))
         cur = near;
@@ -675,7 +698,8 @@ static vec3 keep_range(const MCtx *x, float speed, float lo, float hi, float ani
 /* Hits every living player within r of the monster's feet: a stomp, a worm bursting up. */
 static void ground_blast(Game *g, Monster *m, float r, vec3 col) {
     vec3 c = monster_centre(m);
-    for (int k = 0; k < MAX_PLAYERS; k++) {
+    if (m->alt_kind) utility_monster_strike(g, m, m->dmg);
+    else for (int k = 0; k < MAX_PLAYERS; k++) {
         PlayerSlot *ps = &g->players[k];
         if (!ps->active || ps->st.dead) continue;
         float dx = ps->pl.pos.x - m->pos.x, dz = ps->pl.pos.z - m->pos.z;
@@ -994,6 +1018,49 @@ static int behave(Game *g, Monster *m, const MCtx *x, vec3 *want) {
     }
 }
 
+/* What else a monster may be after this tick (utility spells): a charmed one fights other
+ * monsters or follows its charmer; others go for a lure or a mirror image near them. */
+static void pick_alt(Game *g, Monster *m, int self, vec3 c, float player_dist, vec3 *eye, vec3 *feet) {
+    m->alt_kind = 0;
+    if (m->charm_t > 0) {
+        float bd = 16.0f;
+        for (int k = 0; k < MAX_MONSTERS; k++) {
+            Monster *o = &g->mons[k];
+            if (k == self || !o->alive || o->charm_t > 0 || o->hidden) continue;
+            float d = v3_len(v3_sub(monster_centre(o), c));
+            if (d < bd) { bd = d; m->alt_kind = 2; m->alt_idx = (i16)k; }
+        }
+        if (m->alt_kind == 2) {
+            Monster *o = &g->mons[m->alt_idx];
+            *eye = monster_centre(o);
+            *feet = o->pos;
+            return;
+        }
+        if (m->charmer >= 0 && m->charmer < MAX_PLAYERS && g->players[m->charmer].active) {
+            m->alt_kind = 3;
+            *eye = player_eye(&g->players[m->charmer].pl);
+            *feet = g->players[m->charmer].pl.pos;
+        }
+        return;
+    }
+    float bd = 1e9f;
+    for (int k = 0; k < MAX_EFFECTS; k++) {
+        const Effect *e = &g->effects[k];
+        if (!e->alive || (e->type != EF_LURE && e->type != EF_DECOY)) continue;
+        float d = v3_len(v3_sub(e->pos, m->pos));
+        float reach = e->type == EF_LURE ? e->radius : 14.0f;
+        /* a decoy is taken for you when it is about as close as you are */
+        if (d > reach || (e->type == EF_DECOY && d > player_dist + 3.0f)) continue;
+        if (e->type == EF_LURE) d -= 100.0f; /* a lure wins */
+        if (d < bd) { bd = d; m->alt_kind = 1; m->alt_idx = (i16)k; }
+    }
+    if (m->alt_kind == 1) {
+        const Effect *e = &g->effects[m->alt_idx];
+        *feet = e->pos;
+        *eye = v3_add(e->pos, v3(0, 1.4f, 0));
+    }
+}
+
 void monsters_update(Game *g, float dt) {
     if (g->freeze_monsters) return;
     for (int i = 0; i < MAX_MONSTERS; i++) {
@@ -1008,7 +1075,17 @@ void monsters_update(Game *g, float dt) {
         vec3 feet = tp->pl.pos;
         vec3 to = v3_sub(eye, c);
         float dist = v3_len(to);
-        if (dist > 80.0f) continue; /* frozen far away (their chunk may be unloaded) */
+        if (dist > 80.0f && m->charm_t <= 0) continue; /* frozen far away (their chunk may be unloaded) */
+        /* utility spells: charm wears off, fear fades, and something else may draw it */
+        if (m->charm_t > 0 && (m->charm_t -= dt) <= 0) { m->charm_t = 0; m->charmer = -1; }
+        if (m->fear_t > 0) m->fear_t -= dt;
+        float player_dist = all_dead ? 1e9f : dist;
+        pick_alt(g, m, i, c, player_dist, &eye, &feet);
+        if (m->alt_kind) {
+            all_dead = false;
+            to = v3_sub(eye, c);
+            dist = v3_len(to);
+        }
         /* stay put while the ground under them is not loaded */
         if (game_solid(g, (int)floorf(m->pos.x), (int)floorf(m->pos.y) - 1, (int)floorf(m->pos.z)) < 0) continue;
         m->flash = fmaxf(0.0f, m->flash - dt);
@@ -1041,6 +1118,7 @@ void monsters_update(Game *g, float dt) {
         float dy = feet.y - m->pos.y;
         bool los = dist < 40.0f && phys_line_of_sight(c, eye, game_solid, g);
         if (all_dead) { m->awake = false; m->state = MS_IDLE; }
+        if (m->alt_kind && !m->awake) { m->awake = true; m->state = MS_CHASE; }
         if (!m->awake && !all_dead) {
             /* mimics wait until you are right next to them */
             if (m->type == MON_MIMIC ? (hdist < 2.4f && fabsf(dy) < 1.5f) : (dist < 7.0f || (dist < 24.0f && los))) {
@@ -1058,7 +1136,23 @@ void monsters_update(Game *g, float dt) {
                       (enraged ? 1.3f : 1.0f);
         vec3 hdir = v3_norm(v3(feet.x - m->pos.x, 0, feet.z - m->pos.z));
         MCtx x = { tp, c, eye, feet, hdir, dist, hdist, dy, speed, dt, los, i };
-        if (m->awake) {
+        bool lured = m->alt_kind == 1 && g->effects[m->alt_idx].type == EF_LURE;
+        if (m->awake && m->fear_t > 0 && !all_dead && m->alt_kind != 3) {
+            /* afraid: runs from the nearest player */
+            vec3 away = v3_norm(v3(m->pos.x - tp->pl.pos.x, 0, m->pos.z - tp->pl.pos.z));
+            want = v3_scale(away, speed * 1.2f);
+            if (MONSTERS[m->type].flies) want.y = 0.5f;
+            m->yaw = atan2f(away.z, away.x);
+            if (m->state == MS_WINDUP || m->state == MS_CHARGE) m->state = MS_CHASE;
+        } else if (m->awake && (m->alt_kind == 3 || lured)) {
+            /* following its charmer, or standing spellbound by a lure */
+            float keep = lured ? 1.2f : 3.0f;
+            if (hdist > keep) want = v3_scale(hdir, speed * (lured ? 0.8f : 1.0f));
+            if (d->flies) want.y = (feet.y + 1.5f - m->pos.y) * 2.0f;
+            if (v3_len(want) > 0.1f) m->yaw = atan2f(want.z, want.x);
+            else m->yaw = atan2f(hdir.z, hdir.x);
+            if (m->state == MS_WINDUP || m->state == MS_CHARGE) m->state = MS_CHASE;
+        } else if (m->awake) {
             switch (m->state) {
             case MS_STUN:
                 m->timer -= dt;
@@ -1084,7 +1178,7 @@ void monsters_update(Game *g, float dt) {
             default: {
                 m->state = MS_CHASE;
                 bool moved = false;
-                int bh = m->type >= MON_SPIDER ? behave(g, m, &x, &want) : BH_GENERIC;
+                int bh = m->type >= MON_SPIDER && !m->alt_kind ? behave(g, m, &x, &want) : BH_GENERIC;
                 if (bh == BH_DONE) break;
                 if (bh == BH_MOVED) moved = true;
                 else if (m->type == MON_SKELETON) {
@@ -1149,7 +1243,7 @@ void monsters_update(Game *g, float dt) {
                 if (!moved) {
                     vec3 target;
                     if (los && dist < 5.0f) want = v3_scale(hdir, speed);
-                    else if (flow_next(tp, m->pos, &target)) {
+                    else if (!m->alt_kind && flow_next(tp, m->pos, &target)) {
                         vec3 dir = v3_norm(v3(target.x - m->pos.x, 0, target.z - m->pos.z));
                         want = v3_scale(dir, speed);
                         if (d->flies) want.y = (target.y + 1.2f - m->pos.y) * 2.0f;
@@ -1193,7 +1287,7 @@ void monsters_update(Game *g, float dt) {
 void players_draw(Game *g, const PlayerSlot *viewer) {
     for (int i = 0; i < MAX_PLAYERS; i++) {
         const PlayerSlot *ps = &g->players[i];
-        if (!ps->active || ps == viewer) continue;
+        if (!ps->active || (ps == viewer && ps->st.scry_t <= 0)) continue;
         const Player *pl = &ps->pl;
         vec3 p = pl->pos;
         float h = player_height(pl->stance);

@@ -72,6 +72,17 @@ void monsters_draw(Game *g, vec3 eye) {
         Monster *m = &g->mons[i];
         if (!m->alive) continue;
         if (v3_len(v3_sub(m->pos, eye)) > 90.0f) continue;
+        /* utility spells: Reveal the Hidden marks what hides; charmed and afraid ones show it */
+        float top_y = MONSTERS[m->type].h * m->scale + 0.45f + 0.08f * sinf(g->time * 4.0f + i);
+        bool reveal = g->draw_viewer && g->draw_viewer->st.reveal_t > 0;
+        if (reveal && (m->hidden || (m->type == MON_MIMIC && !m->awake))) {
+            vec3 q = v3_add(m->pos, v3(0, m->hidden ? 0.6f : top_y, 0));
+            batch3d_octa(q, 0.16f, 0.22f, g->time * 2.0f, v3(1.4f, 0.25f, 0.2f), true);
+            batch3d_box(v3_add(m->pos, v3(0, 0.04f, 0)), v3(MONSTERS[m->type].hw * m->scale + 0.2f, 0.02f, MONSTERS[m->type].hw * m->scale + 0.2f),
+                        g->time, v3(1.0f, 0.2f, 0.15f), true);
+        }
+        if (m->charm_t > 0) batch3d_octa(v3_add(m->pos, v3(0, top_y, 0)), 0.1f, 0.14f, g->time * 3.0f, v3(1.4f, 0.5f, 0.9f), true);
+        else if (m->fear_t > 0) batch3d_octa(v3_add(m->pos, v3(0, top_y, 0)), 0.08f, 0.16f, g->time * 9.0f, v3(0.9f, 0.9f, 1.3f), true);
         if (m->hidden && m->type == MON_WRAITH) continue; /* vanished */
         const MonsterDef *d = &MONSTERS[m->type];
         float s = m->scale;

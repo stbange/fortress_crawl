@@ -12,6 +12,7 @@
 #include "render/renderer.h"
 #include "world/chunkmap.h"
 #include "world/layout.h"
+#include "world/pocket.h"
 #include "world/story.h"
 
 #define MAX_MONSTERS 320
@@ -76,6 +77,11 @@ typedef struct Monster {
     /* status effects from elements */
     float burn_t, burn_dps, poison_t, poison_dps, slow_t;
     float level;     /* danger level it was made for (loot quality) */
+    /* utility spells on it: charmed (fights for a player), afraid, a portal just taken */
+    float charm_t, fear_t, portal_cd;
+    i16 charmer;     /* player slot it fights for */
+    u8 alt_kind;     /* this tick's target: 0 a player, 1 a decoy or lure, 2 a monster, 3 follows its charmer */
+    i16 alt_idx;     /* that decoy (effect) or monster */
     /* its region: rank = 10-chunk steps from the gate (0..10), element = the region's,
      * carried by its attacks, resisted, and weak to the opposite one */
     u8 rank, element;
@@ -194,6 +200,15 @@ typedef struct Stats {
     float ward, ward_t, haste_t;
     /* what monsters' elements did to you */
     float burn_t, burn_dps, poison_t, poison_dps, chill_t;
+    /* utility spells running on you (utility.c), in seconds left */
+    float levitate_t, wings_t, glide_t, feather_t, climb_t, stride_t, stoneskin_t;
+    float scry_t, reveal_t, dowse_t, invis_t, steed_t;
+    /* the pocket realm: where the door brought you from, and its comforts */
+    bool realm_return_set;
+    vec3 realm_return;
+    float realm_return_yaw;
+    float refreshed_t, well_fed_t, rest_t, feast_t;
+    float fall_speed; /* fastest downward speed since leaving the ground (fall damage) */
     /* story (per character) */
     u8 motive;       /* 0: not chosen yet, else MOTIVE_* + 1 */
     int chapter;
@@ -319,6 +334,8 @@ typedef struct PlayerSlot {
     Named target;           /* the current chapter's target (cache) */
     int target_chapter;     /* chapter the cache belongs to, -1 none */
     float target_retry;
+    vec3 scry_pos;          /* Clairvoyance: where your sight is */
+    float gate_cd;          /* just went through a gate or door */
     char reading[STORY_TEXT]; /* the trace you stand at */
     u64 reading_key;
     float reading_t;
@@ -347,6 +364,14 @@ typedef struct PlayerSlot {
     float flow_timer;
     int flow_px, flow_py, flow_pz;
 } PlayerSlot;
+
+/* A temporary block change by a spell: to while it lasts, back to from afterwards. */
+typedef struct WorldEdit {
+    int x, y, z;
+    u8 from, to;
+    float until;
+} WorldEdit;
+#define MAX_EDITS 2048
 
 typedef struct Game {
     Options opt;
@@ -393,6 +418,13 @@ typedef struct Game {
     int nlore;
     bool world_started;
     bool freeze_monsters; /* screenshot demos: monsters stand still */
+    /* utility spells (utility.c): timed changes to the world, cells only monsters cannot pass */
+    WorldEdit edits[MAX_EDITS];
+    int nedits;
+    struct { int x, y, z; float until; } barriers[64];
+    int nbarriers;
+    float timeslip_t;
+    PlayerSlot *draw_viewer; /* the view being drawn (Reveal the Hidden) */
     float play_time, autosave_timer;
 
     bool mouse; /* player 1's mouse is captured */
@@ -537,6 +569,8 @@ void mech_draw_hud(Game *g, PlayerSlot *ps, int W, int H);
 /* Works the lever, statue or mirror the player faces; false if there is none. */
 bool mech_use(Game *g, PlayerSlot *ps);
 bool mech_solid(const Game *g, int x, int y, int z);
+/* Reveal the Hidden: traps and puzzle parts glow. */
+void mech_draw_revealed(Game *g);
 /* Flame vents burning right now (centres of the flames); returns the count (sfx.c). */
 int mech_burning_flames(Game *g, vec3 *out, int max);
 /* Screenshot demos and the scripted test (--demo levers|plates|statues|beam|spikes|flames|darts|mechtest). */
@@ -568,6 +602,38 @@ void weapon_draw_ground(const Item *it, vec3 c, float yaw, vec3 light, float tim
 /* Sparks, frost, arcs, venom or a blood mist where a magical weapon hits (rarity > common or an element). */
 void weapon_impact_fx(Game *g, int element, int rarity, bool vampiric, vec3 at, int owner);
 
+/* utility.c: the utility spells beyond the first seven */
+bool utility_cast(Game *g, PlayerSlot *ps, int u, int rank);
+void utility_update(Game *g, float dt);
+void utility_draw_world(Game *g, PlayerSlot *viewer);
+void utility_lights(Game *g, vec3 eye, SceneParams *sp);
+void utility_draw_hud(Game *g, PlayerSlot *ps, int W, int H);
+/* Sets the player's movement from the spells on them, before player_update. */
+void utility_player_physics(Game *g, PlayerSlot *ps);
+/* Collision for a player's movement (water is ground for a strider). Call utility_physics_player first. */
+int player_solid(void *user, int x, int y, int z);
+void utility_physics_player(PlayerSlot *ps);
+/* Cells only monsters cannot pass (the gate of a Warden's Keep). */
+bool utility_barrier(const Game *g, int x, int y, int z);
+/* How fast the world runs for monsters and their shots (Time Slip). */
+float utility_time_scale(const Game *g);
+/* A player attacked: invisibility ends. */
+void utility_player_attacked(PlayerSlot *ps);
+/* Where a player's view is (Clairvoyance moves it away from the body). */
+vec3 game_view_eye(const PlayerSlot *ps);
+/* A monster struck its decoy or charmed foe instead of a player: true if handled. */
+bool utility_monster_strike(Game *g, Monster *m, float dmg);
+/* spells.c: a lasting spell effect (utility spells use it too) */
+Effect *effect_new(Game *g, int type, int element, int owner, vec3 pos, float life, float dmg, float radius);
+
+/* realm.c: the pocket realm behind the Sanctum Door */
+bool realm_has(const vec3 pos);
+void realm_enter(Game *g, PlayerSlot *ps, vec3 from, float yaw);
+void realm_update(Game *g, float dt);
+void realm_draw(Game *g);
+/* utility.c: a door frame with a glowing way through, facing yaw (home: the way back) */
+void utility_draw_door(Game *g, vec3 p, float yaw, float open, bool home);
+
 /* items.c */
 void items_give_start(Stats *s);
 void pickups_update(Game *g, float dt);
@@ -594,6 +660,8 @@ float relic_bonus(const Stats *s, int bonus);
 /* explore.c */
 void explore_update(Game *g, PlayerSlot *ps, float dt);
 bool explore_get(Game *g, int x, int y, int z);
+/* Map of the Mind: everything open in the loaded chunks within r chunks of p counts as seen. */
+void explore_reveal_area(Game *g, vec3 p, int r);
 /* The layer a feet height is on, and its name ("LAYER 3 BELOW"). */
 int layer_of(float feet_y);
 void layer_name(int layer, char *out, int n);

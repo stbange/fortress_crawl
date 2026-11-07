@@ -35,6 +35,7 @@ typedef enum {
     FL_BOYAR, FL_STEPPE, FL_JADE, FL_PORCELAIN, FL_BAMBOO, FL_TERRACOTTA, FL_SILK, FL_DRAGON, FL_MOONLIT, FL_IMPERIAL,
     /* west */
     FL_GOTHIC, FL_DRUIDIC, FL_DROWNED, FL_CORAL, FL_ABYSSAL, FL_VERDIGRIS, FL_PEARL, FL_LEVIATHAN, FL_BRINE, FL_ELDRITCH,
+    FL_SANCTUM, /* the pocket realm only */
     FL_COUNT
 } Flavor;
 /* First flavor of each direction (axis 1 north, 2 south, 3 east, 4 west). */
@@ -50,7 +51,8 @@ typedef enum {
     ARCH_VOID,   /* open air: floating platforms and bridges */
     ARCH_COUNT,
     ARCH_STRUCTURE = 100, /* chunk belongs to a megastructure */
-    ARCH_EXTERIOR = 101   /* outside, in front of the castle */
+    ARCH_EXTERIOR = 101,  /* outside, in front of the castle */
+    ARCH_POCKET = 102     /* the pocket realm behind the Sanctum Door */
 } Archetype;
 
 typedef enum {

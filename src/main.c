@@ -23,6 +23,7 @@ static const char *g_demo_kind;
 static const char *g_demo_weapon;
 static int g_demo_grade; /* --grade 0|1|2: the bestiary demo shows normal, elite or boss monsters */
 static int g_demo_mon = -1; /* --mon n: the portrait demo shows this kind */
+static int g_demo_cast = -1; /* --cast n: the cast demo casts this utility spell (SU_*) */
 
 static bool parse_args(Options *o, int argc, char **argv) {
     memset(o, 0, sizeof *o);
@@ -75,6 +76,7 @@ static bool parse_args(Options *o, int argc, char **argv) {
         else if (!strcmp(a, "--weapon") && i + 1 < argc) g_demo_weapon = argv[++i];
         else if (!strcmp(a, "--grade") && i + 1 < argc) g_demo_grade = atoi(argv[++i]);
         else if (!strcmp(a, "--mon") && i + 1 < argc) g_demo_mon = atoi(argv[++i]);
+        else if (!strcmp(a, "--cast") && i + 1 < argc) g_demo_cast = atoi(argv[++i]);
         else if (!strcmp(a, "--sound")) o->sound = true;
         else if (!strcmp(a, "--chapter") && i + 1 < argc) o->demo_chapter = atoi(argv[++i]) - 1;
         else {
@@ -233,6 +235,66 @@ static void demo_setup(Game *g) {
         if (!strcmp(g_demo_kind, "spells")) { p1->show_skills = true; p1->menu_tab = TAB_SPELLS; return; }
     }
     if (!strcmp(g_demo_kind, "weapons")) { demo_weapons(g, p1); return; }
+    if (!strcmp(g_demo_kind, "cast") && g_demo_cast >= 0 && g_demo_cast < SU_COUNT) {
+        /* a utility spell cast in an open place, then a step back to see it */
+        demo_place(g, p1);
+        p1->pl.fly = false;
+        vec3 f = v3(cosf(p1->pl.yaw), 0, sinf(p1->pl.yaw));
+        int u = g_demo_cast;
+        bool two = u == SU_GATES || u == SU_ANCHOR;
+        bool building = u == SU_KEEP || u == SU_HUT || u == SU_WALL || u == SU_SANCTUARY || u == SU_GRAVWELL || u == SU_QUENCH;
+        p1->pl.pitch = u == SU_BRIDGE || u == SU_STONESHAPE ? -0.1f : -0.2f;
+        if (!utility_cast(g, p1, u, 3)) SDL_Log("cast demo: spell %d failed", u);
+        if (two) {
+            p1->pl.pos = v3_add(p1->pl.pos, v3_scale(f, 5.0f));
+            p1->pl.yaw += PI_F * 0.5f;
+            utility_cast(g, p1, u, 3);
+            p1->pl.yaw -= PI_F * 0.5f;
+            p1->pl.pos = v3_sub(p1->pl.pos, v3_scale(f, 8.0f));
+        }
+        if (building) {
+            p1->pl.pos = v3_add(p1->pl.pos, v3_add(v3_scale(f, u == SU_KEEP ? -9.0f : -5.0f), v3(0, u == SU_KEEP ? 4.0f : 2.0f, 0)));
+            p1->pl.pitch = -0.35f;
+            p1->pl.fly = true;
+        }
+        if (u == SU_MIRROR || u == SU_SANCTUM) { /* step back to see the images round you, or the door */
+            vec3 back = v3_sub(p1->pl.pos, v3_scale(f, u == SU_MIRROR ? 4.5f : 1.5f));
+            if (phys_box_free(back, PLAYER_HALF_W, 1.75f, game_solid, g)) p1->pl.pos = back;
+            p1->pl.pitch = -0.15f;
+        }
+        p1->banner_time = 0;
+        return;
+    }
+    if (!strcmp(g_demo_kind, "realmtest")) {
+        /* the Sanctum's doors and comforts, step by step (log only) */
+        vec3 home = p1->pl.pos;
+        realm_enter(g, p1, home, 1.0f);
+        SDL_Log("realmtest: inside %d at %.1f %.1f %.1f, return set %d", realm_has(p1->pl.pos), p1->pl.pos.x, p1->pl.pos.y, p1->pl.pos.z,
+                s->realm_return_set);
+        s->hp = 10; s->burn_t = 5;
+        p1->pl.pos = v3(28.5f, POCKET_G - 1.0f, 60.5f); /* in the bath */
+        for (int k = 0; k < 30; k++) realm_update(g, 1.0f / 30);
+        SDL_Log("realmtest: bath hp %.0f/%.0f burn %.1f refreshed %.0f", s->hp, s->maxhp, s->burn_t, s->refreshed_t);
+        float before = s->maxhp;
+        p1->pl.pos = v3(POCKET_TABLE_X0 - 1.0f, (float)POCKET_G, 60.5f); /* at the table */
+        for (int k = 0; k < 60; k++) realm_update(g, 1.0f / 30);
+        SDL_Log("realmtest: feast well fed %.0f maxhp %.0f -> %.0f hp %.0f", s->well_fed_t, before, s->maxhp, s->hp);
+        p1->pl.pos = v3(POCKET_BED_X0 - 1.0f, (float)POCKET_G, 106.5f); /* by the bed */
+        for (int k = 0; k < 90; k++) realm_update(g, 1.0f / 30);
+        SDL_Log("realmtest: bed respawn %.1f %.1f %.1f (in realm %d)", s->respawn.x, s->respawn.y, s->respawn.z, realm_has(s->respawn));
+        p1->gate_cd = 0;
+        p1->pl.pos = v3(POCKET_EXIT_X, (float)POCKET_G, POCKET_EXIT_Z); /* through the door home */
+        realm_update(g, 1.0f / 30);
+        SDL_Log("realmtest: out at %.1f %.1f %.1f (home %.1f %.1f %.1f) inside %d", p1->pl.pos.x, p1->pl.pos.y, p1->pl.pos.z, home.x, home.y,
+                home.z, realm_has(p1->pl.pos));
+        return;
+    }
+    if (!strcmp(g_demo_kind, "realm")) {
+        /* through the Sanctum Door: --pos inside the realm picks the spot */
+        p1->pl.fly = true;
+        p1->banner_time = 0;
+        return;
+    }
     if (!strcmp(g_demo_kind, "place") || !strcmp(g_demo_kind, "placefight")) {
         demo_place(g, p1);
         if (!strcmp(g_demo_kind, "placefight")) {

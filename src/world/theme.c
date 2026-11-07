@@ -294,6 +294,12 @@ const FlavorDef FLAVORS[FL_COUNT] = {
         C(36, 30, 50), C(50, 40, 70), C(110, 255, 140), C(40, 34, 56), C(70, 56, 96), C(40, 50, 40),
         C(60, 80, 70), C(120, 255, 150), C(40, 40, 50), C(120, 255, 160), C(40, 30, 60),
         PAT_RUNES, FP_FLAGSTONE, C(120, 255, 160), C(4, 12, 8), B_FUNGUS, B_WATER },
+
+    /* ---------- the pocket realm: warm ivory stone, gold, dark wood, a green lawn ---------- */
+    [FL_SANCTUM] = { "Sanctum", "Sanctum", 0, 0,
+        C(150, 140, 120), C(225, 212, 186), C(170, 150, 120), C(205, 188, 160), C(236, 226, 204), C(120, 76, 44),
+        C(170, 150, 110), C(230, 180, 70), C(70, 130, 60), C(255, 200, 120), C(150, 70, 50),
+        PAT_ASHLAR, FP_TILES, C(255, 200, 130), C(70, 60, 50), B_LANTERN, 0, true },
 };
 #undef C
 

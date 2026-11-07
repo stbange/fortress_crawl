@@ -1,4 +1,5 @@
 #include "world/layout.h"
+#include "world/pocket.h"
 
 #include "core/noise.h"
 
@@ -160,7 +161,14 @@ void world_chunk_info(const World *w, int cx, int cy, int cz, ChunkInfo *ci) {
     ci->seed = hash3(w->seed, cx, cy, cz, 0xC4);
     ci->difficulty = world_difficulty(cx, cy, cz);
     ci->level = (int)ci->difficulty;
-    if (world_is_exterior(cx, cy, cz)) {
+    if (world_is_pocket(cx, cy, cz)) {
+        /* the pocket realm: always the same castle, nothing hostile */
+        ci->stratum = ST_HEAVEN;
+        ci->flavor = FL_SANCTUM;
+        ci->arch = ARCH_POCKET;
+        ci->difficulty = 0;
+        ci->level = 0;
+    } else if (world_is_exterior(cx, cy, cz)) {
         ci->stratum = ST_DUNGEON;
         ci->flavor = FL_OLD;
         ci->arch = ARCH_EXTERIOR;
@@ -212,6 +220,7 @@ static bool struct_stair_ok(const ChunkInfo *c, bool up) {
 
 int world_face_portals(const World *w, int axis, int lx, int ly, int lz, Portal *out, int max) {
     int ux = lx + (axis == 0), uy = ly + (axis == 1), uz = lz + (axis == 2);
+    if (world_is_pocket(lx, ly, lz) || world_is_pocket(ux, uy, uz)) return 0; /* nothing leads into the pocket realm */
     bool eL = world_is_exterior(lx, ly, lz), eU = world_is_exterior(ux, uy, uz);
     if (eL || eU) {
         if (axis == 0 && lx == -1 && ly == 0 && (lz == -1 || lz == 0) && eL && !eU && max > 0) {
@@ -304,6 +313,7 @@ void world_place_name(const ChunkInfo *ci, char *buf, int n) {
     char tn[96];
     theme_name(ci->theme, tn, sizeof tn);
     if (ci->arch == ARCH_EXTERIOR) snprintf(buf, (size_t)n, "Before the Gates");
+    else if (ci->arch == ARCH_POCKET) snprintf(buf, (size_t)n, "The Sanctum");
     else if (ci->has_struct && ci->st.type == STRUCT_VESTIBULE) snprintf(buf, (size_t)n, "The Grand Vestibule");
     else if (ci->has_struct) snprintf(buf, (size_t)n, "%s - %s", tn, STRUCT_NAMES[ci->st.type]);
     else snprintf(buf, (size_t)n, "%s (%s)", tn, ARCH_NAMES[ci->arch]);

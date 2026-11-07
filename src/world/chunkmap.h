@@ -27,6 +27,7 @@ typedef struct Chunk {
     int nsolid, nsprite;
     int theme_slot;
     int pins; /* mesh jobs currently reading this chunk */
+    bool remesh; /* a block changed: build the mesh again */
 } Chunk;
 
 typedef struct ChunkStats {
@@ -60,6 +61,10 @@ Chunk *chunkmap_get(ChunkMap *m, int cx, int cy, int cz);
 Block chunkmap_block(ChunkMap *m, int wx, int wy, int wz, bool *known);
 /* Light at a world cell (r, g, b, fire as 0..15); false if not known yet. */
 bool chunkmap_light(ChunkMap *m, int wx, int wy, int wz, u8 out[4]);
+/* Changes one block of a loaded chunk and has it (and neighbours touching the cell) meshed
+ * again. False if the chunk is not loaded or is being read by a job right now: try again
+ * later. Spells use it for temporary walls, bridges and tunnels. */
+bool chunkmap_set_block(ChunkMap *m, int wx, int wy, int wz, Block b);
 /* True once every chunk within the mesh radius has a mesh. */
 bool chunkmap_settled(ChunkMap *m, vec3 pos);
 

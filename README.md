@@ -10,7 +10,8 @@ get from the gate, the more dangerous it gets.
 
 This is an early prototype. It has **world generation, lighting, the retro renderer,
 Hexen-style combat against seven kinds of primitive monsters, 12 weapon types with rarities
-and affixes, 95 spells, loot, chests and relics, an inventory, a classless skill tree,
+and affixes, 126 spells (38 of them utility spells such as flight, portals and a conjured keep), a
+pocket realm with your own castle, loot, chests and relics, an inventory, a classless skill tree,
 shrines, an explored-cells map, split-screen co-op for up to four players, saving, and
 generated stories: a motive per character, an endless metaplot of named enemies, inscriptions,
 notes of the dead and bounty boards**, and **sound**: every monster, weapon, spell, trap and
@@ -40,7 +41,7 @@ for the full plan and [`docs/STORY.md`](docs/STORY.md) for how the stories work.
 | ![Start screen](docs/screenshots/start.png) | ![Bestiary](docs/screenshots/bestiary.png) |
 | Choose your world's seed | Crawler, brute, wisp, horned, skeleton, slime, bat |
 | ![Inventory](docs/screenshots/inventory.png) | ![Spellbook](docs/screenshots/spellbook.png) |
-| Inventory (I) | Spellbook (B): 8 elements x 11 forms + 7 utility spells |
+| Inventory (I) | Spellbook (B): 8 elements x 11 forms + 38 utility spells |
 | ![Loot](docs/screenshots/loot.png) | ![Spells](docs/screenshots/spells_cast.png) |
 | A chest, a weapon, a scroll, a relic, gold and potions | Firestorm, Fireball and Chain Lightning at a pack |
 | ![Motive](docs/screenshots/story_motive.png) | ![Story](docs/screenshots/story_story.png) |
@@ -53,6 +54,10 @@ for the full plan and [`docs/STORY.md`](docs/STORY.md) for how the stories work.
 | A light beam puzzle: turn the mirrors toward the lock | The watchers must look at the gate |
 | ![Spike trap](docs/screenshots/trap_spikes.png) | ![Flame vent](docs/screenshots/trap_flames.png) |
 | Spikes stab every few seconds | A flame vent |
+| ![The Sanctum](docs/screenshots/sanctum.png) | ![The feast](docs/screenshots/sanctum_feast.png) |
+| The Sanctum: your castle in the pocket realm, behind the Sanctum Door | The feast in the dining hall: Well Fed |
+| ![The bath](docs/screenshots/sanctum_bath.png) | ![Warden's Keep](docs/screenshots/spell_keep.png) |
+| The bath hall: Refreshed | Warden's Keep, a conjured keep of real stone |
 
 ## Build
 
@@ -171,11 +176,36 @@ or *Heavy*. Deeper finds are stronger. Spare weapons can be scrapped for gold.
 **Spells:** every spell is an element (fire burns, frost slows, lightning arcs, poison
 lingers, arcane pierces, holy heals you, shadow steals life, earth stuns and knocks back)
 combined with a form: bolt, barrage, nova, chain, breath, orb, trap rune, halo of orbiting
-orbs, storm, meteor and aura. That makes 88 attack spells, plus Heal, Blink, Ward, Haste,
-Flare, Recall and the Golden Thread. You start with Flame Bolt, Heal and the Golden Thread;
+orbs, storm, meteor and aura. That makes 88 attack spells, plus 38 utility spells (see
+below). You start with Flame Bolt, Heal, the Golden Thread and the Sanctum Door;
 scrolls teach new spells or raise a
 known one's rank (up to 5). The stronger forms only drop deeper in. The Focus skill makes all
 spells stronger and cheaper.
+
+**Utility spells** change how you move, fight and explore. Walls, keeps, huts, bridges, tunnels
+and ice are real blocks for a while, then they crumble.
+
+| Kind | Spells |
+|---|---|
+| Basics | Heal, Blink, Ward, Haste, Flare, Recall, Golden Thread |
+| Moving | Levitate (float, jump rises), Wings of the Gale (fly where you look, then glide down), Feather Fall (no fall damage), Spider Climb, Strider's Grace (walk on water and lava), Phase Step (through 3 blocks of wall), Anchor (cast again to return), Twin Gates (two linked portals, monsters use them too), Stairway of Light (to the layer above or below) |
+| Safe places | Warden's Keep (a keep of stone monsters cannot enter, with a healing hearth; it becomes your shrine), Wall of Stone, Hut of Rest, Sanctuary (a ring monsters will not cross), Mirror Image (decoys take the blows), Stoneskin |
+| Knowing | Clairvoyance (send your sight 40 m ahead), Reveal the Hidden (traps, mimics, buried worms, vanished wraiths), Map of the Mind, Dowsing (points to treasure), Speak with the Dead (at a trace: where your quarry is) |
+| Monsters | Invisibility (until you strike), Lure, Charm (a monster fights for you), Fear, Time Slip (monsters and their shots slow to a quarter), Gravity Well |
+| The world | Stone Shape (carve a passage), Bridge of Light, Quench (water freezes, lava cools), Spectral Steed |
+| Home | **Sanctum Door** |
+
+Falls from high up now hurt (Feather Fall, Levitate, Wings and water save you).
+
+**The Sanctum:** the Sanctum Door opens a door to your own castle in a pocket realm, on a
+floating island under an open sky: a garden with a fountain, a great hall with a throne, a
+library, and three rooms that do something. **Bathe** in the pool of the bath hall (wounds
+close, burns and poison wash off, and you are *Refreshed*: mana flows twice as fast for 15
+minutes), sit down at the **feast** in the dining hall (everything restored and *Well Fed*:
+20% more health that comes back by itself, for 20 minutes), and **rest** in the bedchamber
+(you will wake there when you fall, and the game is saved). The door in the garden takes you
+back to where you opened it. Food and cooking are planned next: see
+[`docs/FOOD.md`](docs/FOOD.md).
 
 **Stories:** every character picks a motive (revenge, glory, riches or truth). It turns the
 world's endless metaplot into chapters: a named captain, then the general above it, then the
@@ -273,7 +303,7 @@ fortress_crawl [--seed N] [--pos x y z] [--look yaw pitch] [--fly] [--radius n] 
                [--shot file.bmp] [--shot-time seconds]
                [--demo combat|sword|death|skills|map|coop|menu|inventory|spells|loot|magic|bestiary|
                        motive|story|read|named|storytest|vault|levers|plates|statues|beam|
-                       darts|spikes|flames|mechtest]
+                       darts|spikes|flames|mechtest|cast|realmtest] [--cast n]
                [--players n] [--test-pad] [--touch] [--fresh] [--persist] [--fullbright] [--chapter n]
 ```
 
@@ -291,7 +321,10 @@ and `darts`, `spikes` and `flames` at the nearest trap at work; `--demo mechtest
 nearest vault through the game code, opens it, takes the hoard and logs each step
 (`worldmap mech` lists where they are). `--players n` starts with n
 characters (gamepads take them over with START). `--test-pad` attaches a virtual gamepad
-that joins, walks, turns and attacks, to test the gamepad path without hardware. `--touch`
+that joins, walks, turns and attacks, to test the gamepad path without hardware.
+`--demo cast --cast n` casts utility spell n (the order of the spell book, 0 = Heal,
+37 = Sanctum Door) in an open place and steps back to look at it; `--demo realmtest` walks
+through the Sanctum (door, bath, feast, bed, door home) and logs each step. `--touch`
 shows the touch controls from the start.
 
 Shrines (glowing rune stones) are respawn points: walk up to one to attune it. When you die,
@@ -380,7 +413,8 @@ nothing extra. The game mixes them itself on an SDL3 audio stream (`src/engine/a
 - **weapons**: a swing or shot for each of the 12 weapon bases, the three alternate attacks,
   and hits on flesh, bone and stone.
 - **spells**: a cast and an impact sound for each of the 8 elements, the forms (meteor, rune,
-  storm, aura, orbit, breath) and the 7 utility spells.
+  storm, aura, orbit, breath) and the utility spells (air, wings, stone, gates, sight, shadow,
+  time, gravity, frost, light, steed), and the Sanctum (its door, the bath, the feast, the bed).
 - **the world**: one ambience loop per stratum and one for outside, crossfading as you move;
   torches, lava, water and burning flame vents heard as you come close; and now and then a
   sound from somewhere in the dark (drips, chains, distant screams, a bell) that fits the place.

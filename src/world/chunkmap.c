@@ -283,6 +283,11 @@ void chunkmap_update(ChunkMap *m, const vec3 *centres, int ncentres) {
                 if (submit_mesh(m, c)) budget--;
             }
         }
+    /* chunks whose blocks were changed get a new mesh (the old one stays until then) */
+    for (int i = 0; i < m->pool_cap; i++) {
+        Chunk *c = &m->pool[i];
+        if (c->used && c->remesh && c->state == CH_READY && !c->mesh_queued && c->has_mesh && submit_mesh(m, c)) c->remesh = false;
+    }
     /* stats */
     memset(&m->stats, 0, sizeof m->stats);
     for (int i = 0; i < m->pool_cap; i++) {
@@ -292,6 +297,34 @@ void chunkmap_update(ChunkMap *m, const vec3 *centres, int ncentres) {
         if (m->pool[i].has_mesh) m->stats.meshed++;
     }
     m->stats.jobs = jobs_in_flight();
+}
+
+static bool editable(Chunk *c) { return c && c->state == CH_READY && c->pins == 0 && !c->mesh_queued; }
+
+bool chunkmap_set_block(ChunkMap *m, int wx, int wy, int wz, Block b) {
+    int cx = floordiv(wx, CHUNK), cy = floordiv(wy, CHUNK), cz = floordiv(wz, CHUNK);
+    Chunk *c = chunkmap_get(m, cx, cy, cz);
+    if (!editable(c)) return false;
+    int lx = wx - cx * CHUNK, ly = wy - cy * CHUNK, lz = wz - cz * CHUNK;
+    /* neighbours whose mesh shows this cell must be free too */
+    Chunk *nb[27];
+    int nn = 0;
+    for (int dz = -1; dz <= 1; dz++)
+        for (int dy = -1; dy <= 1; dy++)
+            for (int dx = -1; dx <= 1; dx++) {
+                if (!dx && !dy && !dz) continue;
+                if ((dx < 0 && lx > 1) || (dx > 0 && lx < CHUNK - 2) || (dy < 0 && ly > 1) || (dy > 0 && ly < CHUNK - 2) ||
+                    (dz < 0 && lz > 1) || (dz > 0 && lz < CHUNK - 2))
+                    continue;
+                Chunk *n = chunkmap_get(m, cx + dx, cy + dy, cz + dz);
+                if (!n) continue;
+                if (n->state == CH_READY && (n->pins > 0 || n->mesh_queued)) return false;
+                nb[nn++] = n;
+            }
+    c->blocks[cidx(lx, ly, lz)] = b;
+    c->remesh = true;
+    for (int i = 0; i < nn; i++) nb[i]->remesh = true;
+    return true;
 }
 
 bool chunkmap_settled(ChunkMap *m, vec3 pos) {

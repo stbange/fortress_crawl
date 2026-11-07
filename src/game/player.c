@@ -14,6 +14,8 @@ void player_init(Player *p, vec3 pos, float yaw) {
     p->pos = pos;
     p->yaw = yaw;
     p->speed_mult = 1.0f;
+    p->max_fall = 40.0f;
+    p->jump_mult = 1.0f;
 }
 
 /* Lowest stance that fits at pos (standing preferred). */
@@ -43,8 +45,32 @@ void player_update(Player *p, const PlayerInput *in, float dt, SolidFn solid, vo
         return;
     }
 
+    if (p->move_mode == MOVE_FLY) {
+        /* wings: fly where you look, with collision; jump climbs, crouch sinks */
+        vec3 look = dir_from_angles(p->yaw, p->pitch);
+        vec3 w = v3_add(v3_scale(look, in->move_z), v3_scale(right, in->move_x));
+        if (in->jump) w.y += 1.0f;
+        if (in->crouch) w.y -= 1.0f;
+        float wl3 = v3_len(w);
+        if (wl3 > 1.0f) w = v3_scale(w, 1.0f / wl3);
+        float sp = (in->sprint ? 14.0f : 9.0f) * p->speed_mult;
+        p->vel = v3_lerp(p->vel, v3_scale(w, sp), fminf(1.0f, 6.0f * dt));
+        int st = fitting_stance(p->pos, STANCE_STAND, solid, user);
+        if (st != p->stance) { p->eye_offset += EYES[p->stance] - EYES[st]; p->stance = st; }
+        for (int axis = 0; axis < 3; axis++) {
+            float d = (axis == 0 ? p->vel.x : axis == 1 ? p->vel.y : p->vel.z) * dt;
+            if (!phys_move_axis(&p->pos, axis, d, HALF_W, HEIGHTS[p->stance], solid, user)) {
+                if (axis == 0) p->vel.x = 0; else if (axis == 1) p->vel.y = 0; else p->vel.z = 0;
+            }
+        }
+        p->on_ground = !phys_box_free(v3_add(p->pos, v3(0, -0.05f, 0)), HALF_W, 0.05f, solid, user);
+        p->eye_offset *= expf(-12.0f * dt);
+        return;
+    }
+    bool lev = p->move_mode == MOVE_LEVITATE;
+
     /* stance: crouch on request, otherwise stand up as soon as there is room */
-    int want = in->crouch ? STANCE_CROUCH : STANCE_STAND;
+    int want = in->crouch && !lev ? STANCE_CROUCH : STANCE_STAND;
     int st = fitting_stance(p->pos, want, solid, user);
     if (st != p->stance) {
         p->eye_offset += EYES[p->stance] - EYES[st];
@@ -56,9 +82,15 @@ void player_update(Player *p, const PlayerInput *in, float dt, SolidFn solid, vo
     float accel = p->on_ground ? 14.0f : 3.0f;
     p->vel.x += (wish.x * speed - p->vel.x) * fminf(1.0f, accel * dt);
     p->vel.z += (wish.z * speed - p->vel.z) * fminf(1.0f, accel * dt);
-    p->vel.y -= 25.0f * dt;
-    if (p->vel.y < -40.0f) p->vel.y = -40.0f;
-    if (in->jump && p->on_ground && p->stance == STANCE_STAND) p->vel.y = 8.2f;
+    if (lev) {
+        /* levitate: no weight; jump rises, crouch sinks */
+        float vy = in->jump ? 3.5f : in->crouch ? -3.5f : 0.0f;
+        p->vel.y += (vy - p->vel.y) * fminf(1.0f, 5.0f * dt);
+    } else {
+        p->vel.y -= 25.0f * dt;
+        if (p->vel.y < -p->max_fall) p->vel.y = -p->max_fall;
+        if (in->jump && p->on_ground && p->stance == STANCE_STAND) p->vel.y = 8.2f * p->jump_mult;
+    }
 
     for (int axis = 0; axis < 3; axis += 2) {
         float d = (axis == 0 ? p->vel.x : p->vel.z) * dt;
@@ -95,6 +127,8 @@ void player_update(Player *p, const PlayerInput *in, float dt, SolidFn solid, vo
         if (!done) {
             p->pos = blocked;
             if (axis == 0) p->vel.x = 0; else p->vel.z = 0;
+            /* spider climb: pushing into a wall walks up it */
+            if (p->climbing && (fabsf(in->move_z) > 0.2f || fabsf(in->move_x) > 0.2f)) p->vel.y = fmaxf(p->vel.y, 4.0f);
         }
     }
     bool was_falling = p->vel.y < 0;

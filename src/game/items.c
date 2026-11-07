@@ -266,7 +266,7 @@ static bool pickup_alive_with_key(Game *g, u64 key) {
 
 void loot_place_in_chunk(Game *g, Chunk *c) {
     const ChunkInfo *ci = &c->info;
-    if (ci->arch == ARCH_EXTERIOR) return;
+    if (ci->arch == ARCH_EXTERIOR || ci->arch == ARCH_POCKET) return;
     u64 ck = chunk_spawn_key(c->cx, c->cy, c->cz);
     Rng r = rng_make(ci->seed ^ 0xC4E57ULL);
     u64 chest_key = mix64(ck ^ 0xC1C1ULL) | 1, relic_key = mix64(ck ^ 0xE1E1ULL) | 1;
@@ -751,12 +751,14 @@ void inventory_draw(Game *g, PlayerSlot *ps, int W, int H, int top) {
 
 typedef struct BookLayout { int cw, ch, gx, gy, lw; bool compact; } BookLayout;
 
+#define UTIL_ROWS ((SU_COUNT + SF_COUNT - 1) / SF_COUNT)
+
 static BookLayout book_layout(int W, int H, int top) {
     BookLayout l;
     l.compact = W < 440;
     l.lw = l.compact ? 0 : 66;
     l.cw = l.compact ? MINI(18, (W - 8) / SF_COUNT) : 30;
-    l.ch = MAXI(7, MINI(l.compact ? 9 : 15, (H - top - (l.compact ? 30 : 64)) / (EL_COUNT + 1)));
+    l.ch = MAXI(7, MINI(l.compact ? 9 : 15, (H - top - (l.compact ? 30 : 64)) / (EL_COUNT + UTIL_ROWS)));
     l.gx = (W - (l.lw + SF_COUNT * l.cw)) / 2 + l.lw;
     l.gy = top + (l.compact ? 2 : 14);
     return l;
@@ -767,8 +769,10 @@ static void book_cell(const BookLayout *l, int id, int *x, int *y) {
         *x = l->gx + spell_form(id) * l->cw;
         *y = l->gy + spell_element(id) * l->ch;
     } else {
-        *x = l->gx + (id - SPELL_ATTACK_COUNT) * l->cw;
-        *y = l->gy + EL_COUNT * l->ch + 2;
+        /* utility spells fill rows of the same width under the elements */
+        int u = id - SPELL_ATTACK_COUNT;
+        *x = l->gx + (u % SF_COUNT) * l->cw;
+        *y = l->gy + (EL_COUNT + u / SF_COUNT) * l->ch + 2;
     }
 }
 
@@ -786,7 +790,8 @@ int spellbook_hit(PlayerSlot *ps, int W, int H, int top, float x, float y) {
 void spellbook_nav(Game *g, PlayerSlot *ps, int nav) {
     Stats *s = &ps->st;
     int id = ps->book_sel;
-    int row = spell_is_attack(id) ? spell_element(id) : EL_COUNT, col = spell_is_attack(id) ? spell_form(id) : id - SPELL_ATTACK_COUNT;
+    int u0 = id - SPELL_ATTACK_COUNT;
+    int row = spell_is_attack(id) ? spell_element(id) : EL_COUNT + u0 / SF_COUNT, col = spell_is_attack(id) ? spell_form(id) : u0 % SF_COUNT;
     switch (nav) {
     case NAV_LEFT: col--; break;
     case NAV_RIGHT: col++; break;
@@ -804,10 +809,11 @@ void spellbook_nav(Game *g, PlayerSlot *ps, int nav) {
         return;
     default: return;
     }
-    row = (row + EL_COUNT + 1) % (EL_COUNT + 1);
-    int ncol = row == EL_COUNT ? SU_COUNT : SF_COUNT;
+    row = (row + EL_COUNT + UTIL_ROWS) % (EL_COUNT + UTIL_ROWS);
+    int urow = row - EL_COUNT;
+    int ncol = urow >= 0 ? MINI(SF_COUNT, SU_COUNT - urow * SF_COUNT) : SF_COUNT;
     col = (col % ncol + ncol) % ncol;
-    ps->book_sel = row == EL_COUNT ? SPELL_ATTACK_COUNT + col : spell_attack_id(row, col);
+    ps->book_sel = urow >= 0 ? SPELL_ATTACK_COUNT + urow * SF_COUNT + col : spell_attack_id(row, col);
     (void)g;
 }
 
@@ -847,7 +853,7 @@ void spellbook_draw(Game *g, PlayerSlot *ps, int W, int H, int top) {
     }
     int known = 0;
     for (int id = 0; id < SPELL_COUNT; id++) known += s->spell_rank[id] > 0;
-    int iy = l.gy + (EL_COUNT + 1) * l.ch + 6;
+    int iy = l.gy + (EL_COUNT + UTIL_ROWS) * l.ch + 6;
     SpellInfo si;
     spell_info(ps->book_sel, &si);
     int rank = s->spell_rank[ps->book_sel];

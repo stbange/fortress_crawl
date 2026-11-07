@@ -12,7 +12,24 @@ enum {
     SF_BOLT, SF_BARRAGE, SF_NOVA, SF_CHAIN, SF_BREATH, SF_ORB, SF_RUNE, SF_ORBIT, SF_STORM, SF_METEOR, SF_AURA,
     SF_COUNT
 };
-enum { SU_HEAL, SU_BLINK, SU_WARD, SU_HASTE, SU_FLARE, SU_RECALL, SU_THREAD, SU_COUNT };
+enum {
+    SU_HEAL, SU_BLINK, SU_WARD, SU_HASTE, SU_FLARE, SU_RECALL, SU_THREAD,
+    /* moving around */
+    SU_LEVITATE, SU_WINGS, SU_FEATHER, SU_CLIMB, SU_STRIDE, SU_PHASE, SU_ANCHOR, SU_GATES, SU_STAIRWAY,
+    /* defence and safe places */
+    SU_KEEP, SU_WALL, SU_HUT, SU_SANCTUARY, SU_MIRROR, SU_STONESKIN,
+    /* seeing and knowing */
+    SU_SCRY, SU_REVEAL, SU_MAPMIND, SU_DOWSE, SU_SPEAKDEAD,
+    /* bending monsters */
+    SU_INVIS, SU_LURE, SU_CHARM, SU_FEAR, SU_TIMESLIP, SU_GRAVWELL,
+    /* changing the world */
+    SU_STONESHAPE, SU_BRIDGE, SU_QUENCH, SU_STEED,
+    /* the way home */
+    SU_SANCTUM,
+    SU_COUNT
+};
+/* Spells known in save version 3 and earlier (88 attack + 7 utility). */
+#define SPELL_COUNT_V3 95
 
 #define SPELL_ATTACK_COUNT (EL_COUNT * SF_COUNT)
 #define SPELL_COUNT (SPELL_ATTACK_COUNT + SU_COUNT)
@@ -104,7 +121,18 @@ typedef struct Pickup {
 
 /* ---------- lasting spell effects ---------- */
 
-enum { EF_STORM, EF_RUNE, EF_METEOR, EF_ORBIT, EF_AURA, EF_FLARE };
+enum {
+    EF_STORM, EF_RUNE, EF_METEOR, EF_ORBIT, EF_AURA, EF_FLARE,
+    /* utility spells (utility.c) */
+    EF_DECOY,     /* a mirror image: monsters strike it, it bursts */
+    EF_LURE,      /* a light monsters go to */
+    EF_SANCTUARY, /* a ring monsters will not cross */
+    EF_GRAVWELL,  /* pulls monsters and loot in */
+    EF_GATE,      /* one of a pair of linked portals (link: the other) */
+    EF_DOOR,      /* the door to the pocket realm */
+    EF_HEARTH,    /* the heart of a keep or hut: heals players near it */
+    EF_ANCHOR,    /* where Anchor brings you back */
+};
 
 typedef struct Effect {
     bool alive;
@@ -112,6 +140,8 @@ typedef struct Effect {
     int owner;
     vec3 pos;
     float t, life, tick, dmg, radius;
+    float yaw;
+    int link;     /* gates: the other gate's index, -1 none */
 } Effect;
 
 #define BAG_SIZE 18

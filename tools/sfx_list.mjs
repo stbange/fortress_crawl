@@ -189,6 +189,23 @@ export const SOUNDS = [
   { id: "spell_recall", dur: 1.6, text: "recall teleport spell, swirling magical vortex and deep whoosh" },
   { id: "spell_thread", dur: 1.6, text: "golden thread spell, delicate magical harp shimmer leading the way" },
   { id: "spell_fizzle", dur: 0.6, text: "spell fails for lack of mana, weak magical fizzle and puff" },
+  // utility spells (utility.c), one sound per family
+  { id: "spell_air", dur: 1.4, text: "levitation spell, soft rising wind swirl with airy magical shimmer lifting upward" },
+  { id: "spell_wings", dur: 1.6, text: "magical wings unfurl, great feathered wings beat twice with a bright shimmering whoosh" },
+  { id: "spell_earth", dur: 2.0, text: "earth magic raises stone walls, deep grinding rumble of rock blocks rising from the ground" },
+  { id: "spell_gate", dur: 1.6, text: "magical portal opens, deep resonant swirling hum with a bright crystalline ring" },
+  { id: "spell_sight", dur: 1.5, text: "divination spell, distant ethereal choir note and soft glassy chimes, mysterious" },
+  { id: "spell_shadow", dur: 1.4, text: "dark enchantment spell, low whispering voices and a soft hissing shadowy swirl" },
+  { id: "spell_time", dur: 1.8, text: "time slows down, a deep pitch falling warble and a heavy slowing clock tick" },
+  { id: "spell_gravity", dur: 1.8, text: "gravity well spell, deep humming vortex pulling inward with low bass throb" },
+  { id: "spell_frost", dur: 1.4, text: "water freezes instantly into ice, crackling crystalline freeze and hissing steam" },
+  { id: "spell_light", dur: 1.4, text: "holy light spell, warm radiant shimmer with a bright sustained harp chord" },
+  { id: "spell_steed", dur: 1.6, text: "spectral horse summoned, ghostly echoing neigh and magical hoof stomp" },
+  // the pocket realm (realm.c)
+  { id: "realm_door", dur: 2.2, text: "magical door to a pocket realm opens, warm deep whoosh, wind chimes and distant birdsong" },
+  { id: "realm_bath", dur: 2.5, text: "stepping into a warm bath, gentle water splashes and a relaxed sigh of relief" },
+  { id: "realm_feast", dur: 2.5, text: "a hearty feast, clinking goblets, plates and cutlery, a satisfied hum, crackling hearth" },
+  { id: "realm_rest", dur: 2.5, text: "lying down in a soft bed, rustling linen, a deep contented yawn and calm stillness" },
 
   // ---------------- the player ----------------
   { id: "step_stone", dur: 0.5, v: 3, text: "single boot footstep on a stone dungeon floor" },

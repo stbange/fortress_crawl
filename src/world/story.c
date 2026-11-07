@@ -1,4 +1,5 @@
 #include "world/story.h"
+#include "world/pocket.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -335,6 +336,7 @@ void story_lord(const World *w, const Domain *d, Named *out) {
 }
 
 bool story_lord_here(const World *w, int cx, int cy, int cz, Named *out) {
+    if (world_is_pocket(cx, cy, cz)) return false;
     Domain d;
     story_domain(w, cx, cy, cz, &d);
     if (d.level < 2) return false; /* the first rooms behind the gate are quiet */
@@ -621,7 +623,7 @@ static const char *const NOTE[] = {
 };
 
 bool story_trace(const World *w, int cx, int cy, int cz, Trace *out) {
-    if (world_is_exterior(cx, cy, cz)) return false;
+    if (world_is_exterior(cx, cy, cz) || world_is_pocket(cx, cy, cz)) return false;
     u64 h = hash3(w->seed, cx, cy, cz, 0x7ACE);
     if (hash_unit(h) >= 0.32f) return false;
     memset(out, 0, sizeof *out);
@@ -665,7 +667,7 @@ bool story_retrieve(const World *w, int cx, int cy, int cz, Retrieve *out) {
     pick_site(w, tx, cy, tz, 1, false, NULL, &out->cx, &out->cy, &out->cz);
     ChunkInfo ci;
     world_chunk_info(w, out->cx, out->cy, out->cz, &ci);
-    if (ci.arch == ARCH_EXTERIOR || (out->cx == cx && out->cy == cy && out->cz == cz)) return false;
+    if (ci.arch == ARCH_EXTERIOR || ci.arch == ARCH_POCKET || (out->cx == cx && out->cy == cy && out->cz == cz)) return false;
     out->key = mix64(h ^ 0x17E3) | 1;
     Domain d;
     story_domain(w, cx, cy, cz, &d);

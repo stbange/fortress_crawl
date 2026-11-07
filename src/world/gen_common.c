@@ -601,14 +601,15 @@ void world_generate_chunk(const World *w, int cx, int cy, int cz, Block *blocks,
     g->light_rate = clampf(1.25f - g->info.difficulty * 0.02f, 0.35f, 1.25f);
     memset(blocks, B_ROCK, CHUNK_VOL);
 
-    if (g->info.arch == ARCH_EXTERIOR) gen_exterior(g);
+    if (g->info.arch == ARCH_POCKET) gen_pocket(g);
+    else if (g->info.arch == ARCH_EXTERIOR) gen_exterior(g);
     else if (g->info.has_struct) gen_structure(g);
     else {
         gen_archetype(g);
         gen_mechanisms(g);
     }
 
-    if (g->info.arch != ARCH_EXTERIOR) seal_exterior(g);
+    if (g->info.arch != ARCH_EXTERIOR && g->info.arch != ARCH_POCKET) seal_exterior(g);
     if (info) *info = g->info;
     free(g->floors);
     free(g);

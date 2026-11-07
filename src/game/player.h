@@ -11,6 +11,9 @@ typedef struct PlayerInput {
     bool jump, crouch, sprint, up, down;
 } PlayerInput;
 
+/* How the player moves (utility spells): walking, levitating, flying. */
+enum { MOVE_WALK, MOVE_LEVITATE, MOVE_FLY };
+
 typedef struct Player {
     vec3 pos; /* feet, centre */
     vec3 vel;
@@ -20,6 +23,11 @@ typedef struct Player {
     float eye_offset; /* smoothing for step-ups and stance changes */
     float bob;
     float speed_mult; /* from skills */
+    /* set every tick by the game from the spells on the player */
+    int move_mode;    /* MOVE_* */
+    float max_fall;   /* fastest fall (feather fall: slow) */
+    float jump_mult;  /* a steed jumps higher */
+    bool climbing;    /* spider climb: pushing into a wall climbs it */
 } Player;
 
 void player_init(Player *p, vec3 pos, float yaw);

@@ -36,6 +36,43 @@ static const struct { const char *name, *desc; float mana, cooldown; int tier; }
     [SU_FLARE] = { "Flare", "a lasting light where you aim", 8, 1.0f, 0 },
     [SU_RECALL] = { "Recall", "back to your shrine", 30, 30.0f, 2 },
     [SU_THREAD] = { "Golden Thread", "a fading thread leads to your target; again: next mission", 6, 1.5f, 0 },
+    /* moving around */
+    [SU_LEVITATE] = { "Levitate", "float for 15 s: jump rises, crouch sinks", 15, 3.0f, 1 },
+    [SU_WINGS] = { "Wings of the Gale", "fly where you look for 20 s, then glide down", 35, 30.0f, 3 },
+    [SU_FEATHER] = { "Feather Fall", "fall slowly and safely for 30 s", 8, 2.0f, 0 },
+    [SU_CLIMB] = { "Spider Climb", "walk up walls for 20 s", 15, 5.0f, 1 },
+    [SU_STRIDE] = { "Strider's Grace", "walk on water, and on lava unharmed, for 30 s", 15, 5.0f, 1 },
+    [SU_PHASE] = { "Phase Step", "step through up to 3 blocks of wall ahead", 20, 4.0f, 2 },
+    [SU_ANCHOR] = { "Anchor", "set an anchor here; cast again to return to it", 10, 1.0f, 1 },
+    [SU_GATES] = { "Twin Gates", "two linked portals, one per cast, for 60 s", 25, 1.0f, 2 },
+    [SU_STAIRWAY] = { "Stairway of Light", "rise to the layer above (look up) or sink below", 30, 20.0f, 2 },
+    /* defence and safe places */
+    [SU_KEEP] = { "Warden's Keep", "a keep monsters cannot enter; its hearth heals; your shrine", 60, 120.0f, 3 },
+    [SU_WALL] = { "Wall of Stone", "a stone wall ahead for 30 s", 15, 6.0f, 0 },
+    [SU_HUT] = { "Hut of Rest", "a hut whose fire heals you inside, for 60 s", 25, 60.0f, 1 },
+    [SU_SANCTUARY] = { "Sanctuary", "a ring monsters will not cross, for 20 s", 25, 25.0f, 1 },
+    [SU_MIRROR] = { "Mirror Image", "copies of you take the monsters' blows", 25, 20.0f, 2 },
+    [SU_STONESKIN] = { "Stoneskin", "half damage but slower, for 20 s", 20, 30.0f, 1 },
+    /* seeing and knowing */
+    [SU_SCRY] = { "Clairvoyance", "send your sight ahead for 20 s; your body stays", 15, 10.0f, 1 },
+    [SU_REVEAL] = { "Reveal the Hidden", "show traps, mimics and hidden foes for 30 s", 10, 15.0f, 0 },
+    [SU_MAPMIND] = { "Map of the Mind", "reveal the map around you", 25, 30.0f, 1 },
+    [SU_DOWSE] = { "Dowsing", "points to the nearest treasure for 20 s", 8, 10.0f, 0 },
+    [SU_SPEAKDEAD] = { "Speak with the Dead", "the dead nearby tell where your quarry lies", 10, 10.0f, 1 },
+    /* bending monsters */
+    [SU_INVIS] = { "Invisibility", "monsters lose you until you strike, for 15 s", 25, 30.0f, 2 },
+    [SU_LURE] = { "Lure", "a light that draws monsters to it for 10 s", 12, 12.0f, 0 },
+    [SU_CHARM] = { "Charm", "the monster you aim at fights for you for 30 s", 30, 25.0f, 2 },
+    [SU_FEAR] = { "Fear", "monsters near you flee for 6 s", 20, 15.0f, 1 },
+    [SU_TIMESLIP] = { "Time Slip", "the world slows to a crawl for 4 s", 40, 45.0f, 3 },
+    [SU_GRAVWELL] = { "Gravity Well", "pulls monsters and loot together for 5 s", 25, 15.0f, 2 },
+    /* changing the world */
+    [SU_STONESHAPE] = { "Stone Shape", "carve a passage through up to 5 blocks, for 3 min", 30, 8.0f, 2 },
+    [SU_BRIDGE] = { "Bridge of Light", "a bridge of light ahead for 60 s", 20, 10.0f, 1 },
+    [SU_QUENCH] = { "Quench", "water near you freezes, lava cools to rock, for 60 s", 20, 20.0f, 2 },
+    [SU_STEED] = { "Spectral Steed", "ride: faster, higher jumps, for 60 s", 20, 60.0f, 1 },
+    /* the way home */
+    [SU_SANCTUM] = { "Sanctum Door", "opens a door to your castle in the pocket realm", 30, 10.0f, 0 },
 };
 
 vec3 element_color(int e) {
@@ -87,6 +124,7 @@ void spells_give_start(Stats *s) {
     s->spell_rank[spell_attack_id(EL_FIRE, SF_BOLT)] = 1;
     s->spell_rank[SPELL_ATTACK_COUNT + SU_HEAL] = 1;
     s->spell_rank[SPELL_ATTACK_COUNT + SU_THREAD] = 1;
+    s->spell_rank[SPELL_ATTACK_COUNT + SU_SANCTUM] = 1; /* everyone has a home */
     s->spell = spell_attack_id(EL_FIRE, SF_BOLT);
 }
 
@@ -220,7 +258,7 @@ static Projectile *spell_proj(Game *g, int owner, int element, int form, vec3 po
     return NULL;
 }
 
-static Effect *effect_new(Game *g, int type, int element, int owner, vec3 pos, float life, float dmg, float radius) {
+Effect *effect_new(Game *g, int type, int element, int owner, vec3 pos, float life, float dmg, float radius) {
     int slot = -1;
     for (int i = 0; i < MAX_EFFECTS && slot < 0; i++)
         if (!g->effects[i].alive) slot = i;
@@ -235,6 +273,7 @@ static Effect *effect_new(Game *g, int type, int element, int owner, vec3 pos, f
     e->life = life;
     e->dmg = dmg;
     e->radius = radius;
+    e->link = -1;
     return e;
 }
 
@@ -305,8 +344,19 @@ static void cast_chain(Game *g, PlayerSlot *ps, int element, float dmg) {
 static bool cast_utility_do(Game *g, PlayerSlot *ps, int u, int rank);
 
 static bool cast_utility(Game *g, PlayerSlot *ps, int u, int rank) {
-    static const int S[SU_COUNT] = { SFX_SPELL_HEAL, SFX_SPELL_BLINK, SFX_SPELL_WARD, SFX_SPELL_HASTE,
-                                     SFX_SPELL_FLARE, SFX_SPELL_RECALL, SFX_SPELL_THREAD };
+    static const int S[SU_COUNT] = {
+        [SU_HEAL] = SFX_SPELL_HEAL, [SU_BLINK] = SFX_SPELL_BLINK, [SU_WARD] = SFX_SPELL_WARD, [SU_HASTE] = SFX_SPELL_HASTE,
+        [SU_FLARE] = SFX_SPELL_FLARE, [SU_RECALL] = SFX_SPELL_RECALL, [SU_THREAD] = SFX_SPELL_THREAD,
+        [SU_LEVITATE] = SFX_SPELL_AIR, [SU_WINGS] = SFX_SPELL_WINGS, [SU_FEATHER] = SFX_SPELL_AIR, [SU_CLIMB] = SFX_SPELL_SHADOW,
+        [SU_STRIDE] = SFX_SPELL_FROST, [SU_PHASE] = SFX_SPELL_BLINK, [SU_ANCHOR] = SFX_SPELL_GATE, [SU_GATES] = SFX_SPELL_GATE,
+        [SU_STAIRWAY] = SFX_SPELL_RECALL, [SU_KEEP] = SFX_SPELL_EARTH, [SU_WALL] = SFX_SPELL_EARTH, [SU_HUT] = SFX_SPELL_EARTH,
+        [SU_SANCTUARY] = SFX_SPELL_LIGHT, [SU_MIRROR] = SFX_SPELL_SHADOW, [SU_STONESKIN] = SFX_SPELL_EARTH,
+        [SU_SCRY] = SFX_SPELL_SIGHT, [SU_REVEAL] = SFX_SPELL_SIGHT, [SU_MAPMIND] = SFX_SPELL_SIGHT, [SU_DOWSE] = SFX_SPELL_THREAD,
+        [SU_SPEAKDEAD] = SFX_SPELL_SIGHT, [SU_INVIS] = SFX_SPELL_SHADOW, [SU_LURE] = SFX_SPELL_LIGHT, [SU_CHARM] = SFX_SPELL_SHADOW,
+        [SU_FEAR] = SFX_SPELL_SHADOW, [SU_TIMESLIP] = SFX_SPELL_TIME, [SU_GRAVWELL] = SFX_SPELL_GRAVITY,
+        [SU_STONESHAPE] = SFX_SPELL_EARTH, [SU_BRIDGE] = SFX_SPELL_LIGHT, [SU_QUENCH] = SFX_SPELL_FROST, [SU_STEED] = SFX_SPELL_STEED,
+        [SU_SANCTUM] = SFX_REALM_DOOR,
+    };
     if (!cast_utility_do(g, ps, u, rank)) return false;
     if (u >= 0 && u < SU_COUNT) sfx_player(g, ps, S[u], 1.0f);
     return true;
@@ -338,6 +388,7 @@ static bool cast_utility_do(Game *g, PlayerSlot *ps, int u, int rank) {
         particles_burst(g, eye, v3(0.7f, 0.5f, 1.0f), 14, 3.0f, 0.05f, true);
         ps->pl.pos = best;
         ps->pl.vel = v3(0, 0, 0);
+        s->fall_speed = 0;
         particles_burst(g, player_eye(&ps->pl), v3(0.7f, 0.5f, 1.0f), 14, 3.0f, 0.05f, true);
         return true;
     }
@@ -363,10 +414,12 @@ static bool cast_utility_do(Game *g, PlayerSlot *ps, int u, int rank) {
         ps->pl.pos = s->respawn;
         ps->pl.yaw = s->respawn_yaw;
         ps->pl.vel = v3(0, 0, 0);
+        s->fall_speed = 0;
         flash_add(g, player_eye(&ps->pl), v3(1.0f, 0.85f, 0.5f), 8.0f, 0.5f);
         return true;
+    default:
+        return utility_cast(g, ps, u, rank);
     }
-    return false;
 }
 
 bool spell_cast(Game *g, PlayerSlot *ps) { return spell_cast_id(g, ps, ps->st.spell); }
@@ -391,6 +444,7 @@ bool spell_cast_id(Game *g, PlayerSlot *ps, int id) {
         s->spell_cd = si.cooldown * haste;
         return true;
     }
+    utility_player_attacked(ps); /* an attack spell gives you away */
     int e = spell_element(id), f = spell_form(id);
     float dmg = si.damage * spell_power(ps, id);
     vec3 eye = player_eye(&ps->pl);

@@ -11,7 +11,7 @@
  * user's preference folder. The world itself never needs saving: the seed rebuilds it. */
 
 #define SAVE_MAGIC 0x56534346u /* "FCSV" */
-#define SAVE_VERSION 3 /* 2: story (motive, chapter, missions, lore); 3: layered world */
+#define SAVE_VERSION 4 /* 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm */
 #define EXPLORED_BUDGET (1200 * 1024)
 
 /* ---------- storage backends ---------- */
@@ -136,6 +136,7 @@ static void write_player(Buf *b, const Stats *s, const Player *pl) {
     for (int i = 0; i < BAG_SIZE; i++) witem(b, &s->bag[i]);
     w32(b, (u32)s->gold); w32(b, (u32)s->potions_hp); w32(b, (u32)s->potions_mp);
     wbytes(b, s->relics, RELIC_COUNT);
+    w16(b, SPELL_COUNT);
     wbytes(b, s->spell_rank, SPELL_COUNT);
     w32(b, (u32)s->spell);
     /* v2: story */
@@ -150,6 +151,9 @@ static void write_player(Buf *b, const Stats *s, const Player *pl) {
         w32(b, (u32)m->sx); w32(b, (u32)m->sy); w32(b, (u32)m->sz);
         w32(b, (u32)m->reward);
     }
+    /* v4: where the Sanctum Door brought you from */
+    w8(b, s->realm_return_set);
+    wv(b, s->realm_return); wf(b, s->realm_return_yaw);
 }
 
 /* Explored cells: per chunk a 512-byte mask of the non-zero bytes, then those bytes. */
@@ -278,7 +282,14 @@ static void read_player(Rd *r, SavedPlayer *sp) {
     }
     s->gold = (int)r32(r); s->potions_hp = (int)r32(r); s->potions_mp = (int)r32(r);
     rbytes(r, s->relics, RELIC_COUNT);
-    rbytes(r, s->spell_rank, SPELL_COUNT);
+    {
+        /* the number of spells grew in version 4: read what there is, skip what we do not know */
+        int ns = r->ver >= 4 ? r16(r) : SPELL_COUNT_V3;
+        u8 tmp[1024];
+        if (ns > (int)sizeof tmp) { r->bad = true; ns = 0; }
+        rbytes(r, tmp, ns);
+        memcpy(s->spell_rank, tmp, (size_t)MINI(ns, SPELL_COUNT));
+    }
     s->spell = (int)r32(r);
     /* before version 3 the world had another shape: the place is meaningless now */
     sp->moved = r->ver < 3;
@@ -298,12 +309,18 @@ static void read_player(Rd *r, SavedPlayer *sp) {
         if (s->motive > MOTIVE_COUNT) s->motive = 0;
         if (s->chapter < 0 || s->chapter > 10000) s->chapter = 0;
     }
+    if (r->ver >= 4) {
+        s->realm_return_set = r8(r) != 0;
+        s->realm_return = rv(r);
+        s->realm_return_yaw = rf(r);
+    }
     /* sanity: a save from a broken build must not crash the game */
     if (s->level < 1 || s->level > 999) s->level = 1;
     if (s->weapon < 0 || s->weapon >= WPN_COUNT) s->weapon = 0;
     if (s->spell < 0 || s->spell >= SPELL_COUNT || !s->spell_rank[s->spell]) s->spell = spell_attack_id(EL_FIRE, SF_BOLT);
     s->spell_rank[spell_attack_id(EL_FIRE, SF_BOLT)] = MAXI(1, s->spell_rank[spell_attack_id(EL_FIRE, SF_BOLT)]);
     s->spell_rank[SPELL_ATTACK_COUNT + SU_THREAD] = MAXI(1, s->spell_rank[SPELL_ATTACK_COUNT + SU_THREAD]); /* everyone has it */
+    s->spell_rank[SPELL_ATTACK_COUNT + SU_SANCTUM] = MAXI(1, s->spell_rank[SPELL_ATTACK_COUNT + SU_SANCTUM]);
     for (int i = 0; i < WPN_COUNT; i++)
         if (!s->equipped[i].used || WEAPON_BASES[s->equipped[i].base].wclass != i) {
             static const int START[WPN_COUNT] = { WB_SWORD, WB_SHORTBOW, WB_STAFF };

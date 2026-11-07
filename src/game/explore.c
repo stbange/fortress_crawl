@@ -92,6 +92,25 @@ void explore_update(Game *g, PlayerSlot *ps, float dt) {
         }
 }
 
+void explore_reveal_area(Game *g, vec3 p, int r) {
+    int pcx = floordiv((int)floorf(p.x), CHUNK), pcy = floordiv((int)floorf(p.y), CHUNK), pcz = floordiv((int)floorf(p.z), CHUNK);
+    for (int cz = pcz - r; cz <= pcz + r; cz++)
+        for (int cy = pcy - 1; cy <= pcy + 1; cy++)
+            for (int cx = pcx - r; cx <= pcx + r; cx++) {
+                Chunk *c = chunkmap_get(&g->map, cx, cy, cz);
+                if (!c || c->state != CH_READY) continue;
+                for (int y = 1; y < CHUNK; y++)
+                    for (int z = 0; z < CHUNK; z++)
+                        for (int x = 0; x < CHUNK; x++) {
+                            Block b = c->blocks[cidx(x, y, z)];
+                            if (block_opaque(b)) continue;
+                            int wx = cx * CHUNK + x, wy = cy * CHUNK + y, wz = cz * CHUNK + z;
+                            mark(g, wx, wy, wz);
+                            if (block_solid(c->blocks[cidx(x, y - 1, z)])) mark(g, wx, wy - 1, wz);
+                        }
+            }
+}
+
 static void map_arrow(float cx, float cy, float yaw, vec3 c) {
     for (int k = 0; k < 5; k++) {
         float d = (float)k * 1.6f;

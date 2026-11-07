@@ -129,6 +129,8 @@ void game_hurt_player(Game *g, PlayerSlot *ps, float dmg, vec3 from) {
     Stats *s = &ps->st;
     if (s->dead || ps->pl.fly || s->invuln > 0) return;
     if (s->ranks[SK_LAST_STAND] && s->hp < s->maxhp * 0.3f) dmg *= 0.5f;
+    if (s->stoneskin_t > 0) dmg *= 0.5f;
+    s->scry_t = 0; /* a blow breaks Clairvoyance */
     if (s->ward > 0) {
         /* the ward takes it first */
         float absorbed = fminf(s->ward, dmg);
@@ -258,6 +260,12 @@ void game_update_atmosphere(Game *g, PlayerSlot *ps, float dt) {
         amb = v3(0.05f, 0.055f, 0.08f);
         stars = 1.0f;
         density = 0.012f;
+    } else if (ci.arch == ARCH_POCKET) {
+        /* the pocket realm: a warm evening sky, the first stars */
+        fog = v3(0.36f, 0.3f, 0.27f);
+        amb = v3(0.3f, 0.27f, 0.24f);
+        stars = 0.35f;
+        density = 0.0025f;
     }
     ps->openness_timer -= dt;
     if (ps->openness_timer <= 0) {
@@ -636,6 +644,7 @@ static void update_player(Game *g, PlayerSlot *ps, const PlayerInput *in, float 
             s->mana = s->maxmana;
             s->hurt = 0;
             s->burn_t = s->poison_t = s->chill_t = 0;
+            s->fall_speed = 0;
             /* a safe return: whatever was waiting at the shrine is gone, and a short grace period */
             for (int i = 0; i < MAX_MONSTERS; i++)
                 if (g->mons[i].alive && v3_len(v3_sub(g->mons[i].pos, s->respawn)) < 16.0f) g->mons[i].alive = false;
@@ -647,9 +656,34 @@ static void update_player(Game *g, PlayerSlot *ps, const PlayerInput *in, float 
     s->invuln = fmaxf(0.0f, s->invuln - dt);
     /* do not simulate until the ground under the player exists */
     bool ground_known = game_solid(g, (int)floorf(ps->pl.pos.x), (int)floorf(ps->pl.pos.y) - 1, (int)floorf(ps->pl.pos.z)) >= 0;
+    utility_player_physics(g, ps);
+    PlayerInput pin = *in;
+    if (s->scry_t > 0) {
+        /* Clairvoyance: the input moves your sight, not your body (up to 40 m away) */
+        vec3 f = dir_from_angles(ps->pl.yaw, ps->pl.pitch), r = v3(-sinf(ps->pl.yaw), 0, cosf(ps->pl.yaw));
+        vec3 mv = v3_add(v3_scale(f, pin.move_z), v3_scale(r, pin.move_x));
+        mv.y += (pin.jump ? 1.0f : 0.0f) - (pin.crouch ? 1.0f : 0.0f);
+        vec3 np = v3_add(ps->scry_pos, v3_scale(mv, (pin.sprint ? 14.0f : 8.0f) * dt));
+        vec3 body = player_eye(&ps->pl);
+        if (v3_len(v3_sub(np, body)) < 40.0f && game_solid(g, (int)floorf(np.x), (int)floorf(np.y), (int)floorf(np.z)) == 0) ps->scry_pos = np;
+        memset(&pin, 0, sizeof pin);
+    }
     if (ground_known || ps->pl.fly) {
-        PlayerInput pin = *in;
-        player_update(&ps->pl, &pin, dt, game_solid, g);
+        bool was_ground = ps->pl.on_ground;
+        utility_physics_player(ps);
+        player_update(&ps->pl, &pin, dt, player_solid, g);
+        utility_physics_player(NULL);
+        /* a long fall hurts, unless something slows it */
+        if (!ps->pl.on_ground) s->fall_speed = fmaxf(s->fall_speed, -ps->pl.vel.y);
+        else if (!was_ground) {
+            bool known;
+            Block in_b = chunkmap_block(&g->map, (int)floorf(ps->pl.pos.x), (int)floorf(ps->pl.pos.y), (int)floorf(ps->pl.pos.z), &known);
+            if (s->fall_speed > 21.0f && !ps->pl.fly && ps->pl.move_mode == MOVE_WALK && in_b != B_WATER) {
+                game_hurt_player(g, ps, s->maxhp * 0.035f * (s->fall_speed - 21.0f), v3_add(ps->pl.pos, ps->pl.vel));
+            }
+            s->fall_speed = 0;
+        }
+        if (ps->pl.move_mode != MOVE_WALK) s->fall_speed = 0;
     }
 }
 
@@ -675,9 +709,10 @@ void game_update(Game *g, const PlayerInput *kb, float dt) {
         monsters_spawn_for_chunks(g);
         for (int i = 0; i < MAX_PLAYERS; i++)
             if (g->players[i].active) flow_update(g, &g->players[i], dt);
-        monsters_update(g, dt);
+        monsters_update(g, dt * utility_time_scale(g));
         combat_update(g, dt);
-        mech_update(g, dt);
+        mech_update(g, dt * utility_time_scale(g));
+        utility_update(g, dt);
         for (int i = 0; i < MAX_PLAYERS; i++)
             if (g->players[i].active) update_shrines(g, &g->players[i]);
     }
@@ -1017,7 +1052,8 @@ void game_view_rect(const Game *g, const PlayerSlot *ps, int *x, int *y, int *w,
 }
 
 static void render_view(Game *g, PlayerSlot *ps, int vx, int vy, int vw, int vh) {
-    vec3 eye = player_eye(&ps->pl);
+    vec3 eye = game_view_eye(ps);
+    g->draw_viewer = ps;
     SceneParams sp;
     memset(&sp, 0, sizeof sp);
     float aspect = (float)vw / (float)vh;
@@ -1034,6 +1070,7 @@ static void render_view(Game *g, PlayerSlot *ps, int vx, int vy, int vw, int vh)
     sp.time = g->time;
     combat_collect_lights(g, ps, &sp);
     mech_collect_lights(g, eye, &sp);
+    utility_lights(g, eye, &sp);
     renderer_set_view(&g->r, vx, vy, vw, vh);
     renderer_begin(&g->r, &sp);
     chunkmap_draw(&g->map, eye);
@@ -1047,6 +1084,7 @@ static void render_view(Game *g, PlayerSlot *ps, int vx, int vy, int vw, int vh)
     mech_draw(g, eye);
     spells_draw_world(g);
     story_draw_threads(g, eye);
+    utility_draw_world(g, ps);
     batch3d_flush(&g->r.vp, &fog);
 
     /* the weapon in view gets its own depth range */
@@ -1054,7 +1092,7 @@ static void render_view(Game *g, PlayerSlot *ps, int vx, int vy, int vw, int vh)
     mat4 vm_proj = m4_perspective(60.0f * PI_F / 180.0f, aspect, 0.01f, 10.0f);
     BatchFog none = { v3(0, 0, 0), ps->fog, 0.0f };
     batch3d_begin();
-    combat_draw_viewmodel(g, ps);
+    if (ps->st.scry_t <= 0) combat_draw_viewmodel(g, ps);
     batch3d_flush(&vm_proj, &none);
     renderer_end_world(&g->r);
 
@@ -1065,6 +1103,7 @@ static void render_view(Game *g, PlayerSlot *ps, int vx, int vy, int vw, int vh)
         story_draw_plates(g, ps, vw, vh);
         draw_hud(g, ps, vw, vh);
         mech_draw_hud(g, ps, vw, vh);
+        utility_draw_hud(g, ps, vw, vh);
     }
     if (!ps->show_skills && !ps->show_map) story_draw_panel(g, ps, vw, vh);
 }

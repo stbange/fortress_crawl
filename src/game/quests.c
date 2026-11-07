@@ -455,6 +455,11 @@ static void update_domain(Game *g, PlayerSlot *ps) {
         ps->domain_id = 1;
         return;
     }
+    if (world_is_pocket(cx, cy, cz)) {
+        snprintf(ps->domain_name, sizeof ps->domain_name, "your own sanctum");
+        ps->domain_id = 2;
+        return;
+    }
     Domain d;
     story_domain(&g->world, cx, cy, cz, &d);
     if (d.id == ps->domain_id) return;
@@ -559,6 +564,7 @@ void story_draw_panel(Game *g, PlayerSlot *ps, int W, int H) {
 
 void story_draw_tracker(Game *g, PlayerSlot *ps, int W, int H, int y) {
     if (!ps->st.motive || ps->st.dead || ps->target_chapter != ps->st.chapter + 1) return;
+    if (realm_has(ps->pl.pos)) return; /* no quarry in the Sanctum: you are out of the world */
     char dir[64], buf[160];
     story_direction(ps->pl.pos.x, ps->pl.pos.y + 1.0f, ps->pl.pos.z, ps->target.cx, ps->target.cy, ps->target.cz, dir, sizeof dir);
     snprintf(buf, sizeof buf, "> %s - %s", ps->target.name, dir);

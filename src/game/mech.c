@@ -450,7 +450,7 @@ static void update_trap(Game *g, Device *d, float dt) {
 /* ---------- lava ---------- */
 
 static void update_lava(Game *g, PlayerSlot *ps, float dt) {
-    if (ps->st.dead || !ps->pl.on_ground || ps->pl.fly) return;
+    if (ps->st.dead || !ps->pl.on_ground || ps->pl.fly || ps->st.stride_t > 0) return; /* a strider walks over it */
     vec3 f = ps->pl.pos;
     bool known;
     Block b = chunkmap_block(&g->map, (int)floorf(f.x), (int)floorf(f.y - 0.05f), (int)floorf(f.z), &known);
@@ -535,6 +535,21 @@ int mech_burning_flames(Game *g, vec3 *out, int max) {
 }
 
 /* ---------- drawing ---------- */
+
+void mech_draw_revealed(Game *g) {
+    /* traps glow red, puzzle parts gold */
+    float pulse = 0.6f + 0.4f * sinf(g->time * 5.0f);
+    for (int i = 0; i < MAX_DEVICES; i++) {
+        const Device *d = &g->devs[i];
+        if (!d->alive) continue;
+        bool trap = d->kind >= DV_DARTS;
+        vec3 col = v3_scale(trap ? v3(1.0f, 0.2f, 0.15f) : v3(1.0f, 0.8f, 0.3f), pulse);
+        float s = d->kind == DV_SPIKES ? d->size * 0.5f : 0.5f;
+        vec3 c = d->kind == DV_SPIKES ? v3(d->x + s, d->y + 0.03f, d->z + s) : v3(d->x + 0.5f, d->y + 0.03f, d->z + 0.5f);
+        batch3d_box(c, v3(s + 0.04f, 0.02f, s + 0.04f), 0, col, true);
+        batch3d_octa(v3_add(c, v3(0, 1.6f, 0)), 0.08f, 0.12f, g->time * 2.0f, col, true);
+    }
+}
 
 static vec3 lit(vec3 col, vec3 l) { return v3(col.x * l.x, col.y * l.y, col.z * l.z); }
 
