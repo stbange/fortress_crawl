@@ -417,7 +417,7 @@ Done:
 - A playtest bot (`--bot`) and the notes from 16 hours of automated play: [`PLAYTEST.md`](PLAYTEST.md).
 - Weapons that differ from world to world (arms.c): nine lost arts of which a world knows four,
   materials by region, powers (trigger + effect), twenty legendaries per world, and weapons that
-  remember their kills (titles at 50 of a kind, a hidden affix at 100).
+  remember their kills (titles at 30 of a kind, a hidden affix at 75).
 - The balance pass from those notes ([`BALANCE_PLAN.md`](BALANCE_PLAN.md)): danger that keeps up,
   a costlier death, a shop for gold, melee across ledges, safer stairs, a nearer first chapter.
 - Screenshot and demo modes (`--shot`, `--demo combat|sword|death|skills|map|coop|menu|

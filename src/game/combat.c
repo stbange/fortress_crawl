@@ -181,11 +181,11 @@ static void weapon_powers(Game *g, PlayerSlot *ps, int wclass, Monster *m, float
     }
     if (!killed || m->aux == 99) return;
     /* what the weapon remembers: its kills, the kind it has killed most of lately, and at
-     * a hundred kills an affix it had hidden */
+     * AWAKEN_KILLS kills an affix it had hidden */
     if (it->kills < 65535) it->kills++;
     int kind = m->type + 1;
     if (it->bane == kind) { if (it->bane_kills < 65535) it->bane_kills++; }
-    else if (it->bane_kills >= BANE_KILLS) { /* a title, once earned, stays */ }
+    else if (it->bane_kills >= 5) { /* on its way to a title (or has one): other kinds do not count against it */ }
     else if (it->bane_kills <= 1) { it->bane = (u8)kind; it->bane_kills = 1; }
     else it->bane_kills--;
     char name[96], buf[160];
@@ -203,7 +203,7 @@ static void weapon_powers(Game *g, PlayerSlot *ps, int wclass, Monster *m, float
         while (item_has_affix(it, a) && ++tries < 20);
         it->hidden = (u8)a;
         item_name(it, name, sizeof name);
-        snprintf(buf, sizeof buf, "A HUNDRED KILLS: IT AWAKENS - %s", name);
+        snprintf(buf, sizeof buf, "%d KILLS: IT AWAKENS - %s", AWAKEN_KILLS, name);
         g_tele.awakened++;
         for (char *q = buf; *q; q++) if (*q >= 'a' && *q <= 'z') *q -= 32;
         game_banner(ps, buf);

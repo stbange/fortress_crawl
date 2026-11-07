@@ -128,8 +128,8 @@ enum { MAT_IRON, MAT_BRONZE, MAT_BONE, MAT_OBSIDIAN, MAT_JADE, MAT_CRYSTAL, MAT_
 enum { PT_NONE, PT_KILL, PT_THIRD, PT_LOW, PT_AIR, PT_CRIT, PT_FIRST, PT_ELITE, PT_COUNT };
 enum { PE_NONE, PE_CHAIN, PE_BLAST, PE_FREEZE, PE_WISP, PE_BLINK, PE_HEAL, PE_SPLIT, PE_DECOY, PE_COUNT };
 #define UNIQUE_COUNT 20
-#define BANE_KILLS 50    /* kills of one kind that earn a weapon its title */
-#define AWAKEN_KILLS 100 /* kills that reveal its hidden affix */
+#define BANE_KILLS 30   /* kills of one kind that earn a weapon its title */
+#define AWAKEN_KILLS 75 /* kills that reveal its hidden affix */
 
 typedef struct MaterialDef {
     const char *name;

@@ -442,8 +442,8 @@ round it*. Every weapon can land a critical hit (5%, more with a rapier or cryst
 each with a line of lore and two powers. Named enemies carry them, from 200 m out; each is
 found once.
 
-**Memory**: a weapon counts its kills. Fifty kills of one kind earn it a title (*Knightbane*:
-25% more damage against knights), and at a hundred kills it awakens a hidden third affix.
+**Memory**: a weapon counts its kills. Thirty kills of one kind earn it a title (*Knightbane*:
+25% more damage against knights), and at 75 kills it awakens a hidden third affix.
 
 | | |
 |---|---|
