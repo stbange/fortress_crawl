@@ -9,8 +9,9 @@ generated on the fly, without end, in every direction including up and down. The
 get from the gate, the more dangerous it gets.
 
 This is an early prototype. It has **world generation, lighting, the retro renderer,
-Hexen-style combat against seven kinds of primitive monsters, 12 weapon types with rarities
-and affixes, 126 spells (38 of them utility spells such as flight, portals and a conjured keep), a
+Hexen-style combat against twenty kinds of monsters, 21 weapon types (each world knows its
+own four lost arts) with rarities, affixes, materials, powers, legendaries and a memory of
+their kills, 126 spells (38 of them utility spells such as flight, portals and a conjured keep), a
 pocket realm with your own castle, loot, chests and relics, an inventory, a classless skill tree,
 shrines, an explored-cells map, split-screen co-op for up to four players, saving, and
 generated stories: a motive per character, an endless metaplot of named enemies, inscriptions,
@@ -397,7 +398,7 @@ chunks north).
 
 ## Weapons
 
-Each of the 12 weapon types has its own model, the same in your hands, in other players'
+Each of the 21 weapon types has its own model, the same in your hands, in other players'
 hands and on the ground: daggers, swords, greatswords with swept guards, axes with a bearded
 bit, flanged maces, leaf-bladed spears, recurved shortbows, longbows, crossbows with a prod and
 a bolt on the rail, wands, staves with a forked head holding a gem, and scepters with a crown of
@@ -411,7 +412,46 @@ a blood-red mist circles vampiric ones. Where they hit, the element bursts too: 
 embers, frost throws shards, lightning arcs out, venom leaves a lingering cloud, and vampiric
 hits draw blood back to you. Magical arrows and bolts glow and trail sparks.
 
-Screenshots of them: `--demo weapons` (a rack of all 12) and `--demo impact` (a hit on a
+**Every world has its own armory.** Besides the 12 weapons found everywhere, each world knows
+four of nine **lost arts**, one of each class and one more, chosen by its seed:
+
+| Lost art | Class | What it does |
+|---|---|---|
+| Whip | blade | 4.5 m reach, pulls the foe toward you |
+| Flail | blade | a knight's shield does not stop it |
+| Scythe | blade | sweeps the full circle round you |
+| Rapier | blade | quick thrusts, a third of them critical |
+| Sling | bow | arcing stones that stun |
+| Chakram | bow | flies out and comes back, cutting through everything |
+| Hand cannon | bow | a ball that bursts where it lands; it kicks |
+| Tome | staff | weak bolts, but spells hit 30% harder and cost 15% less |
+| Censer | staff | a ring of holy fire round you instead of a bolt |
+
+**Materials** show where a weapon was forged. Near the gate it is iron or bronze; each
+direction has three materials of its own, and the world's seed decides which one rules there:
+rime-iron (hits chill), silver (bane of the undead), crystal (more critical hits), embersteel
+(hits smoulder), obsidian (+20% damage, slower), jade (hits sting with poison), bone (draws a
+little life), starmetal (15% faster). The material tints the metal.
+
+**Powers**: rare and better weapons carry one or two, a trigger and an effect, for example
+*every third hit: lightning leaps to two foes*, *on a kill: a wisp fights at your side*,
+*struck from the air: shards fly out of it*, *below a third of your health: the ground freezes
+round it*. Every weapon can land a critical hit (5%, more with a rapier or crystal).
+
+**Legendaries**: every world has twenty named weapons of its own (*Ravenspite*, *Dawnthorn*...),
+each with a line of lore and two powers. Named enemies carry them, from 200 m out; each is
+found once.
+
+**Memory**: a weapon counts its kills. Fifty kills of one kind earn it a title (*Knightbane*:
+25% more damage against knights), and at a hundred kills it awakens a hidden third affix.
+
+| | |
+|---|---|
+| ![The lost arts](docs/screenshots/lost_arts.png) | ![A legendary](docs/screenshots/inventory_legendary.png) |
+| Whip, flail, scythe; rapier, sling, chakram; hand cannon, tome, censer | A legendary of this world with its powers, material, kills and lore |
+
+Screenshots of them: `--demo weapons` (a rack of the 12 classic ones), `--demo lostarts` (the
+nine lost arts) and `--demo impact` (a hit on a
 monster), with `--weapon base[:rarity[:affix[:affix]]]` to choose what you hold, for example
 `--weapon greatsword:legendary:vampiric`. `--demo placefight` shows one monster of each kind
 in the region you start in.
