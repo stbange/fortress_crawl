@@ -265,10 +265,12 @@ static void spawn_chunk(Game *g, Chunk *c) {
         for (int attempt = 0; attempt < 40; attempt++) {
             int x = rng_range(&r, 1, 30), z = rng_range(&r, 1, 30);
             int wx = c->cx * CHUNK + x, wz = c->cz * CHUNK + z;
-            int found = -1;
-            for (int y = 30; y >= 1; y--)
-                if (standable_cell(g, wx, c->cy * CHUNK + y, wz, head)) { found = c->cy * CHUNK + y; break; }
-            if (found < 0) continue;
+            /* (world y is negative below the gate's layer: no -1 for "none") */
+            int found = 0;
+            bool any = false;
+            for (int y = 30; y >= 1 && !any; y--)
+                if (standable_cell(g, wx, c->cy * CHUNK + y, wz, head)) { found = c->cy * CHUNK + y; any = true; }
+            if (!any) continue;
             vec3 p = v3(wx + 0.5f, (float)found + (MONSTERS[type].flies ? 1.0f : 0.0f), wz + 0.5f);
             bool near_player = false;
             for (int k = 0; k < MAX_PLAYERS; k++)

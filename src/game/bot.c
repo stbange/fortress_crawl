@@ -67,6 +67,7 @@ typedef struct Bot {
     int stalemates;
     float last_fall, low_hp_since;
     int close_calls;
+    float vertical_until; /* the thread's end is reached: now go up or down the stairs */
     bool low;
     int realm_trips, realm_phase;
     float max_dist, max_depth, max_height;
@@ -154,16 +155,18 @@ static void bfs(vec3 feet) {
     dist_[s] = 0;
     parent_[s] = -1;
     queue_[qt++] = s;
-    static const int DX[4] = { 1, -1, 0, 0 }, DZ[4] = { 0, 0, 1, -1 };
+    static const int DX[8] = { 1, -1, 0, 0, 1, 1, -1, -1 }, DZ[8] = { 0, 0, 1, -1, 1, -1, 1, -1 };
     while (qh < qt) {
         int c = queue_[qh++], x, y, z;
         cell_of(c, &x, &y, &z);
-        for (int d = 0; d < 4; d++) {
+        for (int d = 0; d < 8; d++) {
             int nx = x + DX[d], nz = z + DZ[d];
+            /* diagonals (spiral stairs): only past two open corners */
+            if (d >= 4 && (!air(x + DX[d], y, z) || !air(x, y, z + DZ[d]))) continue;
             int cand[8] = { 0 }, nc = 0;
             if (walk(nx, y, nz) != 3) cand[nc++] = idx(nx, y, nz);
-            else if (walk(nx, y + 1, nz) == 1 && air(x, y + 2, z) && walk(x, y, z) == 1) cand[nc++] = idx(nx, y + 1, nz); /* step up */
-            else if (air(nx, y, nz) && air(nx, y + 1, nz) == 1) {
+            else if (walk(nx, y + 1, nz) != 3 && air(x, y + 1, z) && air(nx, y + 1, nz)) cand[nc++] = idx(nx, y + 1, nz); /* step up */
+            else if (air(nx, y, nz)) { /* (a low ceiling over the step: the player ducks) */
                 for (int dy = 1; dy <= 5; dy++) { /* drop down */
                     if (!air(nx, y - dy + 1, nz)) break;
                     if (walk(nx, y - dy, nz) != 3) { cand[nc++] = idx(nx, y - dy, nz); break; }
@@ -284,6 +287,27 @@ static void plan(PlayerSlot *ps) {
         B.goal = v3(x + 0.5f, (float)y, z + 0.5f);
         return;
     }
+    /* the quester follows the Golden Thread: the farthest point of it within reach */
+    if (B.style == BS_QUESTER && ps->thread.n > 1 && ps->thread.t < ps->thread.life) {
+        int bi = -1;
+        for (int k = ps->thread.n - 1; k >= 0 && bi < 0; k--) {
+            int ri = reach_index(ps->thread.pts[k]);
+            if (ri >= 0 && dist_[ri] > 3) bi = ri;
+        }
+        vec3 end = ps->thread.pts[ps->thread.n - 1];
+        if (v3_len(v3_sub(end, feet)) < 4.0f && B.vertical_until < B.t) {
+            B.vertical_until = B.t + 45.0f;
+            logf_("%7.1f THREADEND at the stairs: now %s\n", B.t, ps->target.cy * CHUNK > feet.y ? "up" : "down");
+        }
+        if (bi >= 0 && B.vertical_until < B.t) {
+            B.goal_kind = 0;
+            set_path_to(bi);
+            int x, y, z;
+            cell_of(bi, &x, &y, &z);
+            B.goal = v3(x + 0.5f, (float)y, z + 0.5f);
+            return;
+        }
+    }
     /* explore: new places, by style */
     vec3 tgt = feet;
     bool has_tgt = false;
@@ -303,6 +327,7 @@ static void plan(PlayerSlot *ps) {
         vec3 c = v3(x + 0.5f, (float)y, z + 0.5f);
         if (B.style == BS_DELVER) sc += 0.08f * (gate_dist(c) - here_gate);
         if (has_tgt) sc += 0.1f * (v3_len(v3_sub(feet, tgt)) - v3_len(v3_sub(c, tgt)));
+        if (has_tgt && B.vertical_until > B.t) sc += 0.5f * (tgt.y > feet.y ? c.y - feet.y : feet.y - c.y);
         /* a little noise so equal choices differ */
         sc += (float)((mix64((u64)i * 2654435761u + (u64)(B.t * 10)) & 255) / 2550.0);
         if (sc > bs) { bs = sc; best = i; }
@@ -774,6 +799,6 @@ bool bot_step(Game *g, PlayerInput *in, float dt) {
     }
     follow_path(ps, in, dt, B.goal_kind == 0 && s->hp > s->maxhp * 0.5f);
     /* the golden thread now and then for the quester */
-    if (B.style == BS_QUESTER && fmodf(B.t, 60.0f) < dt) cast_util(g, ps, SU_THREAD);
+    if (B.style == BS_QUESTER && (ps->thread.n == 0 || ps->thread.t >= ps->thread.life) && fmodf(B.t, 5.0f) < dt) cast_util(g, ps, SU_THREAD);
     return true;
 }
