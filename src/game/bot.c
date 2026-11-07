@@ -135,7 +135,8 @@ static int walk(int x, int y, int z) {
     if (below == 1 && here == 0) {
         bool known;
         Block b = chunkmap_block(&G->map, x, y - 1, z, &known);
-        if (b != B_LAVA) r = game_solid(G, x, y + 1, z) == 0 ? 1 : 2;
+        Block here_b = chunkmap_block(&G->map, x, y, z, &known);
+        if (b != B_LAVA && b != B_BRAZIER && here_b != B_FIRE) r = game_solid(G, x, y + 1, z) == 0 ? 1 : 2;
     }
     walk_cache[i] = (u8)r;
     return r;
@@ -277,7 +278,8 @@ static void plan(PlayerSlot *ps) {
         int ri = reach_index(p->pos);
         if (ri < 0) continue;
         float sc = dist_[ri] - (p->kind == PK_CHEST ? 15.0f : 0.0f) - (p->kind == PK_RELIC ? 20.0f : 0.0f);
-        if (sc < bscore && dist_[ri] < 60) { bscore = sc; best = ri; }
+        int max_d = B.style == BS_QUESTER && ps->thread.n > 1 ? 10 : 60; /* the quester keeps to its thread */
+        if (sc < bscore && dist_[ri] < max_d) { bscore = sc; best = ri; }
     }
     if (best >= 0) {
         B.goal_kind = 1;
@@ -441,7 +443,7 @@ static bool cast_util(Game *g, PlayerSlot *ps, int u) {
     if (ok) {
         B.utility_casts[u]++;
         g_tele.casts_utility++;
-        logf_("%7.1f CAST %s (mana %.0f)\n", B.t, spell_name(id), mana);
+        logf_("%7.1f CAST %s (mana %.0f) \"%s\"\n", B.t, spell_name(id), mana, ps->banner_time > 0 ? ps->banner : "");
     }
     return ok;
 }
@@ -785,6 +787,13 @@ bool bot_step(Game *g, PlayerInput *in, float dt) {
             B.npath = 0;
             if (B.stuck_windows == 6) {
                 B.hard_stuck++;
+                /* the whole area round that goal is out of reach this way: forget it */
+                for (int dz = -16; dz <= 16; dz += 8)
+                    for (int dy = -4; dy <= 4; dy += 4)
+                        for (int dx = -16; dx <= 16; dx += 8) {
+                            int *bv = visits((int)floorf(B.goal.x) + dx, (int)floorf(B.goal.y) + dy, (int)floorf(B.goal.z) + dz, true);
+                            if (bv) *bv += 200;
+                        }
                 logf_("%7.1f HARDSTUCK at %.1f %.1f %.1f (goal %.1f %.1f %.1f) - recall\n", B.t, p.x, p.y, p.z, B.goal.x, B.goal.y, B.goal.z);
                 if (!cast_util(g, ps, SU_RECALL)) { ps->pl.pos = s->respawn; ps->pl.vel = v3(0, 0, 0); }
                 B.stuck_windows = 0;

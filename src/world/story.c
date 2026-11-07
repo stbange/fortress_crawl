@@ -431,6 +431,22 @@ void story_chapter_target(const World *w, int chapter, Named *out) {
     int dir = arc_dir(w->seed, arc);
     float jit = (rng_float(&r) - 0.5f) * 0.5f * d;
     int cx = 0, cy = 0, cz = 0;
+    if (chapter == 0) {
+        /* the first captain is close: 3-4 chunks out, on the gate's layer or one below, so a
+         * new character meets the story within its first half hour */
+        d = 3.0f + rng_float(&r);
+        if (dir == AD_UP || dir == AD_DOWN) dir = AD_NORTH + (int)(rng_float(&r) * 4.0f) % 4;
+        jit = (rng_float(&r) - 0.5f) * 0.5f * d;
+        switch (dir) {
+        case AD_NORTH: cz = -(int)d; cx = (int)jit; break;
+        case AD_SOUTH: cz = (int)d; cx = (int)jit; break;
+        case AD_EAST: cx = (int)d; cz = (int)jit; break;
+        default: cx = -(int)d - 1; cz = (int)jit; break;
+        }
+        cy = rng_chance(&r, 0.5f) ? 0 : -1;
+        pick_site(w, cx, cy, cz, 1, false, NULL, &out->cx, &out->cy, &out->cz);
+        return;
+    }
     switch (dir) {
     case AD_DOWN:
     case AD_UP: {

@@ -567,7 +567,10 @@ void story_draw_tracker(Game *g, PlayerSlot *ps, int W, int H, int y) {
     if (realm_has(ps->pl.pos)) return; /* no quarry in the Sanctum: you are out of the world */
     char dir[64], buf[160];
     story_direction(ps->pl.pos.x, ps->pl.pos.y + 1.0f, ps->pl.pos.z, ps->target.cx, ps->target.cy, ps->target.cz, dir, sizeof dir);
-    snprintf(buf, sizeof buf, "> %s - %s", ps->target.name, dir);
+    /* the arrow says at a glance whether the way leads up or down */
+    int here_cy = floordiv((int)floorf(ps->pl.pos.y + 1.0f), CHUNK);
+    const char *arrow = ps->target.cy < here_cy ? "v" : ps->target.cy > here_cy ? "^" : ">";
+    snprintf(buf, sizeof buf, "%s %s - %s", arrow, ps->target.name, dir);
     upper(buf);
     int maxc = (W - 8) / 6;
     if ((int)strlen(buf) > maxc) buf[maxc] = 0;
@@ -937,6 +940,22 @@ static int thread_goals(Game *g, PlayerSlot *ps, vec3 *goal, char names[][STORY_
     return n;
 }
 
+/* The thread goes on down (or up) the spiral stair, step by step, to its exit on the next
+ * layer: the steps are where the generator put them (carve_helix_w). */
+static void thread_add_stairs(Thread *th, const Portal *sp, bool up) {
+    int y0 = up ? sp->y_low : sp->y_up - 2, y1 = up ? sp->y_up - 2 : sp->y_low, step = up ? 1 : -1;
+    for (int wy = y0; up ? wy <= y1 : wy >= y1; wy += step) {
+        if (th->n >= THREAD_MAX - 2) return;
+        int sec = floormod(wy - sp->phase, 16);
+        for (int dz = -2; dz <= 2; dz++)
+            for (int dx = -2; dx <= 2; dx++)
+                if (MAXI(abs(dx), abs(dz)) == 2 && helix_sector(dx, dz) == sec) th->pts[th->n++] = v3(sp->x + dx + 0.5f, wy + 1.1f, sp->z + dz + 0.5f);
+    }
+    int d = up ? sp->exit_dir : sp->low_dir;
+    int ey = up ? sp->y_up : sp->y_low;
+    th->pts[th->n++] = v3(sp->x + DIR_X[d] * 3 + 0.5f, ey + 0.1f, sp->z + DIR_Z[d] * 3 + 0.5f);
+}
+
 bool story_cast_thread(Game *g, PlayerSlot *ps) {
     vec3 goal[1 + MAX_MISSIONS];
     char names[1 + MAX_MISSIONS][STORY_NAME];
@@ -954,6 +973,7 @@ bool story_cast_thread(Game *g, PlayerSlot *ps) {
     int here = layer_of(ps->pl.pos.y + 0.01f), there = layer_of(goal[i].y);
     vec3 dest = goal[i];
     bool via_stairs = false;
+    Portal stair = { 0 };
     if (there != here) {
         bool up = there > here;
         int pcx = floordiv((int)floorf(ps->pl.pos.x), CHUNK), pcz = floordiv((int)floorf(ps->pl.pos.z), CHUNK);
@@ -965,10 +985,11 @@ bool story_cast_thread(Game *g, PlayerSlot *ps) {
                 vec3 at = v3(sp.x + 0.5f, (float)(here * CHUNK + LAYER_FLOOR) + 1.0f, sp.z + 0.5f);
                 float a = v3_len(v3(at.x - ps->pl.pos.x, 0, at.z - ps->pl.pos.z));
                 float b = v3_len(v3(goal[i].x - at.x, 0, goal[i].z - at.z));
-                if (a + b * 0.8f < best) { best = a + b * 0.8f; dest = at; via_stairs = true; }
+                if (a + b * 0.8f < best) { best = a + b * 0.8f; dest = at; via_stairs = true; stair = sp; }
             }
     }
     int r = thread_path(g, ps->pl.pos, dest, &ps->thread);
+    if (via_stairs && r == 2) thread_add_stairs(&ps->thread, &stair, there > here);
     char buf[128];
     if (r == 0) snprintf(buf, sizeof buf, "THE THREAD FINDS NO WAY FROM HERE");
     else if (via_stairs && r == 2) snprintf(buf, sizeof buf, "THE STAIRS %s - TOWARDS %s", there > here ? "UP" : "DOWN", names[i]);
