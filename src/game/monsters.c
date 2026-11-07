@@ -867,6 +867,12 @@ static void sweep(Game *g, Monster *m, float r, float half_deg, float mult, floa
 static void windup_release(Game *g, Monster *m, const MCtx *x) {
     const MonsterDef *d = &MONSTERS[m->type];
     bool in_reach = x->hdist < d->reach + d->hw * m->scale + 0.6f && fabsf(x->dy) < 2.0f;
+    /* a blow needs a clear line, as the player's does: no biting through a ledge's edge */
+    if (in_reach && !m->alt_kind) {
+        vec3 top = v3_add(m->pos, v3(0, d->h * m->scale * 0.9f, 0)), chest = v3_add(x->feet, v3(0, 1.0f, 0));
+        if (!phys_line_of_sight(top, chest, game_solid, g) && !phys_line_of_sight(top, v3_add(x->feet, v3(0, 0.3f, 0)), game_solid, g))
+            in_reach = false;
+    }
     m->state = MS_CHASE;
     m->cooldown = d->attack_time;
     switch (m->type) {
@@ -1197,7 +1203,7 @@ void monsters_update(Game *g, float dt) {
         bool ranged = d->flies || m->type == MON_SKELETON || m->type == MON_WISP || m->type == MON_SHAMAN || m->type == MON_EYE ||
                       m->type == MON_NECRO || m->type == MON_WORM;
         if (m->awake && !ranged && !m->alt_kind && m->state == MS_CHASE && !all_dead) {
-            if (hdist < d->reach + d->hw * m->scale + 0.6f && fabsf(dy) < 1.8f) m->giveup_t = 0, m->giveup_d = hdist;
+            if (hdist < d->reach + d->hw * m->scale + 0.6f && fabsf(dy) < 1.8f && los) m->giveup_t = 0, m->giveup_d = hdist;
             else if (hdist < m->giveup_d - 1.0f || m->giveup_t <= 0) { m->giveup_d = hdist; m->giveup_t = dt; }
             else if ((m->giveup_t += dt) > 6.0f) {
                 m->awake = false;

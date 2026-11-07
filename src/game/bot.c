@@ -535,7 +535,7 @@ static Monster *pick_enemy(PlayerSlot *ps) {
     float bd = 1e9f;
     for (int i = 0; i < MAX_MONSTERS; i++) {
         Monster *m = &G->mons[i];
-        if (!m->alive || m->hidden || m->charm_t > 0) continue;
+        if (!m->alive || m->hidden || m->charm_t > 0 || m->sulk_t > 0) continue; /* (a sulking one leaves you be) */
         bool skip = false;
         for (int k = 0; k < 8; k++) skip |= B.ignore[k] == m && B.ignore_until[k] > B.t;
         if (skip) continue;
