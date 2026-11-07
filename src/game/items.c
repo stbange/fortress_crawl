@@ -531,7 +531,10 @@ void drink_potion(Game *g, PlayerSlot *ps, bool mana) {
     (*n)--;
     if (mana) g_tele.potions_mp++; else g_tele.potions_hp++;
     if (mana) s->mana = fminf(s->maxmana, s->mana + s->maxmana * 0.6f);
-    else s->hp = fminf(s->maxhp, s->hp + s->maxhp * 0.5f);
+    else {
+        s->hp = fminf(s->maxhp, s->hp + s->maxhp * 0.5f);
+        s->burn_t = s->poison_t = 0; /* and it washes off burns and poison */
+    }
     ps->potion_cd = 0.6f;
     sfx_player(g, ps, SFX_POTION_DRINK, 1.0f);
     particles_burst(g, player_eye(&ps->pl), mana ? v3(0.3f, 0.5f, 1.0f) : v3(1.0f, 0.3f, 0.3f), 10, 1.5f, 0.04f, true);

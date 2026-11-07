@@ -70,6 +70,7 @@ typedef struct Bot {
     float next_shop;
     bool shopped_realm;
     int realm_rested;
+    float avoid_until;
     float vertical_until; /* the thread's end is reached: now go up or down the stairs */
     bool low;
     int realm_trips, realm_phase;
@@ -714,6 +715,16 @@ bool bot_step(Game *g, PlayerInput *in, float dt) {
               g_tele.last_rank, s->level, tier_at(p), gate_dist(p), awake, s->potions_hp);
         B.npath = 0;
         B.realm_phase = 0;
+        if (g_tele.last_grade == GRADE_BOSS) {
+            /* killed by a boss: keep away from there for a while */
+            B.avoid_until = B.t + 300.0f;
+            for (int dz = -24; dz <= 24; dz += 8)
+                for (int dy = -4; dy <= 4; dy += 4)
+                    for (int dx = -24; dx <= 24; dx += 8) {
+                        int *bv = visits((int)floorf(p.x) + dx, (int)floorf(p.y) + dy, (int)floorf(p.z) + dz, true);
+                        if (bv) *bv += 300;
+                    }
+        }
     }
     B.was_dead = s->dead;
     if (g_tele.taken[HS_FALL] > B.last_fall + 0.5f) {
@@ -736,7 +747,7 @@ bool bot_step(Game *g, PlayerInput *in, float dt) {
     if (B.t >= B.next_status) { status(ps); B.next_status = B.t + 15.0f; }
     if (s->dead) return true;
     /* back where it fell? the delver and quester pay for it, the others take the shrine */
-    if (s->fell_t > 0 && s->fell_t < 14.0f && (B.style == BS_DELVER || B.style == BS_QUESTER)) {
+    if (s->fell_t > 0 && s->fell_t < 14.0f && (B.style == BS_DELVER || B.style == BS_QUESTER) && B.avoid_until < B.t) {
         int gold = s->gold;
         game_thread_key(g, ps);
         logf_("%7.1f RETURN where it fell (-%d gold)\n", B.t, gold - s->gold);

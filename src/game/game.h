@@ -191,6 +191,7 @@ typedef struct Stats {
     float hurt, since_hurt, invuln;
     bool dead;
     float dead_t;
+    float last_death;   /* g->time of the last death: a second one soon after costs less */
     vec3 respawn;
     float respawn_yaw;
     /* items */

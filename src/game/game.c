@@ -694,15 +694,24 @@ static void update_player(Game *g, PlayerSlot *ps, const PlayerInput *in, float 
             s->fell_t = realm_has(s->safe_pos) || v3_len(v3_sub(s->safe_pos, s->respawn)) < 20.0f ? 0.0f : 15.0f;
             int lost = s->gold / 5;
             s->gold -= lost;
-            s->hp = s->maxhp * (home ? 1.0f : 0.5f);
-            s->mana = s->maxmana * (home ? 1.0f : 0.5f);
+            /* dying again within two minutes: no second weakening (no death loops) */
+            bool again = s->last_death > 0 && g->time - s->last_death < 120.0f;
+            s->last_death = g->time;
+            s->hp = s->maxhp * (home || again ? 1.0f : 0.5f);
+            s->mana = s->maxmana * (home || again ? 1.0f : 0.5f);
             s->hurt = 0;
             s->burn_t = s->poison_t = s->chill_t = 0;
             s->fall_speed = 0;
             /* a safe return: whatever was waiting at the shrine is gone, and a short grace period */
-            for (int i = 0; i < MAX_MONSTERS; i++)
-                if (g->mons[i].alive && v3_len(v3_sub(g->mons[i].pos, s->respawn)) < 16.0f) g->mons[i].alive = false;
-            s->invuln = 2.0f;
+            for (int i = 0; i < MAX_MONSTERS; i++) {
+                Monster *m = &g->mons[i];
+                if (!m->alive) continue;
+                float d = v3_len(v3_sub(m->pos, s->respawn));
+                if (d < 30.0f && m->grade != GRADE_BOSS && !m->named_kind) m->alive = false;
+                /* a boss or a named enemy that waits there goes back to its lair for a while */
+                else if (d < 60.0f && m->target == ps->index) { m->awake = false; m->state = MS_IDLE; m->sulk_t = 45.0f; }
+            }
+            s->invuln = 4.0f;
             char buf[96];
             if (s->fell_t > 0)
                 snprintf(buf, sizeof buf, "-%d GOLD. %s: BACK WHERE YOU FELL (-%d MORE)", lost, ps->pad && !ps->keyboard ? "R-STICK" : "G", s->gold / 5);
