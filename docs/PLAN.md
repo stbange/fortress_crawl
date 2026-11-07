@@ -415,6 +415,8 @@ Done:
 - Traps, puzzles (levers, plates, statues, light beams) and vaults; lava burns (6.9).
 - 38 utility spells and the Sanctum, a castle in a pocket realm (6.10).
 - A playtest bot (`--bot`) and the notes from 16 hours of automated play: [`PLAYTEST.md`](PLAYTEST.md).
+- The balance pass from those notes ([`BALANCE_PLAN.md`](BALANCE_PLAN.md)): danger that keeps up,
+  a costlier death, a shop for gold, melee across ledges, safer stairs, a nearer first chapter.
 - Screenshot and demo modes (`--shot`, `--demo combat|sword|death|skills|map|coop|menu|
   inventory|spells|loot|magic|bestiary|motive|story|read|named|storytest|vault|levers|plates|
   statues|beam|darts|spikes|flames|mechtest|cast|realmtest`, `--shot-time`,

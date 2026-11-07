@@ -58,6 +58,8 @@ for the full plan and [`docs/STORY.md`](docs/STORY.md) for how the stories work.
 | The Sanctum: your castle in the pocket realm, behind the Sanctum Door | The feast in the dining hall: Well Fed |
 | ![The bath](docs/screenshots/sanctum_bath.png) | ![Warden's Keep](docs/screenshots/spell_keep.png) |
 | The bath hall: Refreshed | Warden's Keep, a conjured keep of real stone |
+| ![The shop](docs/screenshots/shop.png) | |
+| The SHOP tab at the Sanctum library's shrine | |
 
 ## Build
 
@@ -177,7 +179,7 @@ or *Heavy*. Deeper finds are stronger. Spare weapons can be scrapped for gold.
 lingers, arcane pierces, holy heals you, shadow steals life, earth stuns and knocks back)
 combined with a form: bolt, barrage, nova, chain, breath, orb, trap rune, halo of orbiting
 orbs, storm, meteor and aura. That makes 88 attack spells, plus 38 utility spells (see
-below). You start with Flame Bolt, Heal, the Golden Thread and the Sanctum Door;
+below). You start with Flame Bolt, the Golden Thread and the Sanctum Door (Heal is found);
 scrolls teach new spells or raise a
 known one's rank (up to 5). The stronger forms only drop deeper in. The Focus skill makes all
 spells stronger and cheaper.
@@ -195,11 +197,14 @@ and ice are real blocks for a while, then they crumble.
 | The world | Stone Shape (carve a passage), Bridge of Light, Quench (water freezes, lava cools), Spectral Steed |
 | Home | **Sanctum Door** |
 
-Falls from high up now hurt (Feather Fall, Levitate, Wings and water save you).
+Falls from high up hurt, at most a third of your health (Feather Fall, Levitate, Wings and
+water save you). Recall cast again within a minute takes you back to where you cast it.
 
 **The Sanctum:** the Sanctum Door opens a door to your own castle in a pocket realm, on a
 floating island under an open sky: a garden with a fountain, a great hall with a throne, a
-library, and three rooms that do something. **Bathe** in the pool of the bath hall (wounds
+library, and three rooms that do something. At first only the bed is made; the library's
+shrine sells the rest back to life (the bath 500 gold, the feast 1000, the library 1500, which
+then gives a free scroll every 20 minutes). **Bathe** in the pool of the bath hall (wounds
 close, burns and poison wash off, and you are *Refreshed*: mana flows twice as fast for 15
 minutes), sit down at the **feast** in the dining hall (everything restored and *Well Fed*:
 20% more health that comes back by itself, for 20 minutes), and **rest** in the bedchamber
@@ -251,7 +256,7 @@ last and shows what is saved; *New characters* (press twice) deletes the save of
 | R / Shift+R | next / previous known spell |
 | H / J | drink a health / mana potion |
 | G | Golden Thread: a fading line to your story target (again: next mission) |
-| TAB, I, B, L | character menu: last tab, inventory, spellbook, story (Q/E or [ ] switch tabs) |
+| TAB, I, B, L | character menu: last tab, inventory, spellbook, story; SHOP is the fifth tab (Q/E or [ ] switch tabs) |
 | in the menu | arrows or WASD select, Enter equips / uses / learns / makes a spell active, Del or X scraps a weapon |
 | M | map of the cells you have seen |
 | Space, Shift, Ctrl | jump, sprint, crouch (you duck and crawl automatically in low tunnels) |
@@ -303,7 +308,8 @@ fortress_crawl [--seed N] [--pos x y z] [--look yaw pitch] [--fly] [--radius n] 
                [--shot file.bmp] [--shot-time seconds]
                [--demo combat|sword|death|skills|map|coop|menu|inventory|spells|loot|magic|bestiary|
                        motive|story|read|named|storytest|vault|levers|plates|statues|beam|
-                       darts|spikes|flames|mechtest|cast|realmtest] [--cast n]
+                       darts|spikes|flames|mechtest|cast|realmtest|shop] [--cast n]
+               [--bot STYLE] [--bot-minutes n] [--bot-log file]
                [--players n] [--test-pad] [--touch] [--fresh] [--persist] [--fullbright] [--chapter n]
 ```
 
@@ -324,11 +330,20 @@ characters (gamepads take them over with START). `--test-pad` attaches a virtual
 that joins, walks, turns and attacks, to test the gamepad path without hardware.
 `--demo cast --cast n` casts utility spell n (the order of the spell book, 0 = Heal,
 37 = Sanctum Door) in an open place and steps back to look at it; `--demo realmtest` walks
-through the Sanctum (door, bath, feast, bed, door home) and logs each step. `--touch`
+through the Sanctum (door, bath, feast, bed, door home) and logs each step. `--demo shop --pos
+51.5 9608 101.5` opens the shop at the Sanctum library's shrine. `--bot STYLE` plays by itself
+(see [`docs/PLAYTEST.md`](docs/PLAYTEST.md)). `--touch`
 shows the touch controls from the start.
 
 Shrines (glowing rune stones) are respawn points: walk up to one to attune it. When you die,
-you return to the last attuned shrine and keep everything.
+you return to the last attuned shrine (or the Sanctum bed, if you slept there) with half your
+health and mana, and lose a fifth of the gold you carry. For 15 seconds after that, the Golden
+Thread key (G, right stick click, PATH) takes you back where you fell, for another fifth.
+
+**The shop** (the SHOP tab of the character menu): anywhere, scrap every weapon in the bag
+worse than the one you wear. At a shrine: health potions (you carry at most 5) and mana
+potions, a rank for the active spell, new affixes for the weapon in hand, another of a relic
+you carry, and at the Sanctum library's shrine the rooms of the Sanctum.
 
 ## The world farther out
 
