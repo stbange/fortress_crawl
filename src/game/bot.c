@@ -67,6 +67,9 @@ typedef struct Bot {
     int stalemates;
     float last_fall, low_hp_since;
     int close_calls;
+    float next_shop;
+    bool shopped_realm;
+    int realm_rested;
     float vertical_until; /* the thread's end is reached: now go up or down the stairs */
     bool low;
     int realm_trips, realm_phase;
@@ -250,8 +253,12 @@ static void plan(PlayerSlot *ps) {
     /* in the Sanctum: feast, bath, then the door home */
     if (realm_has(feet)) {
         vec3 to;
-        if (ps->st.well_fed_t <= 0) to = v3(POCKET_TABLE_X0 - 1.5f, POCKET_G, (POCKET_TABLE_Z0 + POCKET_TABLE_Z1) * 0.5f);
-        else if (ps->st.refreshed_t <= 0) to = v3((POCKET_BATH_X0 + POCKET_BATH_X1) * 0.5f, POCKET_G - 1, (POCKET_BATH_Z0 + POCKET_BATH_Z1) * 0.5f);
+        const Stats *s = &ps->st;
+        bool want_feast = !(s->sanctum & SANCTUM_FEAST) && s->gold >= 1000, want_bath = !(s->sanctum & SANCTUM_BATH) && s->gold >= 500;
+        if ((want_feast || want_bath) && !B.shopped_realm) to = v3(51.5f, POCKET_G, 101.5f); /* the library's shrine */
+        else if (s->well_fed_t <= 0 && (s->sanctum & SANCTUM_FEAST)) to = v3(POCKET_TABLE_X0 - 1.5f, POCKET_G, (POCKET_TABLE_Z0 + POCKET_TABLE_Z1) * 0.5f);
+        else if (s->refreshed_t <= 0 && (s->sanctum & SANCTUM_BATH)) to = v3((POCKET_BATH_X0 + POCKET_BATH_X1) * 0.5f, POCKET_G - 1, (POCKET_BATH_Z0 + POCKET_BATH_Z1) * 0.5f);
+        else if (B.realm_rested < 1) to = v3(POCKET_BED_X0 - 1.5f, POCKET_G, (POCKET_BED_Z0 + POCKET_BED_Z1) * 0.5f);
         else to = v3(POCKET_EXIT_X, POCKET_G, POCKET_EXIT_Z);
         /* the realm is bigger than the search: walk toward the far goal through the nearest cell */
         int best = -1;
@@ -267,6 +274,22 @@ static void plan(PlayerSlot *ps) {
         B.goal = to;
         set_path_to(best);
         return;
+    }
+    /* gold to spend: the nearest shrine in reach */
+    if (ps->st.gold > 800 && B.t >= B.next_shop) {
+        int bi = -1;
+        for (int k = 0; k < G->nshrines; k++) {
+            int ri = reach_index(v3_add(G->shrines[k], v3(1.0f, -0.5f, 0)));
+            if (ri >= 0 && dist_[ri] < 50 && (bi < 0 || dist_[ri] < dist_[bi])) bi = ri;
+        }
+        if (bi >= 0) {
+            B.goal_kind = 1;
+            set_path_to(bi);
+            int x, y, z;
+            cell_of(bi, &x, &y, &z);
+            B.goal = v3(x + 0.5f, (float)y, z + 0.5f);
+            return;
+        }
     }
     /* things worth picking up */
     int best = -1;
@@ -404,6 +427,7 @@ static void manage_gear(Game *g, PlayerSlot *ps) {
             logf_("%7.1f EQUIP class %d rarity %d score %.2f\n", B.t, wc, s->equipped[wc].rarity, weapon_score(&s->equipped[wc]));
         }
     }
+    shop_buy_kind(g, ps, SH_SCRAP);
     /* scrap the weakest when the bag is nearly full */
     int used = 0;
     for (int i = 0; i < BAG_SIZE; i++) used += s->bag[i].used;
@@ -537,6 +561,11 @@ static void fight(Game *g, PlayerSlot *ps, Monster *m, PlayerInput *in, float dt
         if (hd > reach - 0.4f) in->move_z = 1.0f;
         if (m->state == MS_WINDUP && B.style == BS_CAUTIOUS && hd < reach + 0.5f) in->move_z = -1.0f; /* step back from a raised blow */
         ps->pad_attack = hd < reach + 0.3f && facing(ps, c, 0.35f);
+        if (m->type == MON_KNIGHT && hd < reach + 2.0f) {
+            /* its shield faces you: step round it */
+            vec3 fw = v3(cosf(m->yaw), 0, sinf(m->yaw)), to = v3_norm(v3(ps->pl.pos.x - m->pos.x, 0, ps->pl.pos.z - m->pos.z));
+            if (v3_dot(fw, to) > 0.2f) in->move_x = 1.0f;
+        }
     } else {
         if (d < 5.0f) in->move_z = -1.0f;
         else if (d > 15.0f) in->move_z = 1.0f;
@@ -576,6 +605,8 @@ static void survive(Game *g, PlayerSlot *ps, bool in_fight) {
         if (cast_util(g, ps, SU_SANCTUM)) {
             B.realm_phase = 1;
             B.realm_trips++;
+            B.shopped_realm = false;
+            B.realm_rested = 0;
             logf_("%7.1f REALM trip (hp %.0f/%.0f)\n", B.t, s->hp, s->maxhp);
         }
     }
@@ -704,6 +735,34 @@ bool bot_step(Game *g, PlayerInput *in, float dt) {
     }
     if (B.t >= B.next_status) { status(ps); B.next_status = B.t + 15.0f; }
     if (s->dead) return true;
+    /* back where it fell? the delver and quester pay for it, the others take the shrine */
+    if (s->fell_t > 0 && s->fell_t < 14.0f && (B.style == BS_DELVER || B.style == BS_QUESTER)) {
+        int gold = s->gold;
+        game_thread_key(g, ps);
+        logf_("%7.1f RETURN where it fell (-%d gold)\n", B.t, gold - s->gold);
+        B.npath = 0;
+    }
+    /* at a shrine: shop */
+    if (B.t >= B.next_shop && shop_open_here(g, ps)) {
+        B.next_shop = B.t + 30.0f;
+        int bought = 0;
+        if (realm_has(ps->pl.pos)) {
+            if (shop_buy_kind(g, ps, SH_FEAST)) bought++;
+            if (shop_buy_kind(g, ps, SH_BATH)) bought++;
+            if (s->gold > 3000 && shop_buy_kind(g, ps, SH_LIBRARY)) bought++;
+            if (shop_buy_kind(g, ps, SH_SCROLL)) bought++;
+            B.shopped_realm = true;
+        }
+        while (s->potions_hp < POTION_HP_MAX && shop_buy_kind(g, ps, SH_POTION_HP)) bought++;
+        int sp = best_attack_spell(s);
+        if (sp >= 0) {
+            s->spell = sp;
+            while (s->gold > 300 && shop_buy_kind(g, ps, SH_RANK)) bought++;
+        }
+        if (s->gold > 1500 && shop_buy_kind(g, ps, SH_RELIC)) bought++;
+        if (bought) logf_("%7.1f SHOP %d bought, gold left %d\n", B.t, bought, s->gold);
+    }
+    if (B.realm_phase && realm_has(ps->pl.pos) && s->respawn.y > POCKET_Y0 && B.realm_rested < 1) B.realm_rested = 1;
     if (B.t >= B.next_skills) {
         spend_points(ps);
         manage_gear(g, ps);

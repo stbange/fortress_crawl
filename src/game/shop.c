@@ -16,7 +16,6 @@ static void upper(char *s) {
  * Anywhere: scrap every weapon in the bag that is worse than the one of its class you
  * wear. */
 
-enum { SH_SCRAP, SH_POTION_HP, SH_POTION_MP, SH_RANK, SH_REROLL, SH_RELIC, SH_BATH, SH_FEAST, SH_LIBRARY, SH_SCROLL };
 
 typedef struct ShopItem {
     int kind, arg, price;
@@ -180,6 +179,19 @@ static void buy(Game *g, PlayerSlot *ps, const ShopItem *it) {
     upper(buf);
     game_banner(ps, buf);
     g->autosave_timer = 1e9f;
+}
+
+/* Buys the first offer of that kind that can be bought (for the playtest bot). */
+bool shop_buy_kind(Game *g, PlayerSlot *ps, int kind) {
+    ShopItem items[SHOP_MAX];
+    int n = shop_items(g, ps, items);
+    for (int i = 0; i < n; i++)
+        if (items[i].kind == kind && items[i].ok && items[i].price <= ps->st.gold) {
+            int gold = ps->st.gold;
+            buy(g, ps, &items[i]);
+            return ps->st.gold != gold || kind == SH_SCRAP;
+        }
+    return false;
 }
 
 void shop_nav(Game *g, PlayerSlot *ps, int nav) {

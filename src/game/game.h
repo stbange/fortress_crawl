@@ -651,6 +651,8 @@ bool shop_open_here(Game *g, const PlayerSlot *ps);
 void shop_nav(Game *g, PlayerSlot *ps, int nav);
 void shop_tap(Game *g, PlayerSlot *ps, int W, int H, int top, float x, float y);
 void shop_draw(Game *g, PlayerSlot *ps, int W, int H, int top);
+enum { SH_SCRAP, SH_POTION_HP, SH_POTION_MP, SH_RANK, SH_REROLL, SH_RELIC, SH_BATH, SH_FEAST, SH_LIBRARY, SH_SCROLL };
+bool shop_buy_kind(Game *g, PlayerSlot *ps, int kind);
 /* game.c: the Golden Thread key (right after a death: back where you fell) */
 void game_thread_key(Game *g, PlayerSlot *ps);
 void realm_enter(Game *g, PlayerSlot *ps, vec3 from, float yaw);
