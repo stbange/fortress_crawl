@@ -137,9 +137,11 @@ void spell_next(PlayerSlot *ps, int dir) {
 
 /* ---------- hits ---------- */
 
+static bool tome(const Stats *s) { return (WEAPON_BASES[s->equipped[WPN_STAFF].base].flags & WBF_SPELLBOOST) != 0; }
+
 static float spell_power(const PlayerSlot *ps, int id) {
     const Stats *s = &ps->st;
-    return (1.0f + 0.3f * s->ranks[SK_FOCUS]) * (1.0f + 0.07f * (s->level - 1)) * (1.0f + 0.25f * (s->spell_rank[id] - 1)) *
+    return (tome(s) ? 1.3f : 1.0f) * (1.0f + 0.3f * s->ranks[SK_FOCUS]) * (1.0f + 0.07f * (s->level - 1)) * (1.0f + 0.25f * (s->spell_rank[id] - 1)) *
            (1.0f + relic_bonus(s, RB_DAMAGE));
 }
 
@@ -443,7 +445,7 @@ bool spell_cast_id(Game *g, PlayerSlot *ps, int id) {
     }
     SpellInfo si;
     spell_info(id, &si);
-    float cost = si.mana * (1.0f - 0.15f * s->ranks[SK_FOCUS]);
+    float cost = si.mana * (1.0f - 0.15f * s->ranks[SK_FOCUS]) * (tome(s) ? 0.85f : 1.0f);
     if (s->mana < cost) {
         if (ps->banner_time <= 0) game_banner(ps, "NOT ENOUGH MANA");
         sfx_player(g, ps, SFX_SPELL_FIZZLE, 1.0f);

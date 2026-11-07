@@ -14,6 +14,8 @@
 #include "world/layout.h"
 #include "world/pocket.h"
 #include "game/tele.h"
+/* WBF_* of the weapon landing the current blow (monster_damage reads it: a flail ignores shields) */
+extern unsigned g_hit_flags;
 #include "world/story.h"
 
 #define MAX_MONSTERS 320
@@ -114,6 +116,10 @@ typedef struct Projectile {
     u8 form;    /* SF_* for spells */
     u8 rarity;  /* of the bow or staff that shot it (glow and impact effects) */
     float radius, tick, age;
+    u8 wclass;  /* WPN_* of the weapon that shot it (its powers count), 255 for none */
+    u8 wbase;   /* WB_* it came from (how it looks and flies) */
+    float grav; /* how fast it drops */
+    bool back;  /* a chakram on its way back */
 } Projectile;
 
 typedef struct Particle {
@@ -362,6 +368,9 @@ typedef struct PlayerSlot {
     char domain_name[STORY_NAME];
     int motive_sel, story_scroll;
     int shop_sel;
+    /* weapon powers (combat.c): hits per weapon class, and each effect's cooldown */
+    u16 hits[WPN_COUNT];
+    float pow_cd[PE_COUNT];
     Thread thread;
     int thread_goal;
     float thread_cast_time;

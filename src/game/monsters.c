@@ -486,7 +486,7 @@ void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int 
     if (!m->alive || m->hidden) return; /* vanished or underground */
     if (m->rank >= 4) dmg *= 0.85f; /* armoured, far out */
     if (attacker >= 0) g_tele.dealt += fminf(dmg, m->hp);
-    if (m->type == MON_KNIGHT && m->state != MS_STUN) {
+    if (m->type == MON_KNIGHT && m->state != MS_STUN && !(g_hit_flags & WBF_SHIELDBREAK)) {
         /* the shield takes blows from the front: go round it */
         vec3 fw = v3(cosf(m->yaw), 0, sinf(m->yaw)), to = v3_sub(from, m->pos);
         to.y = 0;
@@ -525,6 +525,24 @@ void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int 
         if (m->elite) flash_add(g, c, v3(1.0f, 0.6f, 0.3f), 8.0f, 0.4f);
         loot_drop(g, m->pos, m->level, m->elite, m->named_kind ? 0.5f : 0.0f);
         if (m->story_key) story_on_kill(g, m);
+        if (m->named_kind && m->story_key && m->level >= 6.0f) {
+            /* a named enemy carries one of this world's legendaries (each is found once) */
+            int id = (int)(m->story_key % UNIQUE_COUNT);
+            u64 key = mix64(g->world.seed ^ 0x11E6ULL ^ (u64)id * 0x9E3779B9ULL) | 1;
+            if (!looted_has(g, key)) {
+                bool lying = false;
+                for (int k = 0; k < MAX_PICKUPS; k++) lying |= g->pickups[k].alive && g->pickups[k].key == key;
+                if (!lying) {
+                    Item it = arms_unique(id, m->level + 3.0f);
+                    pickup_spawn(g, PK_WEAPON, v3_add(m->pos, v3(0, 0.6f, 0)), 0, &it, key, 0);
+                    char buf[128];
+                    snprintf(buf, sizeof buf, "IT DROPS %s, A LEGENDARY OF THIS WORLD", arms_unique_name(id));
+                    for (char *q = buf; *q; q++) if (*q >= 'a' && *q <= 'z') *q -= 32;
+                    game_banner_all(g, buf);
+                    flash_add(g, c, v3(0.6f, 1.0f, 0.8f), 12.0f, 0.8f);
+                }
+            }
+        }
         if (m->type == MON_BLOATER && m->aux != 2) { m->aux = 2; bloater_burst(g, m, 0.6f); }
         if (m->grade == GRADE_BOSS) {
             /* a boss always leaves a good weapon */
@@ -1143,7 +1161,15 @@ void monsters_update(Game *g, float dt) {
         float dist = v3_len(to);
         if (dist > 80.0f && m->charm_t <= 0) continue; /* frozen far away (their chunk may be unloaded) */
         /* utility spells: charm wears off, fear fades, and something else may draw it */
-        if (m->charm_t > 0 && (m->charm_t -= dt) <= 0) { m->charm_t = 0; m->charmer = -1; }
+        if (m->charm_t > 0 && (m->charm_t -= dt) <= 0) {
+            m->charm_t = 0;
+            m->charmer = -1;
+            if (m->aux == 99) { /* a summoned wisp: the bond ends, and so does it */
+                particles_burst(g, c, v3(0.6f, 0.8f, 1.0f), 14, 2.0f, 0.05f, true);
+                m->alive = false;
+                continue;
+            }
+        }
         if (m->fear_t > 0) m->fear_t -= dt;
         float player_dist = all_dead ? 1e9f : dist;
         pick_alt(g, m, i, c, player_dist, &eye, &feet);

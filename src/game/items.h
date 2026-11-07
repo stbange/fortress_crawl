@@ -63,7 +63,24 @@ enum {
     WB_DAGGER, WB_SWORD, WB_AXE, WB_MACE, WB_SPEAR, WB_GREATSWORD,
     WB_SHORTBOW, WB_LONGBOW, WB_CROSSBOW,
     WB_WAND, WB_STAFF, WB_SCEPTER,
+    /* the lost arts: each world knows only four of them (arms.c) */
+    WB_WHIP, WB_FLAIL, WB_SCYTHE, WB_RAPIER,
+    WB_SLING, WB_CHAKRAM, WB_CANNON,
+    WB_TOME, WB_CENSER,
     WB_COUNT
+};
+#define WB_CLASSIC 12 /* the first 12 are found in every world */
+
+/* What a weapon base does beyond its numbers. */
+enum {
+    WBF_PULL = 1,        /* hits pull the foe toward you (whip) */
+    WBF_SHIELDBREAK = 2, /* a knight's shield does not stop it (flail) */
+    WBF_CRIT = 4,        /* a third of its thrusts are critical (rapier) */
+    WBF_STUN = 8,        /* hits stun for a moment (sling) */
+    WBF_RETURN = 16,     /* flies out and comes back (chakram) */
+    WBF_EXPLODE = 32,    /* bursts where it lands (hand cannon) */
+    WBF_SPELLBOOST = 64, /* spells hit harder and cost less while it is your staff (tome) */
+    WBF_PULSE = 128,     /* a burst round you instead of a bolt (censer) */
 };
 
 /* Affixes: elemental ones add that element's effect to every hit. */
@@ -75,6 +92,8 @@ typedef struct WeaponBase {
     float dmg, cooldown, range, arc_deg, knock, speed; /* speed: projectiles */
     int pierce;
     float mana; /* staves: mana per bolt */
+    unsigned flags; /* WBF_* */
+    float gravity;  /* projectiles: how fast they drop */
 } WeaponBase;
 extern const WeaponBase WEAPON_BASES[WB_COUNT];
 
@@ -82,6 +101,12 @@ typedef struct Item {
     u8 used;
     u8 base, rarity, level;
     u8 affix[2];
+    u8 material;        /* MAT_*: where it was forged (arms.c) */
+    u8 unique;          /* 0, or 1 + one of this world's legendaries */
+    u8 power[2];        /* trigger << 4 | effect (arms.c), 0 none */
+    u8 hidden;          /* AF_* revealed after 100 kills, 0 not yet */
+    u8 bane;            /* MON_* + 1 it has killed most of lately, 0 none */
+    u16 kills, bane_kills;
 } Item;
 
 float item_damage_mult(const Item *it);
@@ -95,6 +120,37 @@ Item item_roll_region(u64 seed, float level, int min_rarity, int tier, int regio
 vec3 rarity_color(int rarity);
 int item_affix_element(const Item *it); /* EL_* of its first elemental affix or EL_NONE */
 bool item_has_affix(const Item *it, int affix);
+
+/* ---------- the world's armory (arms.c) ----------
+ * Materials by region, powers (a trigger and an effect), the lost arts a world knows,
+ * its legendaries, and what a weapon remembers of its kills. */
+enum { MAT_IRON, MAT_BRONZE, MAT_BONE, MAT_OBSIDIAN, MAT_JADE, MAT_CRYSTAL, MAT_SILVER, MAT_STARMETAL, MAT_EMBERSTEEL, MAT_RIMEIRON, MAT_COUNT };
+enum { PT_NONE, PT_KILL, PT_THIRD, PT_LOW, PT_AIR, PT_CRIT, PT_FIRST, PT_ELITE, PT_COUNT };
+enum { PE_NONE, PE_CHAIN, PE_BLAST, PE_FREEZE, PE_WISP, PE_BLINK, PE_HEAL, PE_SPLIT, PE_DECOY, PE_COUNT };
+#define UNIQUE_COUNT 20
+#define BANE_KILLS 50    /* kills of one kind that earn a weapon its title */
+#define AWAKEN_KILLS 100 /* kills that reveal its hidden affix */
+
+typedef struct MaterialDef {
+    const char *name;
+    float dmg, speed, crit, life; /* damage and cooldown factors, crit chance, share of damage drawn as life */
+    int element;                  /* a faint element on hits, EL_NONE */
+    vec3 tint;
+    const char *desc;
+} MaterialDef;
+extern const MaterialDef MATERIALS[MAT_COUNT];
+
+void arms_init(u64 world_seed);             /* at world start: the lost arts and the legendaries */
+bool arms_base_known(int base);             /* a classic weapon, or a lost art of this world */
+int arms_lost_art(int k);                   /* this world's lost arts, k 0..3 */
+int arms_pick_base(u64 seed);               /* a random weapon base this world knows */
+int arms_material(int region, int tier, u64 seed); /* what weapons are forged of there */
+void arms_roll_powers(Item *it, u64 seed);
+Item arms_unique(int id, float level);      /* legendary id (0..UNIQUE_COUNT-1) of this world */
+const char *arms_unique_name(int id);
+const char *arms_unique_lore(int id);
+void arms_power_text(int power, char *out, int n);
+const char *arms_bane_title(int mon_type);  /* "Crawlerbane" */
 
 /* ---------- relics ---------- */
 

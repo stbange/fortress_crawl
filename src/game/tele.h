@@ -18,6 +18,7 @@ typedef struct Tele {
     int gold;
     int casts_attack, casts_utility;
     int blocked_knight;
+    int lost_found, uniques_found, powers_fired, awakened, banes;
 } Tele;
 
 extern Tele g_tele;

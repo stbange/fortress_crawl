@@ -189,6 +189,18 @@ export const SOUNDS = [
   { id: "spell_recall", dur: 1.6, text: "recall teleport spell, swirling magical vortex and deep whoosh" },
   { id: "spell_thread", dur: 1.6, text: "golden thread spell, delicate magical harp shimmer leading the way" },
   { id: "spell_fizzle", dur: 0.6, text: "spell fails for lack of mana, weak magical fizzle and puff" },
+  // the lost arts (arms.c): weapons only some worlds know
+  { id: "swing_whip", dur: 0.6, text: "leather whip cracks sharply through the air, loud snap" },
+  { id: "swing_flail", dur: 0.8, text: "heavy spiked flail swung on a rattling iron chain, whooshing ball" },
+  { id: "swing_scythe", dur: 0.9, text: "great scythe sweeps in a wide circle, long metallic whistling swish" },
+  { id: "swing_rapier", dur: 0.5, text: "thin rapier thrust, quick steel swish and light metallic ring" },
+  { id: "shoot_sling", dur: 0.6, text: "sling whirls and releases a stone, whirring rope and sharp release" },
+  { id: "throw_chakram", dur: 0.8, text: "spinning metal throwing ring whirs through the air, rising whirr" },
+  { id: "fire_cannon", dur: 1.2, text: "medieval hand cannon fires, deep black powder boom with crackle and smoke hiss" },
+  { id: "cast_tome", dur: 0.8, text: "magic book flips its pages open and releases a small arcane burst" },
+  { id: "cast_censer", dur: 0.9, text: "swinging incense censer on a chain releases a pulse of holy fire, chiming whoosh" },
+  { id: "crit_hit", dur: 0.5, text: "critical hit, sharp heavy impact with a bright metallic ring" },
+  { id: "weapon_awaken", dur: 2.0, text: "a magic weapon awakens, deep resonant hum rising into a shimmering choir chord" },
   // utility spells (utility.c), one sound per family
   { id: "spell_air", dur: 1.4, text: "levitation spell, soft rising wind swirl with airy magical shimmer lifting upward" },
   { id: "spell_wings", dur: 1.6, text: "magical wings unfurl, great feathered wings beat twice with a bright shimmering whoosh" },

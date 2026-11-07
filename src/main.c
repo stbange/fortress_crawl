@@ -116,7 +116,8 @@ static int name_index(const char *s, int len, const char *const *names, int n) {
 
 static bool parse_weapon(const char *spec, Item *out) {
     static const char *BASES[WB_COUNT] = { "dagger", "sword", "axe", "mace", "spear", "greatsword",
-                                           "shortbow", "longbow", "crossbow", "wand", "staff", "scepter" };
+                                           "shortbow", "longbow", "crossbow", "wand", "staff", "scepter",
+                                           "whip", "flail", "scythe", "rapier", "sling", "chakram", "cannon", "tome", "censer" };
     static const char *RARS[RAR_COUNT] = { "common", "magic", "rare", "epic", "legendary" };
     static const char *AFF[AF_COUNT] = { "none", "fire", "frost", "shock", "venom", "vampiric", "swift", "keen", "heavy" };
     Item it = { 0 };
@@ -146,9 +147,12 @@ static void demo_weapons(Game *g, PlayerSlot *p1) {
     static const u8 AFX[WB_COUNT] = { AF_NONE, AF_FIRE, AF_FROST, AF_SHOCK, AF_VENOM, AF_VAMPIRIC,
                                       AF_NONE, AF_FIRE, AF_SHOCK, AF_FROST, AF_VENOM, AF_KEEN };
     vec3 f = v3(cosf(p1->pl.yaw), 0, sinf(p1->pl.yaw)), r = v3(-sinf(p1->pl.yaw), 0, cosf(p1->pl.yaw));
-    for (int i = 0; i < WB_COUNT; i++) {
-        Item it = { 1, (u8)i, RAR[i], 8, { AFX[i], 0 } };
-        int row = i / 6, col = i % 6;
+    bool lost = !strcmp(g_demo_kind, "lostarts");
+    for (int n = 0; n < (lost ? WB_COUNT - WB_CLASSIC : WB_CLASSIC); n++) {
+        int i = lost ? WB_CLASSIC + n : n;
+        Item it = { 1, (u8)i, RAR[i % WB_CLASSIC], 8, { AFX[i % WB_CLASSIC], 0 } };
+        if (lost) it.material = (u8)(1 + n % (MAT_COUNT - 1)); /* in different materials */
+        int row = n / 6, col = n % 6;
         vec3 p = v3_add(v3_add(p1->pl.pos, v3_scale(f, 2.0f + row * 1.3f)), v3_scale(r, (col - 2.5f) * (0.75f + row * 0.25f)));
         p.y += 1.0f + row * 0.35f; /* at eye height, so each can be seen */
         pickup_spawn(g, PK_WEAPON, p, 0, &it, 880 + (u64)i, 0);
@@ -232,13 +236,18 @@ static void demo_setup(Game *g) {
         s->spell_rank[spell_attack_id(EL_FIRE, SF_STORM)] = 2;
         s->spell = spell_attack_id(EL_FIRE, SF_STORM);
         p1->inv_sel = 4;
+        /* one of this world's legendaries, well used */
+        s->bag[1] = arms_unique(3, 12);
+        s->bag[1].kills = 64;
+        s->bag[1].bane = MON_SKELETON + 1;
+        s->bag[1].bane_kills = 31;
         p1->book_sel = s->spell;
         stats_refresh(p1);
         s->mana = s->maxmana;
         if (!strcmp(g_demo_kind, "inventory")) { p1->show_skills = true; p1->menu_tab = TAB_INVENTORY; return; }
         if (!strcmp(g_demo_kind, "spells")) { p1->show_skills = true; p1->menu_tab = TAB_SPELLS; return; }
     }
-    if (!strcmp(g_demo_kind, "weapons")) { demo_weapons(g, p1); return; }
+    if (!strcmp(g_demo_kind, "weapons") || !strcmp(g_demo_kind, "lostarts")) { demo_weapons(g, p1); return; }
     if (!strcmp(g_demo_kind, "cast") && g_demo_cast >= 0 && g_demo_cast < SU_COUNT) {
         /* a utility spell cast in an open place, then a step back to see it */
         demo_place(g, p1);
@@ -850,6 +859,7 @@ static void start_world(App *a) {
     if (!g->opt.seed_text[0]) snprintf(g->opt.seed_text, sizeof g->opt.seed_text, "%llu", (unsigned long long)g->opt.seed);
     SDL_Log("World seed: %s (%llu)", g->opt.seed_text, (unsigned long long)g->opt.seed);
     world_init(&g->world, g->opt.seed);
+    arms_init(g->opt.seed); /* this world's lost arts, materials and legendaries */
     story_game_init(g);
     chunkmap_init(&g->map, &g->world, &g->r, g->opt.radius, g->opt.vradius);
     /* the saved characters of this world (screenshot and test runs start fresh) */
@@ -956,7 +966,16 @@ static void frame(void *user) {
         /* playtest: as fast as the world loads, drawing now and then */
         static int frames;
         static bool started;
-        if (!started) { bot_init(g, g->opt.bot, g->opt.bot_log, g->opt.bot_minutes); started = true; }
+        if (!started) {
+            bot_init(g, g->opt.bot, g->opt.bot_log, g->opt.bot_minutes);
+            started = true;
+            Item it; /* --weapon: start with that weapon (to try a lost art) */
+            if (g_demo_weapon && parse_weapon(g_demo_weapon, &it)) {
+                int wc = WEAPON_BASES[it.base].wclass;
+                g->players[0].st.equipped[wc] = it;
+                g->players[0].st.weapon = wc;
+            }
+        }
         u64 t0 = SDL_GetTicksNS();
         while (SDL_GetTicksNS() - t0 < 30000000ull && chunkmap_settled(&g->map, player_eye(&g->players[0].pl))) {
             if (!bot_step(g, &in, DT)) { a->running = false; break; }

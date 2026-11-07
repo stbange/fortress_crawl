@@ -26,16 +26,190 @@ static float weapon_mult(const Stats *s, int wclass) {
 }
 
 /* A hit with a weapon: its elemental affix adds the element's effect. */
-static void weapon_hit(Game *g, PlayerSlot *ps, Monster *m, int wclass, float dmg, vec3 from, float knock) {
-    int el = item_affix_element(&ps->st.equipped[wclass]);
-    int base = ps->st.equipped[wclass].base;
-    sfx_at(g, base == WB_MACE ? SFX_HIT_BLUNT : SFX_HIT_BLADE, v3_add(m->pos, v3(0, MONSTERS[m->type].h * m->scale * 0.5f, 0)),
-           base == WB_GREATSWORD || base == WB_AXE ? 1.2f : 1.0f);
+unsigned g_hit_flags;
+
+static void explode(Game *g, int owner, vec3 at, float dmg, float radius, const Monster *skip);
+static void chain_lightning(Game *g, int owner, Monster *from, float dmg);
+static Projectile *proj_new(Game *g, int owner, u8 kind, vec3 pos, vec3 vel, float dmg);
+static void weapon_powers(Game *g, PlayerSlot *ps, int wclass, Monster *m, float dmg, bool crit, bool was_full);
+
+static bool undead(const Monster *m) {
+    return m->type == MON_SKELETON || m->type == MON_WRAITH || m->type == MON_NECRO || m->element == EL_SHADOW;
+}
+
+/* A hit with a weapon (a blow, or an arrow or bolt it shot): critical hits, the weapon's
+ * material and memory, its elemental affix, and then its powers. */
+static void weapon_hit_ex(Game *g, PlayerSlot *ps, Monster *m, int wclass, float dmg, vec3 from, float knock, bool shot) {
+    Item *it = &ps->st.equipped[wclass];
+    const WeaponBase *wb = &WEAPON_BASES[it->base];
+    const MaterialDef *mat = &MATERIALS[it->material % MAT_COUNT];
+    vec3 c = v3_add(m->pos, v3(0, MONSTERS[m->type].h * m->scale * 0.55f, 0));
+    bool full = m->hp >= m->maxhp * 0.999f;
+    /* critical hits: 5%, more with a rapier or crystal */
+    float crit_chance = 0.05f + mat->crit + ((wb->flags & WBF_CRIT) ? 0.3f : 0.0f);
+    u64 h = mix64((u64)(g->time * 7919.0f) ^ ((u64)(m - g->mons) << 24) ^ (u64)ps->hits[wclass]);
+    bool crit = (float)(h & 0xFFFF) / 65536.0f < crit_chance;
+    if (crit) {
+        dmg *= 2.0f;
+        sfx_at(g, SFX_CRIT_HIT, c, 1.0f);
+        particles_burst(g, c, v3(1.0f, 0.95f, 0.7f), 10, 4.0f, 0.04f, true);
+    }
+    if (it->bane && it->bane - 1 == m->type && it->bane_kills >= BANE_KILLS) dmg *= 1.25f; /* it knows this kind */
+    if (it->material == MAT_SILVER && undead(m)) dmg *= 1.4f;
+    if (it->material == MAT_BRONZE) knock *= 1.3f;
+    int el = item_affix_element(it);
+    if (!shot) {
+        int base = it->base;
+        sfx_at(g, base == WB_MACE || base == WB_FLAIL ? SFX_HIT_BLUNT : SFX_HIT_BLADE, c, base == WB_GREATSWORD || base == WB_AXE ? 1.2f : 1.0f);
+    }
     if (el != EL_NONE) sfx_at(g, sfx_element_impact(el), m->pos, 0.5f);
-    weapon_impact_fx(g, el, ps->st.equipped[wclass].rarity, el == EL_SHADOW,
-                     v3_add(m->pos, v3(0, MONSTERS[m->type].h * m->scale * 0.55f, 0)), ps->index);
+    weapon_impact_fx(g, el, it->rarity, el == EL_SHADOW, c, ps->index);
+    g_hit_flags = wb->flags;
     if (el != EL_NONE) element_hit(g, m, el, dmg, from, knock, ps->index);
     else monster_damage(g, m, dmg, from, knock, ps->index);
+    g_hit_flags = 0;
+    /* the material's own touch: a faint element, life drawn back */
+    if (m->alive && mat->element != EL_NONE && mat->element != el) element_hit(g, m, mat->element, dmg * 0.12f, from, 0.0f, ps->index);
+    if (mat->life > 0) ps->st.hp = fminf(ps->st.maxhp, ps->st.hp + dmg * mat->life);
+    /* a sling stone stuns */
+    if ((wb->flags & WBF_STUN) && m->alive && m->grade != GRADE_BOSS && m->state != MS_STUN) {
+        m->state = MS_STUN;
+        m->timer = 0.5f;
+    }
+    weapon_powers(g, ps, wclass, m, dmg, crit, full);
+}
+
+static void weapon_hit(Game *g, PlayerSlot *ps, Monster *m, int wclass, float dmg, vec3 from, float knock) {
+    weapon_hit_ex(g, ps, m, wclass, dmg, from, knock, false);
+}
+
+/* ---------- powers and memory ---------- */
+
+/* A wisp of your own for a while (it vanishes when the bond ends, never turns on you). */
+static void summon_wisp(Game *g, PlayerSlot *ps) {
+    int mine = 0;
+    for (int i = 0; i < MAX_MONSTERS; i++)
+        if (g->mons[i].alive && g->mons[i].aux == 99 && g->mons[i].charmer == ps->index) mine++;
+    if (mine >= 2) return;
+    vec3 at = v3_add(player_eye(&ps->pl), v3(cosf(ps->pl.yaw + 2.0f) * 1.2f, 0.3f, sinf(ps->pl.yaw + 2.0f) * 1.2f));
+    Monster *w = monster_spawn(g, MON_WISP, at, ps->st.level, false, v3(0.6f, 0.8f, 1.0f), 0);
+    if (!w) return;
+    w->aux = 99;
+    w->xp = 0;
+    w->charm_t = 15.0f;
+    w->charmer = (i16)ps->index;
+    w->awake = true;
+    w->state = MS_CHASE;
+    particles_burst(g, at, v3(0.6f, 0.8f, 1.0f), 16, 3.0f, 0.05f, true);
+    sfx_at(g, SFX_WISP_ALERT, at, 0.8f);
+}
+
+static void power_effect(Game *g, PlayerSlot *ps, int e, Monster *m, float dmg) {
+    static const float CD[PE_COUNT] = { 0, 0.4f, 0.8f, 2.0f, 8.0f, 1.5f, 1.0f, 0.5f, 6.0f };
+    if (ps->pow_cd[e] > 0) return;
+    ps->pow_cd[e] = CD[e];
+    g_tele.powers_fired++;
+    vec3 c = v3_add(m->pos, v3(0, MONSTERS[m->type].h * m->scale * 0.5f, 0));
+    switch (e) {
+    case PE_CHAIN: chain_lightning(g, ps->index, m, dmg * 0.5f); break;
+    case PE_BLAST: explode(g, ps->index, c, dmg * 0.6f, 2.5f, m->alive ? m : NULL); break;
+    case PE_FREEZE:
+        for (int i = 0; i < MAX_MONSTERS; i++) {
+            Monster *o = &g->mons[i];
+            if (o->alive && o->charm_t <= 0 && v3_len(v3_sub(o->pos, m->pos)) < 4.0f) o->slow_t = fmaxf(o->slow_t, 3.0f);
+        }
+        for (int k = 0; k < 16; k++) {
+            float a = k * 2.0f * PI_F / 16.0f;
+            particles_burst(g, v3_add(m->pos, v3(cosf(a) * 2.5f, 0.1f, sinf(a) * 2.5f)), v3(0.75f, 0.92f, 1.0f), 1, 1.0f, 0.06f, true);
+        }
+        sfx_at(g, SFX_SPELL_FROST, m->pos, 0.8f);
+        break;
+    case PE_WISP: summon_wisp(g, ps); break;
+    case PE_BLINK: {
+        if (!m->alive) break;
+        vec3 to = v3_sub(m->pos, ps->pl.pos);
+        to.y = 0;
+        float d = v3_len(to);
+        if (d < 0.1f || d > 8.0f) break;
+        vec3 behind = v3_add(m->pos, v3_scale(to, (MONSTERS[m->type].hw * m->scale + 1.0f) / d));
+        behind.y = m->pos.y;
+        if (!phys_box_free(behind, PLAYER_HALF_W, player_height(STANCE_STAND), game_solid, g)) break;
+        particles_burst(g, player_eye(&ps->pl), v3(0.7f, 0.5f, 1.0f), 12, 3.0f, 0.05f, true);
+        ps->pl.pos = behind;
+        ps->pl.yaw = atan2f(-to.z, -to.x);
+        sfx_player(g, ps, SFX_SPELL_BLINK, 0.8f);
+        break;
+    }
+    case PE_HEAL:
+        ps->st.hp = fminf(ps->st.maxhp, ps->st.hp + ps->st.maxhp * 0.06f);
+        particles_burst(g, player_eye(&ps->pl), v3(0.5f, 1.0f, 0.5f), 6, 1.5f, 0.04f, true);
+        break;
+    case PE_SPLIT:
+        for (int k = 0; k < 3; k++) {
+            float a = ps->pl.yaw + (k - 1) * 2.1f;
+            Projectile *p = proj_new(g, ps->index, PJ_BOLT, c, v3(cosf(a) * 16.0f, 0.5f, sinf(a) * 16.0f), dmg * 0.4f);
+            if (!p) break;
+            p->last_hit = (int)(m - g->mons);
+            p->rarity = RAR_RARE;
+            p->life = 1.2f;
+        }
+        sfx_at(g, SFX_BOLT_HIT, c, 0.8f);
+        break;
+    case PE_DECOY: {
+        vec3 at = v3_add(ps->pl.pos, v3(cosf(ps->pl.yaw + 1.6f) * 1.5f, 0, sinf(ps->pl.yaw + 1.6f) * 1.5f));
+        Effect *ef = effect_new(g, EF_DECOY, EL_ARCANE, ps->index, at, 8.0f, 1, 0.5f);
+        if (ef) ef->yaw = ps->pl.yaw;
+        sfx_player(g, ps, SFX_SPELL_SHADOW, 0.7f);
+        break;
+    }
+    default: break;
+    }
+}
+
+static void weapon_powers(Game *g, PlayerSlot *ps, int wclass, Monster *m, float dmg, bool crit, bool was_full) {
+    Stats *s = &ps->st;
+    Item *it = &s->equipped[wclass];
+    bool killed = !m->alive;
+    int hits = ++ps->hits[wclass];
+    for (int k = 0; k < 2; k++) {
+        int t = it->power[k] >> 4, e = it->power[k] & 15;
+        if (!t || !e) continue;
+        bool fire = (t == PT_KILL && killed) || (t == PT_THIRD && hits % 3 == 0) || (t == PT_LOW && s->hp < s->maxhp * 0.34f) ||
+                    (t == PT_AIR && !ps->pl.on_ground) || (t == PT_CRIT && crit) || (t == PT_FIRST && was_full) ||
+                    (t == PT_ELITE && (m->elite || m->grade == GRADE_BOSS || m->named_kind));
+        if (fire) power_effect(g, ps, e, m, dmg);
+    }
+    if (!killed || m->aux == 99) return;
+    /* what the weapon remembers: its kills, the kind it has killed most of lately, and at
+     * a hundred kills an affix it had hidden */
+    if (it->kills < 65535) it->kills++;
+    int kind = m->type + 1;
+    if (it->bane == kind) { if (it->bane_kills < 65535) it->bane_kills++; }
+    else if (it->bane_kills >= BANE_KILLS) { /* a title, once earned, stays */ }
+    else if (it->bane_kills <= 1) { it->bane = (u8)kind; it->bane_kills = 1; }
+    else it->bane_kills--;
+    char name[96], buf[160];
+    if (it->bane == kind && it->bane_kills == BANE_KILLS) {
+        item_name(it, name, sizeof name);
+        snprintf(buf, sizeof buf, "YOUR WEAPON IS NOW %s: MORE DAMAGE TO THEIR KIND", name);
+        g_tele.banes++;
+        for (char *q = buf; *q; q++) if (*q >= 'a' && *q <= 'z') *q -= 32;
+        game_banner(ps, buf);
+        sfx_player(g, ps, SFX_WEAPON_AWAKEN, 1.0f);
+    }
+    if (it->kills == AWAKEN_KILLS && !it->hidden) {
+        int a, tries = 0;
+        do a = 1 + (int)(mix64((u64)it->base * 31 + it->level + (u64)it->material * 7 + (u64)tries * 101) % (AF_COUNT - 1));
+        while (item_has_affix(it, a) && ++tries < 20);
+        it->hidden = (u8)a;
+        item_name(it, name, sizeof name);
+        snprintf(buf, sizeof buf, "A HUNDRED KILLS: IT AWAKENS - %s", name);
+        g_tele.awakened++;
+        for (char *q = buf; *q; q++) if (*q >= 'a' && *q <= 'z') *q -= 32;
+        game_banner(ps, buf);
+        sfx_player(g, ps, SFX_WEAPON_AWAKEN, 1.0f);
+        flash_add(g, player_eye(&ps->pl), weapon_glow_color(it), 8.0f, 0.6f);
+    }
 }
 
 /* ---------- particles and flashes ---------- */
@@ -101,6 +275,8 @@ static Projectile *proj_new(Game *g, int owner, u8 kind, vec3 pos, vec3 vel, flo
         p->last_hit = -1;
         p->owner = owner;
         p->element = EL_NONE;
+        p->wclass = 255;
+        p->grav = 5.0f;
         return p;
     }
     return NULL;
@@ -166,9 +342,15 @@ static void projectile_hit_monster(Game *g, Projectile *p, Monster *m, int index
     if (p->kind == PJ_ARROW) sfx_at(g, SFX_HIT_ARROW, p->pos, 1.0f);
     else if (p->kind == PJ_BOLT) sfx_at(g, p->element != EL_NONE ? sfx_element_impact(p->element) : SFX_BOLT_HIT, p->pos, 1.0f);
     else if (p->kind == PJ_NOVA) sfx_at(g, SFX_IMPACT_FIRE, p->pos, 0.7f);
-    if (p->element != EL_NONE) element_hit(g, m, p->element, p->dmg, v3_sub(p->pos, p->vel), knock, p->owner);
-    else monster_damage(g, m, p->dmg, v3_sub(p->pos, p->vel), knock, p->owner);
-    if (p->kind == PJ_ARROW || p->kind == PJ_BOLT) weapon_impact_fx(g, p->element, p->rarity, p->element == EL_SHADOW, p->pos, p->owner);
+    bool from_weapon = p->wclass < WPN_COUNT && p->owner >= 0 && p->owner < MAX_PLAYERS && g->players[p->owner].active;
+    if (p->wbase == WB_CANNON) knock = 9.0f;
+    if (from_weapon) weapon_hit_ex(g, &g->players[p->owner], m, p->wclass, p->dmg, v3_sub(p->pos, p->vel), knock, true);
+    else {
+        if (p->element != EL_NONE) element_hit(g, m, p->element, p->dmg, v3_sub(p->pos, p->vel), knock, p->owner);
+        else monster_damage(g, m, p->dmg, v3_sub(p->pos, p->vel), knock, p->owner);
+        if (p->kind == PJ_ARROW || p->kind == PJ_BOLT) weapon_impact_fx(g, p->element, p->rarity, p->element == EL_SHADOW, p->pos, p->owner);
+    }
+    if (p->wbase == WB_CANNON) { explode(g, p->owner, p->pos, p->dmg * 0.6f, 3.0f, m); p->alive = false; return; }
     if (p->kind == PJ_BOLT) {
         if (p->explode) explode(g, p->owner, p->pos, p->dmg * 0.6f, 3.0f, m);
         if (p->chain) chain_lightning(g, p->owner, m, p->dmg * 0.6f);
@@ -203,7 +385,18 @@ static void update_projectiles(Game *g, float dt0) {
         float dt = enemy ? dt0 * utility_time_scale(g) : dt0;
         p->life -= dt;
         if (p->life <= 0) { p->alive = false; continue; }
-        if (p->kind == PJ_ARROW || p->kind == PJ_ENEMY_ARROW) p->vel.y -= 5.0f * dt;
+        if (p->kind == PJ_ARROW || p->kind == PJ_ENEMY_ARROW) p->vel.y -= p->grav * dt;
+        if (p->wbase == WB_CHAKRAM && p->owner >= 0 && p->owner < MAX_PLAYERS) {
+            /* out for a moment, then home to the hand that threw it */
+            vec3 hand = player_eye(&g->players[p->owner].pl);
+            if (p->age > 0.55f) p->back = true;
+            if (p->back) {
+                vec3 to = v3_sub(hand, p->pos);
+                float d = v3_len(to);
+                if (d < 1.0f) { p->alive = false; continue; }
+                p->vel = v3_scale(to, 24.0f / d);
+            }
+        }
         else if (p->kind == PJ_BOULDER) p->vel.y -= 14.0f * dt;
         p->age += dt;
         float len = v3_len(p->vel) * dt;
@@ -212,6 +405,14 @@ static void update_projectiles(Game *g, float dt0) {
         for (int s = 0; s < steps && p->alive; s++) {
             p->pos = v3_add(p->pos, step);
             if (game_solid(g, (int)floorf(p->pos.x), (int)floorf(p->pos.y), (int)floorf(p->pos.z)) != 0) {
+                if (p->wbase == WB_CHAKRAM && !p->back) { /* rings off the wall and comes back */
+                    p->pos = v3_sub(p->pos, step);
+                    p->back = true;
+                    p->last_hit = -1;
+                    sfx_at(g, SFX_HIT_WALL, p->pos, 0.7f);
+                    break;
+                }
+                if (p->wbase == WB_CANNON) { explode(g, p->owner, v3_sub(p->pos, step), p->dmg * 0.6f, 3.0f, NULL); p->alive = false; break; }
                 p->alive = false;
                 vec3 back = v3_sub(p->pos, step);
                 switch (p->kind) {
@@ -290,7 +491,7 @@ static void sword_strike(Game *g, PlayerSlot *ps, bool whirl) {
     float range = whirl ? wb->range + 0.7f : wb->range;
     float arc = whirl ? 2.0f * PI_F : fmaxf(wb->arc_deg, s->ranks[SK_CLEAVE] ? 150.0f : 0.0f) * PI_F / 180.0f;
     float knock = wb->knock * (item_has_affix(&s->equipped[WPN_SWORD], AF_HEAVY) ? 1.5f : 1.0f);
-    bool hit_all = whirl || s->ranks[SK_CLEAVE];
+    bool hit_all = whirl || s->ranks[SK_CLEAVE] || wb->arc_deg >= 300.0f;
     Monster *best = NULL;
     float best_d = 1e9f;
     int hits = 0;
@@ -378,6 +579,16 @@ static void fire_arrows(Game *g, PlayerSlot *ps, int count, float spread_deg) {
         p->pierce = wb->pierce + (s->ranks[SK_PIERCING] ? 3 : 0);
         p->element = (u8)item_affix_element(&s->equipped[WPN_BOW]);
         p->rarity = s->equipped[WPN_BOW].rarity;
+        p->wclass = WPN_BOW;
+        p->wbase = s->equipped[WPN_BOW].base;
+        p->grav = wb->gravity > 0 ? wb->gravity : (wb->flags & WBF_RETURN) ? 0.0f : 5.0f;
+        if (wb->flags & WBF_RETURN) p->life = 3.0f;
+    }
+    if (wb->flags & WBF_EXPLODE) { /* the hand cannon kicks */
+        vec3 back = dir_from_angles(ps->pl.yaw, 0);
+        ps->pl.vel = v3_sub(ps->pl.vel, v3_scale(back, 4.0f));
+        particles_burst(g, v3_add(eye, v3_scale(back, 0.8f)), v3(0.6f, 0.58f, 0.55f), 14, 2.0f, 0.08f, false);
+        flash_add(g, v3_add(eye, v3_scale(back, 0.8f)), v3(1.3f, 0.8f, 0.4f), 6.0f, 0.15f);
     }
 }
 
@@ -387,8 +598,28 @@ static void cast_bolt(Game *g, PlayerSlot *ps) {
     vec3 d = aim_dir(g, ps, 0.0f, 0.0f);
     const WeaponBase *wb = equipped_base(s, WPN_STAFF);
     float dmg = 24.0f * (1.0f + 0.3f * s->ranks[SK_FOCUS]) * level_mult(s) * weapon_mult(s, WPN_STAFF);
+    if (wb->flags & WBF_PULSE) {
+        /* the censer: a ring of holy fire round you, every foe in it struck */
+        vec3 c = v3_add(ps->pl.pos, v3(0, 0.8f, 0));
+        for (int i = 0; i < MAX_MONSTERS; i++) {
+            Monster *m = &g->mons[i];
+            if (!m->alive || m->hidden || m->charm_t > 0) continue;
+            vec3 mc = v3_add(m->pos, v3(0, MONSTERS[m->type].h * m->scale * 0.5f, 0));
+            if (v3_len(v3_sub(mc, c)) < wb->range && phys_line_of_sight(c, mc, game_solid, g))
+                weapon_hit_ex(g, ps, m, WPN_STAFF, dmg, c, wb->knock, true);
+        }
+        vec3 col = item_affix_element(&s->equipped[WPN_STAFF]) != EL_NONE ? element_color(item_affix_element(&s->equipped[WPN_STAFF])) : v3(1.0f, 0.8f, 0.4f);
+        for (int k = 0; k < 24; k++) {
+            float a = k * 2.0f * PI_F / 24.0f;
+            particles_burst(g, v3_add(ps->pl.pos, v3(cosf(a) * wb->range * 0.8f, 0.4f, sinf(a) * wb->range * 0.8f)), col, 1, 1.5f, 0.06f, true);
+        }
+        flash_add(g, c, col, wb->range * 2.0f, 0.3f);
+        return;
+    }
     Projectile *p = proj_new(g, ps->index, PJ_BOLT, v3_add(eye, v3_scale(d, 0.4f)), v3_scale(d, wb->speed), dmg);
     if (p) {
+        p->wclass = WPN_STAFF;
+        p->wbase = s->equipped[WPN_STAFF].base;
         p->element = (u8)item_affix_element(&s->equipped[WPN_STAFF]);
         p->rarity = s->equipped[WPN_STAFF].rarity;
         p->explode = s->ranks[SK_FIREBALL] > 0;
@@ -464,13 +695,17 @@ static void try_attack(Game *g, PlayerSlot *ps, bool alt) {
         [WB_DAGGER] = SFX_SWING_DAGGER, [WB_SWORD] = SFX_SWING_SWORD, [WB_AXE] = SFX_SWING_AXE, [WB_MACE] = SFX_SWING_MACE,
         [WB_SPEAR] = SFX_SWING_SPEAR, [WB_GREATSWORD] = SFX_SWING_GREATSWORD, [WB_SHORTBOW] = SFX_SHOOT_SHORTBOW,
         [WB_LONGBOW] = SFX_SHOOT_LONGBOW, [WB_CROSSBOW] = SFX_SHOOT_CROSSBOW, [WB_WAND] = SFX_CAST_WAND,
-        [WB_STAFF] = SFX_CAST_STAFF, [WB_SCEPTER] = SFX_CAST_SCEPTER,
+        [WB_STAFF] = SFX_CAST_STAFF, [WB_SCEPTER] = SFX_CAST_SCEPTER, [WB_WHIP] = SFX_SWING_WHIP, [WB_FLAIL] = SFX_SWING_FLAIL,
+        [WB_SCYTHE] = SFX_SWING_SCYTHE, [WB_RAPIER] = SFX_SWING_RAPIER, [WB_SLING] = SFX_SHOOT_SLING, [WB_CHAKRAM] = SFX_THROW_CHAKRAM,
+        [WB_CANNON] = SFX_FIRE_CANNON, [WB_TOME] = SFX_CAST_TOME, [WB_CENSER] = SFX_CAST_CENSER,
     };
     static const int ALT[WPN_COUNT] = { SFX_WHIRLWIND, SFX_ARROW_STORM, SFX_STAFF_NOVA };
     /* metal weapons a little lower the heavier they are */
     static const float PITCH[WB_COUNT] = { [WB_DAGGER] = 1.0f, [WB_SWORD] = 0.85f, [WB_AXE] = 0.82f, [WB_MACE] = 0.75f,
                                            [WB_SPEAR] = 0.9f, [WB_GREATSWORD] = 0.72f, [WB_SHORTBOW] = 1.0f, [WB_LONGBOW] = 0.95f,
-                                           [WB_CROSSBOW] = 0.95f, [WB_WAND] = 1.0f, [WB_STAFF] = 1.0f, [WB_SCEPTER] = 0.95f };
+                                           [WB_CROSSBOW] = 0.95f, [WB_WAND] = 1.0f, [WB_STAFF] = 1.0f, [WB_SCEPTER] = 0.95f,
+                                           [WB_WHIP] = 1.0f, [WB_FLAIL] = 0.9f, [WB_SCYTHE] = 0.9f, [WB_RAPIER] = 1.05f, [WB_SLING] = 1.0f,
+                                           [WB_CHAKRAM] = 1.0f, [WB_CANNON] = 1.0f, [WB_TOME] = 1.0f, [WB_CENSER] = 1.0f };
     int b = it->base < WB_COUNT ? it->base : WB_SWORD;
     if (alt) sfx_player(g, ps, ALT[s->weapon], 1.0f);
     else sfx_player_pitch(g, ps, SWING[b], 1.0f, PITCH[b]);
@@ -487,6 +722,7 @@ void combat_update(Game *g, float dt) {
         s->since_hurt += dt;
         s->spell_cd -= dt;
         ps->potion_cd -= dt;
+        for (int k = 0; k < PE_COUNT; k++) if (ps->pow_cd[k] > 0) ps->pow_cd[k] -= dt;
         if (s->ward_t > 0 && (s->ward_t -= dt) <= 0) s->ward = 0;
         if (s->haste_t > 0) s->haste_t -= dt;
         ps->pl.speed_mult = (1.0f + 0.12f * s->ranks[SK_FLEET_FOOT]) * (1.0f + relic_bonus(s, RB_SPEED)) * (s->haste_t > 0 ? 1.4f : 1.0f);
@@ -543,7 +779,23 @@ void combat_draw_world(Game *g, vec3 eye) {
             batch3d_box(v3_add(p->pos, v3(0.1f, 0.12f, 0)), v3(0.18f, 0.16f, 0.2f), -p->age * 4.0f, v3_scale(rock, 0.8f), false);
             continue;
         }
-        if (p->kind == PJ_ARROW || p->kind == PJ_ENEMY_ARROW) {
+        if (p->kind == PJ_ARROW && (p->wbase == WB_SLING || p->wbase == WB_CANNON || p->wbase == WB_CHAKRAM)) {
+            vec3 light = game_light_at(g, p->pos);
+            vec3 glow = p->element != EL_NONE ? element_color(p->element) : rarity_color(p->rarity);
+            if (p->wbase == WB_SLING) { /* a stone */
+                batch3d_box(p->pos, v3(0.06f, 0.05f, 0.06f), p->age * 9.0f, v3(0.5f * light.x, 0.47f * light.y, 0.42f * light.z), false);
+            } else if (p->wbase == WB_CANNON) { /* an iron ball trailing smoke */
+                batch3d_octa(p->pos, 0.12f, 0.12f, p->age * 4.0f, v3(0.22f * light.x + 0.05f, 0.22f * light.y + 0.05f, 0.24f * light.z + 0.05f), false);
+                if (fmodf(p->age * 30.0f, 1.0f) < 0.5f) particles_burst(g, p->pos, v3(0.5f, 0.5f, 0.5f), 1, 0.3f, 0.06f, false);
+            } else { /* a spinning ring of blades */
+                float a = p->age * 25.0f;
+                for (int k = 0; k < 6; k++) {
+                    float b = a + k * PI_F / 3.0f;
+                    batch3d_box(v3_add(p->pos, v3(cosf(b) * 0.16f, 0, sinf(b) * 0.16f)), v3(0.07f, 0.012f, 0.025f), b,
+                                p->rarity > RAR_COMMON ? glow : v3(0.75f * light.x, 0.75f * light.y, 0.8f * light.z), p->rarity > RAR_COMMON);
+                }
+            }
+        } else if (p->kind == PJ_ARROW || p->kind == PJ_ENEMY_ARROW) {
             vec3 d = v3_norm(p->vel);
             vec3 light = game_light_at(g, p->pos);
             vec3 tint = p->kind == PJ_ENEMY_ARROW ? (p->element != EL_NONE ? element_color(p->element) : v3(0.85f, 0.82f, 0.7f))

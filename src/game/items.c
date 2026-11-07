@@ -20,6 +20,16 @@ const WeaponBase WEAPON_BASES[WB_COUNT] = {
     [WB_WAND] = { "Wand", WPN_STAFF, 0.6f, 0.25f, 0, 0, 2, 30, 0, 3 },
     [WB_STAFF] = { "Staff", WPN_STAFF, 1.0f, 0.45f, 0, 0, 5, 24, 0, 6 },
     [WB_SCEPTER] = { "Scepter", WPN_STAFF, 1.6f, 0.7f, 0, 0, 7, 20, 0, 10 },
+    /* the lost arts (a world knows four of them)          class      dmg  cd     range arc   knock speed pierce mana flags gravity */
+    [WB_WHIP] = { "Whip", WPN_SWORD, 0.9f, 0.55f, 4.5f, 30, -6, 0, 0, 0, WBF_PULL, 0 },
+    [WB_FLAIL] = { "Flail", WPN_SWORD, 1.3f, 0.62f, 2.6f, 100, 7, 0, 0, 0, WBF_SHIELDBREAK, 0 },
+    [WB_SCYTHE] = { "Scythe", WPN_SWORD, 1.35f, 1.0f, 3.0f, 360, 4, 0, 0, 0, 0, 0 },
+    [WB_RAPIER] = { "Rapier", WPN_SWORD, 0.6f, 0.32f, 3.0f, 25, 2, 0, 0, 0, WBF_CRIT, 0 },
+    [WB_SLING] = { "Sling", WPN_BOW, 1.0f, 0.55f, 0, 0, 4, 30, 0, 0, WBF_STUN, 16.0f },
+    [WB_CHAKRAM] = { "Chakram", WPN_BOW, 1.1f, 0.75f, 0, 0, 3, 22, 99, 0, WBF_RETURN, 0 },
+    [WB_CANNON] = { "Hand Cannon", WPN_BOW, 2.3f, 1.4f, 0, 0, 9, 45, 0, 0, WBF_EXPLODE, 3.0f },
+    [WB_TOME] = { "Tome", WPN_STAFF, 0.5f, 0.4f, 0, 0, 2, 28, 0, 4, WBF_SPELLBOOST, 0 },
+    [WB_CENSER] = { "Censer", WPN_STAFF, 0.9f, 0.8f, 4.5f, 0, 5, 0, 0, 6, WBF_PULSE, 0 },
 };
 
 static const char *AFFIX_ADJ[AF_COUNT] = { "", "Burning", "Frozen", "Crackling", "Venomous", "Vampiric", "Swift", "Keen", "Heavy" };
@@ -43,18 +53,18 @@ vec3 rarity_color(int r) {
     return C[r < 0 || r >= RAR_COUNT ? 0 : r];
 }
 
-bool item_has_affix(const Item *it, int affix) { return it->affix[0] == affix || it->affix[1] == affix; }
+bool item_has_affix(const Item *it, int affix) { return it->affix[0] == affix || it->affix[1] == affix || it->hidden == affix; }
 
 float item_damage_mult(const Item *it) {
     static const float RAR[RAR_COUNT] = { 1.0f, 1.12f, 1.28f, 1.5f, 1.8f };
-    float m = WEAPON_BASES[it->base].dmg * (1.0f + 0.06f * it->level) * RAR[it->rarity];
+    float m = WEAPON_BASES[it->base].dmg * (1.0f + 0.06f * it->level) * RAR[it->rarity] * MATERIALS[it->material % MAT_COUNT].dmg;
     if (item_has_affix(it, AF_KEEN)) m *= 1.15f;
     if (item_has_affix(it, AF_HEAVY)) m *= 1.25f;
     return m;
 }
 
 float item_speed_mult(const Item *it) {
-    float m = 1.0f;
+    float m = MATERIALS[it->material % MAT_COUNT].speed;
     if (item_has_affix(it, AF_SWIFT)) m *= 0.8f;
     if (item_has_affix(it, AF_HEAVY)) m *= 1.1f;
     return m;
@@ -80,14 +90,27 @@ const char *item_grade(int level) {
 }
 
 void item_name(const Item *it, char *out, int n) {
-    const char *base = WEAPON_BASES[it->base].name;
+    if (it->unique) {
+        if (it->bane_kills >= BANE_KILLS && it->bane) snprintf(out, (size_t)n, "%s, %s", arms_unique_name(it->unique - 1), arms_bane_title(it->bane - 1));
+        else snprintf(out, (size_t)n, "%s", arms_unique_name(it->unique - 1));
+        return;
+    }
+    char based[48];
+    /* the material says where it was forged (plain iron goes unsaid) */
+    if (it->material && it->material < MAT_COUNT) snprintf(based, sizeof based, "%s %s", MATERIALS[it->material].name, WEAPON_BASES[it->base].name);
+    else snprintf(based, sizeof based, "%s", WEAPON_BASES[it->base].name);
+    const char *base = based;
     const char *gr = item_grade(it->level);
     char tmp[96];
     if (it->affix[0] && it->affix[1]) snprintf(tmp, sizeof tmp, "%s %s %s", AFFIX_ADJ[it->affix[0]], base, AFFIX_SUFFIX[it->affix[1]]);
     else if (it->affix[0]) snprintf(tmp, sizeof tmp, "%s %s", AFFIX_ADJ[it->affix[0]], base);
     else snprintf(tmp, sizeof tmp, "%s", base);
-    if (gr[0]) snprintf(out, (size_t)n, "%s %s", gr, tmp);
-    else snprintf(out, (size_t)n, "%s", tmp);
+    char full[128];
+    if (gr[0]) snprintf(full, sizeof full, "%s %s", gr, tmp);
+    else snprintf(full, sizeof full, "%s", tmp);
+    /* a weapon that has killed enough of one kind carries their name */
+    if (it->bane && it->bane_kills >= BANE_KILLS) snprintf(out, (size_t)n, "%s, %s", full, arms_bane_title(it->bane - 1));
+    else snprintf(out, (size_t)n, "%s", full);
 }
 
 /* The affix a region favours: its element, or speed up high and life-stealing down deep. */
@@ -101,7 +124,7 @@ Item item_roll_region(u64 seed, float level, int min_rarity, int tier, int regio
     Rng r = rng_make(seed);
     Item it = { 0 };
     it.used = 1;
-    it.base = (u8)rng_range(&r, 0, WB_COUNT - 1);
+    it.base = (u8)arms_pick_base(rng_next(&r));
     float u = rng_float(&r) - fminf(0.15f, level * 0.004f); /* deeper: better odds */
     /* every 10-chunk step out shifts the odds; legendaries only from step 6 */
     float t = (float)tier;
@@ -123,6 +146,8 @@ Item item_roll_region(u64 seed, float level, int min_rarity, int tier, int regio
         }
         it.affix[i] = (u8)a;
     }
+    it.material = (u8)arms_material(region, tier, rng_next(&r));
+    arms_roll_powers(&it, rng_next(&r));
     return it;
 }
 
@@ -337,6 +362,9 @@ static bool collect(Game *g, PlayerSlot *ps, Pickup *p) {
         }
         s->bag[slot] = p->item;
         g_tele.weapons[p->item.rarity % 5]++;
+        if (p->item.unique && p->key) looted_add(g, p->key); /* a legendary of this world: found for good */
+        if (p->item.unique) g_tele.uniques_found++;
+        if (p->item.base >= WB_CLASSIC) g_tele.lost_found++;
         sfx_player(g, ps, SFX_PICKUP_WEAPON, 1.0f);
         item_name(&p->item, name, sizeof name);
         snprintf(buf, sizeof buf, "%s %s", p->item.rarity >= RAR_RARE ? RARITY_NAMES[p->item.rarity] : "FOUND", name);
@@ -664,7 +692,8 @@ static void frame_rect(float x, float y, float w, float h, vec3 c, float a) {
     batch2d_rect(x + w - 1, y, 1, h, c.x, c.y, c.z, a);
 }
 
-static const char *WEAPON_ICON[WB_COUNT] = { "D", "S", "A", "M", "P", "G", "B", "L", "C", "W", "T", "Z" };
+static const char *WEAPON_ICON[WB_COUNT] = { "D", "S", "A", "M", "P", "G", "B", "L", "C", "W", "T", "Z",
+                                             "J", "F", "Y", "R", "O", "Q", "K", "U", "N" };
 
 void inventory_draw(Game *g, PlayerSlot *ps, int W, int H, int top) {
     Stats *s = &ps->st;
@@ -683,7 +712,7 @@ void inventory_draw(Game *g, PlayerSlot *ps, int W, int H, int top) {
         frame_rect(x, y, w, h, ps->inv_sel == i ? v3(1.0f, 0.8f, 0.4f) : v3_scale(rc, 0.6f), 1.0f);
     }
     /* relics */
-    int ry = l.info_y + (l.compact ? 40 : 60);
+    int ry = l.compact ? l.info_y + 40 : H - 24; /* (below the item's details, which can run long) */
     for (int i = 0; i < RELIC_COUNT; i++) {
         float x = (float)(l.ex + i * (l.compact ? 12 : 16)), y = (float)ry;
         bool got = s->relics[i] > 0;
@@ -728,7 +757,9 @@ void inventory_draw(Game *g, PlayerSlot *ps, int W, int H, int top) {
         const WeaponBase *b = &WEAPON_BASES[it->base];
         item_name(it, name, sizeof name);
         vec3 c = rarity_color(it->rarity);
-        snprintf(buf, sizeof buf, "%s (%s, LV %d)", name, RARITY_NAMES[it->rarity], it->level);
+        if (it->unique) snprintf(buf, sizeof buf, "%s (LEGENDARY %s, LV %d)", name, WEAPON_BASES[it->base].name, it->level);
+        else snprintf(buf, sizeof buf, "%s (%s, LV %d)", name, RARITY_NAMES[it->rarity], it->level);
+        for (char *q = buf; *q; q++) if (*q >= 'a' && *q <= 'z') *q -= 32;
         font_text(l.ex, y, buf, c.x, c.y, c.z);
         float cd = b->cooldown * item_speed_mult(it);
         if (b->wclass == WPN_SWORD) snprintf(buf, sizeof buf, "DAMAGE x%.2f  %.2fs  REACH %.1fm  ARC %.0f", item_damage_mult(it), cd, b->range, b->arc_deg);
@@ -741,7 +772,39 @@ void inventory_draw(Game *g, PlayerSlot *ps, int W, int H, int top) {
                 strncat(buf, AFFIX_DESC[it->affix[a]], sizeof buf - strlen(buf) - 1);
                 strncat(buf, a == 0 && it->affix[1] ? ", " : "", sizeof buf - strlen(buf) - 1);
             }
+        if (it->hidden) {
+            strncat(buf, buf[0] ? ", " : "", sizeof buf - strlen(buf) - 1);
+            strncat(buf, AFFIX_DESC[it->hidden], sizeof buf - strlen(buf) - 1);
+        }
         if (buf[0]) font_text(l.ex, y + 20, buf, 0.6f, 0.8f, 0.6f);
+        /* powers, the material, what it remembers; a legendary's story */
+        int ly = y + 30, maxc = (W - l.ex - 8) / 6;
+        for (int k = 0; k < 2 && !l.compact; k++) {
+            if (!it->power[k]) continue;
+            arms_power_text(it->power[k], buf, sizeof buf);
+            if ((int)strlen(buf) > maxc) buf[maxc] = 0;
+            font_text(l.ex, ly, buf, 0.75f, 0.7f, 1.0f);
+            ly += 10;
+        }
+        char mem[160] = "";
+        if (it->material && it->material < MAT_COUNT) snprintf(mem, sizeof mem, "%s", MATERIALS[it->material].desc);
+        if (it->kills) {
+            char k2[96];
+            if (it->bane && it->bane_kills >= BANE_KILLS) snprintf(k2, sizeof k2, "%d KILLS, %s", it->kills, arms_bane_title(it->bane - 1));
+            else if (it->bane) snprintf(k2, sizeof k2, "%d KILLS (%d/%d %sS)", it->kills, it->bane_kills, BANE_KILLS, MONSTERS[it->bane - 1].name);
+            else snprintf(k2, sizeof k2, "%d KILLS", it->kills);
+            if (!it->hidden) snprintf(k2 + strlen(k2), sizeof k2 - strlen(k2), " - AWAKENS AT %d", AWAKEN_KILLS);
+            snprintf(mem + strlen(mem), sizeof mem - strlen(mem), "%s%s", mem[0] ? " - " : "", k2);
+        }
+        for (char *q = mem; *q; q++) if (*q >= 'a' && *q <= 'z') *q -= 32;
+        if ((int)strlen(mem) > maxc) mem[maxc] = 0;
+        if (mem[0] && !l.compact) { font_text(l.ex, ly, mem, 0.7f, 0.66f, 0.55f); ly += 10; }
+        if (it->unique && !l.compact) {
+            snprintf(buf, sizeof buf, "%s", arms_unique_lore(it->unique - 1));
+            for (char *q = buf; *q; q++) if (*q >= 'a' && *q <= 'z') *q -= 32;
+            if ((int)strlen(buf) > maxc) buf[maxc] = 0;
+            font_text(l.ex, ly, buf, 0.6f, 1.0f, 0.75f);
+        }
         if (ps->inv_sel >= 3 && !l.compact) {
             const Item *eq = &s->equipped[b->wclass];
             float diff = item_damage_mult(it) - item_damage_mult(eq);

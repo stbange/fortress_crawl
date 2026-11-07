@@ -47,8 +47,11 @@ static WLook look_of(const Item *it, vec3 light, float time) {
     int r = it->rarity < RAR_COUNT ? it->rarity : 0;
     WLook L;
     L.rarity = r;
-    L.metal = mulv(METAL[r], light);
-    L.edge = mulv(v3_add(METAL[r], v3(0.15f, 0.15f, 0.15f)), light);
+    /* the material colours the metal: bronze, bone, obsidian, jade, starmetal... */
+    vec3 tint = MATERIALS[it->material % MAT_COUNT].tint;
+    vec3 metal = mulv(METAL[r], tint);
+    L.metal = mulv(metal, light);
+    L.edge = mulv(v3_add(metal, v3(0.15f, 0.15f, 0.15f)), light);
     L.wood = mulv(r == RAR_EPIC ? v3(0.34f, 0.2f, 0.17f) : r == RAR_LEGENDARY ? v3(0.85f, 0.82f, 0.74f) : v3(0.45f, 0.29f, 0.15f), light);
     L.grip = mulv(GRIP[r], light);
     L.accent = mulv(ACCENT[r], light);
@@ -228,6 +231,61 @@ static void model_melee(const WF *f, const WLook *L, int base, float time, bool 
         if (L->glow_amt > 0) B(f, 0.52f, 0, 0, 0.02f, 0.047f, 0.047f, L->glow, true); /* a glowing band */
         if (fx) weapon_motes(f, L, 0.45f, 0.6f, time, seed);
         break;
+    case WB_WHIP: {
+        /* a short handle and a lash hanging and swaying */
+        B(f, 0.06f, 0, 0, 0.08f, 0.018f, 0.018f, L->grip, false);
+        B(f, 0.15f, 0, 0, 0.012f, 0.022f, 0.022f, L->accent, false);
+        float pa = 0.16f, pc = 0.0f, pb = 0.0f;
+        for (int i = 1; i <= 12; i++) {
+            float k = i / 12.0f;
+            float a = 0.16f + k * 0.62f, c = -k * k * 0.3f, b = sinf(time * 3.0f + k * 4.0f) * 0.07f * k + k * k * 0.18f;
+            SEG(f, pa, pb, pc, a, b, c, 0.011f * (1.2f - 0.6f * k), i == 12 && L->glow_amt > 0 ? L->glow : v3_scale(L->grip, 1.2f), i == 12 && L->glow_amt > 0);
+            pa = a; pb = b; pc = c;
+        }
+        if (fx) weapon_motes(f, L, 0.5f, 0.95f, time, seed);
+        break;
+    }
+    case WB_FLAIL: {
+        B(f, 0.14f, 0, 0, 0.2f, 0.016f, 0.016f, L->wood, false);
+        B(f, -0.02f, 0, 0, 0.05f, 0.019f, 0.019f, L->grip, false);
+        B(f, 0.35f, 0, 0, 0.015f, 0.022f, 0.022f, L->accent, false);
+        for (int k = 0; k < 4; k++) /* the chain */
+            O(f, 0.39f + k * 0.035f, sinf(time * 4.0f) * 0.01f * k, -0.01f * k * k, 0.012f, 0.016f, k * 0.8f, L->metal, false);
+        vec3 ball = v3(0.56f, sinf(time * 4.0f) * 0.05f, -0.1f);
+        O(f, ball.x, ball.y, ball.z, 0.07f, 0.07f, time, L->metal, false);
+        for (int k = 0; k < 6; k++) {
+            vec3 d = k < 2 ? f->u : k < 4 ? f->v : f->w;
+            if (k & 1) d = v3_scale(d, -1.0f);
+            SP(f, ball.x, ball.y, ball.z, d, 0.012f, 0.075f, L->edge, false);
+        }
+        if (L->glow_amt > 0) O(f, ball.x, ball.y, ball.z, 0.03f, 0.056f, -time * 2.0f, L->glow, true);
+        if (fx) weapon_motes(f, L, 0.45f, 0.6f, time, seed);
+        break;
+    }
+    case WB_SCYTHE: {
+        B(f, 0.5f, 0, 0, 0.62f, 0.015f, 0.015f, L->wood, false); /* the snath */
+        B(f, 0.3f, 0.05f, 0, 0.02f, 0.05f, 0.012f, L->grip, false); /* a hand grip */
+        B(f, 1.1f, 0, 0, 0.025f, 0.022f, 0.022f, L->accent, false);
+        /* the blade, curving out and down */
+        float pa = 1.1f, pb = 0.0f;
+        for (int i = 1; i <= 8; i++) {
+            float k = i / 8.0f;
+            float a = 1.1f - 0.25f * k * k, b = -0.55f * k;
+            SEG(f, pa, pb, 0, a, b, 0, 0.022f * (1.1f - k * 0.8f), L->metal, false);
+            if (L->glow_amt > 0) SEG(f, pa - 0.02f, pb, 0, a - 0.02f, b, 0, 0.005f, L->glow, true);
+            pa = a; pb = b;
+        }
+        if (fx) weapon_motes(f, L, 0.9f, 1.12f, time, seed);
+        break;
+    }
+    case WB_RAPIER:
+        B(f, 0, 0, 0, 0.055f, 0.014f, 0.014f, L->grip, false);
+        O(f, 0.07f, 0, 0, 0.05f, 0.022f, 0.0f, L->accent, false); /* the cup */
+        SEG(f, -0.05f, 0, 0.03f, 0.06f, 0, 0.05f, 0.005f, L->accent, false); /* knuckle bow */
+        O(f, -0.07f, 0, 0, 0.018f, 0.018f, 0.0f, L->accent, false);
+        blade(f, L, 0.08f, 0.72f, 0.009f, 0.05f);
+        if (fx) weapon_motes(f, L, 0.12f, 0.8f, time, seed);
+        break;
     case WB_SPEAR:
         B(f, 0.25f, 0, 0, 0.62f, 0.014f, 0.014f, L->wood, false);
         B(f, 0.0f, 0, 0, 0.06f, 0.017f, 0.017f, L->grip, false);
@@ -312,6 +370,81 @@ static void model_crossbow(const WF *f, const WLook *L, float draw, float time, 
     if (fx) weapon_motes(f, L, 0.1f, 0.25f, time, seed);
 }
 
+static vec3 gem_color(const WLook *L, vec3 fallback);
+
+/* The lost ranged arts: u forward, v right, w up (like the crossbow). */
+static void model_lost_ranged(const WF *f, const WLook *L, int base, float draw, float time, bool fx, float seed) {
+    switch (base) {
+    case WB_SLING: {
+        /* two cords from the hand to a pouch with a stone, swinging */
+        float sw = sinf(time * 9.0f * (0.3f + draw)) * 0.08f;
+        vec3 pouch = v3(0.12f + sw, 0, -0.3f);
+        SEG(f, 0, 0.012f, 0, pouch.x, pouch.y + 0.02f, pouch.z, 0.003f, v3_scale(L->grip, 1.3f), false);
+        SEG(f, 0, -0.012f, 0, pouch.x, pouch.y - 0.02f, pouch.z, 0.003f, v3_scale(L->grip, 1.3f), false);
+        B(f, pouch.x, pouch.y, pouch.z, 0.04f, 0.05f, 0.025f, v3_scale(L->grip, 1.6f), false);
+        O(f, pouch.x, pouch.y, pouch.z - 0.03f, 0.035f, 0.035f, time, L->glow_amt > 0 ? L->glow : v3_scale(L->metal, 0.8f), L->glow_amt > 0);
+        B(f, 0, 0, 0, 0.02f, 0.02f, 0.02f, L->accent, false); /* the loop round a finger */
+        if (fx) weapon_motes(f, L, -0.05f, 0.1f, time, seed);
+        break;
+    }
+    case WB_CHAKRAM: {
+        float spin = time * 0.6f;
+        for (int k = 0; k < 10; k++) {
+            float a0 = spin + k * 2.0f * PI_F / 10.0f, a1 = a0 + 2.0f * PI_F / 10.0f;
+            SEG(f, 0.12f + cosf(a0) * 0.12f, sinf(a0) * 0.12f, 0, 0.12f + cosf(a1) * 0.12f, sinf(a1) * 0.12f, 0, 0.012f, L->metal, false);
+            if (k % 2 == 0) {
+                vec3 out = v3_add(v3_scale(f->u, cosf(a0)), v3_scale(f->v, sinf(a0)));
+                SP(f, 0.12f + cosf(a0) * 0.13f, sinf(a0) * 0.13f, 0, out, 0.01f, 0.04f, L->edge, false);
+            }
+        }
+        B(f, 0.0f, 0, 0, 0.025f, 0.012f, 0.012f, L->grip, false); /* where the hand holds it */
+        if (L->glow_amt > 0) O(f, 0.12f, 0, 0, 0.015f, 0.015f, time * 3.0f, L->glow, true);
+        if (fx) weapon_motes(f, L, 0.02f, 0.24f, time, seed);
+        break;
+    }
+    case WB_CANNON:
+    default:
+        B(f, 0.18f, 0, 0.02f, 0.22f, 0.04f, 0.04f, v3_scale(L->metal, 0.6f), false); /* the barrel */
+        B(f, 0.4f, 0, 0.02f, 0.02f, 0.05f, 0.05f, L->accent, false); /* the muzzle */
+        B(f, 0.05f, 0, 0.02f, 0.015f, 0.046f, 0.046f, L->accent, false);
+        B(f, -0.12f, 0, -0.01f, 0.12f, 0.022f, 0.03f, L->wood, false); /* the tiller */
+        B(f, -0.03f, 0, -0.05f, 0.02f, 0.015f, 0.04f, L->grip, false);
+        SP(f, 0.02f, 0, 0.06f, f->w, 0.006f, 0.03f, v3(0.4f, 0.35f, 0.3f), false); /* the touch hole and match */
+        if (draw > 0.9f && fmodf(time * 6.0f, 1.0f) < 0.5f) O(f, 0.02f, 0, 0.095f, 0.006f, 0.008f, 0, v3(1.3f, 0.6f, 0.2f), true);
+        if (L->glow_amt > 0) B(f, 0.18f, 0.041f, 0.02f, 0.2f, 0.002f, 0.006f, L->glow, true);
+        if (fx) weapon_motes(f, L, 0.0f, 0.4f, time, seed);
+        break;
+    }
+}
+
+/* The lost staff arts: u from the hand outward. */
+static void model_lost_staff(const WF *f, const WLook *L, int base, float charge, vec3 gem_base, float time, bool fx, float seed) {
+    vec3 gem = v3_scale(gem_color(L, gem_base), 0.75f + 0.25f * sinf(time * 6.0f) + charge);
+    if (base == WB_TOME) {
+        /* a book held open toward the foe */
+        B(f, 0.1f, 0, 0, 0.1f, 0.085f, 0.012f, L->grip, false); /* the cover */
+        B(f, 0.1f, 0, 0.013f, 0.092f, 0.078f, 0.004f, v3(0.85f, 0.8f, 0.68f), false); /* the pages */
+        B(f, 0.1f, 0, 0.017f, 0.08f, 0.003f, 0.002f, v3(0.3f, 0.25f, 0.2f), false);
+        for (int k = 0; k < 4; k++) B(f, 0.04f + k * 0.04f, 0.045f, 0.018f, 0.012f, 0.025f, 0.001f, v3(0.4f, 0.35f, 0.3f), false); /* lines */
+        B(f, 0.1f, -0.088f, 0, 0.1f, 0.006f, 0.014f, L->accent, false); /* the spine */
+        O(f, 0.1f, 0, 0.03f + 0.01f * sinf(time * 3.0f), 0.018f, 0.025f, time * 2.0f, gem, true); /* a sigil over the page */
+        if (fx) weapon_motes(f, L, 0.02f, 0.2f, time, seed);
+        return;
+    }
+    /* the censer: a chain and a lantern of holy smoke */
+    SEG(f, 0, 0, 0, 0.28f, 0, 0, 0.004f, L->metal, false);
+    B(f, 0.3f, 0, 0, 0.01f, 0.03f, 0.03f, L->accent, false);
+    O(f, 0.37f, 0, 0, 0.055f, 0.06f, time * 0.5f, L->metal, false);
+    for (int k = 0; k < 4; k++) {
+        float a = k * PI_F * 0.5f + time * 0.5f;
+        O(f, 0.37f, cosf(a) * 0.05f, sinf(a) * 0.05f, 0.012f, 0.015f, 0, gem, true); /* light through the holes */
+    }
+    SP(f, 0.43f, 0, 0, f->u, 0.015f, 0.03f, L->accent, false);
+    float ph = fmodf(time * 0.8f, 1.0f);
+    O(f, 0.3f - ph * 0.15f, sinf(time * 2.0f) * 0.02f, 0, 0.012f + ph * 0.02f, 0.012f + ph * 0.02f, time, v3(0.55f, 0.52f, 0.5f), false);
+    if (fx) weapon_motes(f, L, 0.3f, 0.44f, time, seed);
+}
+
 /* Staves: u from the butt (o) to the head. charge: brighter right after a cast. */
 static vec3 gem_color(const WLook *L, vec3 fallback) {
     if (L->vampiric) return v3(0.95f, 0.1f, 0.18f);
@@ -364,18 +497,24 @@ static void model_staff(const WF *f, const WLook *L, int base, float charge, vec
 
 /* ---------- drawing in the world ---------- */
 
+/* Held pointing forward like a crossbow (not upright like a bow). */
+static bool forward_held(int base) { return base == WB_CROSSBOW || base == WB_SLING || base == WB_CHAKRAM || base == WB_CANNON; }
+
 static void model(const WF *f, const Item *it, vec3 light, float time, bool fx, float seed, float draw, float charge, vec3 gem) {
     WLook L = look_of(it, light, time);
     const WeaponBase *wb = &WEAPON_BASES[it->base < WB_COUNT ? it->base : WB_SWORD];
     if (wb->wclass == WPN_SWORD) model_melee(f, &L, it->base, time, fx, seed);
     else if (it->base == WB_CROSSBOW) model_crossbow(f, &L, draw, time, fx, seed);
+    else if (it->base == WB_SLING || it->base == WB_CHAKRAM || it->base == WB_CANNON) model_lost_ranged(f, &L, it->base, draw, time, fx, seed);
+    else if (it->base == WB_TOME || it->base == WB_CENSER) model_lost_staff(f, &L, it->base, charge, gem, time, fx, seed);
     else if (wb->wclass == WPN_BOW) model_bow(f, &L, it->base, draw, time, fx, seed, charge > 0); /* charge: an arrow on the string */
     else model_staff(f, &L, it->base, charge, gem, time, fx, seed);
 }
 
 /* Length of a model along u (to centre it on the ground). */
 static float model_len(int base) {
-    static const float LEN[WB_COUNT] = { 0.3f, 0.6f, 0.58f, 0.62f, 1.1f, 0.98f, 0.56f, 0.88f, 0.55f, 0.37f, 1.0f, 0.57f };
+    static const float LEN[WB_COUNT] = { 0.3f, 0.6f, 0.58f, 0.62f, 1.1f, 0.98f, 0.56f, 0.88f, 0.55f, 0.37f, 1.0f, 0.57f,
+                                         0.95f, 0.62f, 1.15f, 0.82f, 0.25f, 0.26f, 0.45f, 0.2f, 0.45f };
     return base < WB_COUNT ? LEN[base] : 0.6f;
 }
 
@@ -384,13 +523,13 @@ void weapon_draw_ground(const Item *it, vec3 c, float yaw, vec3 light, float tim
     f.u = v3(cosf(yaw), 0, sinf(yaw));
     f.s = 0.9f;
     int wc = WEAPON_BASES[it->base].wclass;
-    if (wc == WPN_BOW && it->base != WB_CROSSBOW) {
+    if (wc == WPN_BOW && !forward_held(it->base)) {
         /* bows stand up, slowly turning */
         f.u = v3(0, 1, 0);
         f.w = v3(cosf(yaw), 0, sinf(yaw));
         f.v = v3(-sinf(yaw), 0, cosf(yaw));
         f.o = v3_add(c, v3(0, 0.2f, 0));
-    } else if (it->base == WB_CROSSBOW) {
+    } else if (forward_held(it->base)) {
         f.v = v3(-sinf(yaw), 0, cosf(yaw));
         f.w = v3(0, 1, 0);
         f.o = c;
@@ -401,7 +540,7 @@ void weapon_draw_ground(const Item *it, vec3 c, float yaw, vec3 light, float tim
         f.o = v3_sub(c, v3_scale(f.u, model_len(it->base) * 0.45f * f.s));
     }
     f.up = v3(0, 1, 0);
-    model(&f, it, light, time, true, seed, it->base == WB_CROSSBOW ? 1.0f : 0.0f, 0.0f, v3(0.55f, 0.6f, 1.0f));
+    model(&f, it, light, time, true, seed, forward_held(it->base) ? 1.0f : 0.0f, 0.0f, v3(0.55f, 0.6f, 1.0f));
 }
 
 void weapon_draw_held(const Item *it, vec3 hand, vec3 dir, vec3 side, vec3 light, float time, float seed) {
@@ -414,17 +553,17 @@ void weapon_draw_held(const Item *it, vec3 hand, vec3 dir, vec3 side, vec3 light
     f.s = 1.0f;
     int wc = WEAPON_BASES[it->base].wclass;
     if (wc == WPN_STAFF) f.o = v3_sub(hand, v3_scale(f.u, 0.3f * model_len(it->base)));
-    if (wc == WPN_BOW && it->base != WB_CROSSBOW) {
+    if (wc == WPN_BOW && !forward_held(it->base)) {
         /* held upright, string toward the archer */
         f.u = v3(0, 1, 0);
         f.w = v3_scale(v3_norm(v3(dir.x, 0, dir.z)), -1.0f);
         f.v = v3_cross(f.w, f.u);
-    } else if (it->base == WB_CROSSBOW) {
+    } else if (forward_held(it->base)) {
         f.u = v3_norm(v3(dir.x, 0, dir.z));
         f.w = v3(0, 1, 0);
         f.v = v3_cross(f.u, f.w);
     }
-    model(&f, it, light, time, true, seed, it->base == WB_CROSSBOW ? 1.0f : 0.0f, 1.0f, v3(0.55f, 0.6f, 1.0f));
+    model(&f, it, light, time, true, seed, forward_held(it->base) ? 1.0f : 0.0f, 1.0f, v3(0.55f, 0.6f, 1.0f));
 }
 
 /* ---------- the weapon in your hands ---------- */
@@ -444,7 +583,7 @@ void weapon_draw_view(Game *g, PlayerSlot *ps, vec3 light) {
     case WPN_SWORD: {
         int base = it->base;
         float reach = base == WB_GREATSWORD ? 0.85f : base == WB_DAGGER ? 1.15f : 1.0f;
-        if (base == WB_SPEAR) {
+        if (base == WB_SPEAR || base == WB_RAPIER) {
             /* a thrust: the point goes forward and comes back */
             float th = attacking ? sinf(fminf(1.0f, t * 1.4f) * PI_F) * 0.35f : 0.0f;
             f.o = v3(0.3f + walk, -0.4f + fabsf(walk), -0.3f - th);
@@ -479,8 +618,16 @@ void weapon_draw_view(Game *g, PlayerSlot *ps, vec3 light) {
     }
     case WPN_BOW: {
         float draw = attacking ? (t < 0.3f ? 0.0f : (t - 0.3f) / 0.7f) : 1.0f; /* crossbow: cocking again after a shot */
-        if (it->base == WB_CROSSBOW) {
-            float kick = attacking && t < 0.2f ? (0.2f - t) * 0.4f : 0.0f;
+        if (it->base == WB_CHAKRAM || it->base == WB_SLING) {
+            /* held low in front; the chakram leaves the hand when thrown */
+            if (it->base == WB_CHAKRAM && attacking && t < 0.85f) break;
+            f.o = v3(0.2f + walk, (it->base == WB_SLING ? -0.12f : -0.32f) + fabsf(walk), -0.5f);
+            f.u = v3_norm(v3(-0.25f, 0.15f, -1.0f));
+            f.v = v3_norm(v3_cross(f.u, v3(0, 1, 0)));
+            f.w = v3_cross(f.v, f.u);
+            model(&f, it, light, time, true, seed, attacking ? 1.0f - t : 0.0f, 0, v3(0, 0, 0));
+        } else if (forward_held(it->base)) {
+            float kick = attacking && t < 0.2f ? (0.2f - t) * (it->base == WB_CANNON ? 1.0f : 0.4f) : 0.0f;
             f.o = v3(0.2f + walk, -0.2f + fabsf(walk) + kick * 0.5f, -0.5f + kick);
             f.u = v3_norm(v3(-0.1f, 0.08f, -1.0f));
             f.s = 0.8f;
@@ -507,7 +654,23 @@ void weapon_draw_view(Game *g, PlayerSlot *ps, vec3 light) {
         float thrust = attacking ? sinf(t * PI_F) * 0.12f : 0.0f;
         float charge = attacking ? 0.5f * (1.0f - t) : 0.0f;
         vec3 gem = s->ranks[SK_FIREBALL] ? v3(1.0f, 0.55f, 0.2f) : v3(0.55f, 0.6f, 1.0f);
-        if (it->base == WB_WAND) {
+        if (it->base == WB_TOME) {
+            f.o = v3(0.08f + walk, -0.24f + fabsf(walk), -0.4f - thrust);
+            f.u = v3_norm(v3(0.1f, 0.35f, -1.0f));
+            f.v = v3_norm(v3_cross(f.u, v3(0, 1, 0)));
+            f.w = v3_cross(f.v, f.u);
+            model(&f, it, light, time, true, seed, 0, charge, gem);
+            break;
+        } else if (it->base == WB_CENSER) {
+            /* swinging on its chain from the hand */
+            float sw = sinf(time * 2.2f) * 0.25f + (attacking ? sinf(t * PI_F) * 0.8f : 0.0f);
+            f.o = v3(0.26f + walk, 0.12f, -0.62f);
+            f.u = v3_norm(v3(sinf(sw) * 0.5f, -1.0f, -cosf(sw) * 0.3f));
+            f.v = v3_norm(v3_cross(f.u, v3(0, 0, 1)));
+            f.w = v3_cross(f.v, f.u);
+            model(&f, it, light, time, true, seed, 0, charge, gem);
+            break;
+        } else if (it->base == WB_WAND) {
             f.o = v3(0.24f + walk, -0.3f + fabsf(walk), -0.42f - thrust);
             f.u = v3_norm(v3(-0.1f, 0.35f, -1.0f));
         } else if (it->base == WB_SCEPTER) {

@@ -11,7 +11,8 @@
  * user's preference folder. The world itself never needs saving: the seed rebuilds it. */
 
 #define SAVE_MAGIC 0x56534346u /* "FCSV" */
-#define SAVE_VERSION 5 /* 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms */
+#define SAVE_VERSION 6 /* 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms;
+                          6: weapons with materials, powers, legendaries and memory */
 #define EXPLORED_BUDGET (1200 * 1024)
 
 /* ---------- storage backends ---------- */
@@ -121,7 +122,11 @@ static void w64(Buf *b, u64 v) { w32(b, (u32)v); w32(b, (u32)(v >> 32)); }
 static void wf(Buf *b, float f) { u32 v; memcpy(&v, &f, 4); w32(b, v); }
 static void wv(Buf *b, vec3 v) { wf(b, v.x); wf(b, v.y); wf(b, v.z); }
 static void wbytes(Buf *b, const u8 *p, int n) { w16(b, (u16)n); put(b, p, n); }
-static void witem(Buf *b, const Item *it) { w8(b, it->used); w8(b, it->base); w8(b, it->rarity); w8(b, it->level); w8(b, it->affix[0]); w8(b, it->affix[1]); }
+static void witem(Buf *b, const Item *it) {
+    w8(b, it->used); w8(b, it->base); w8(b, it->rarity); w8(b, it->level); w8(b, it->affix[0]); w8(b, it->affix[1]);
+    w8(b, it->material); w8(b, it->unique); w8(b, it->power[0]); w8(b, it->power[1]); w8(b, it->hidden); w8(b, it->bane);
+    w16(b, it->kills); w16(b, it->bane_kills);
+}
 
 static void write_player(Buf *b, const Stats *s, const Player *pl) {
     wv(b, pl->pos); wf(b, pl->yaw); wf(b, pl->pitch); w8(b, pl->fly);
@@ -256,8 +261,15 @@ static void rbytes(Rd *r, u8 *out, int cap) {
 }
 static Item ritem(Rd *r) {
     Item it;
+    memset(&it, 0, sizeof it);
     it.used = r8(r); it.base = r8(r); it.rarity = r8(r); it.level = r8(r); it.affix[0] = r8(r); it.affix[1] = r8(r);
-    if (it.base >= WB_COUNT || it.rarity >= RAR_COUNT || it.affix[0] >= AF_COUNT || it.affix[1] >= AF_COUNT) memset(&it, 0, sizeof it);
+    if (r->ver >= 6) {
+        it.material = r8(r); it.unique = r8(r); it.power[0] = r8(r); it.power[1] = r8(r); it.hidden = r8(r); it.bane = r8(r);
+        it.kills = r16(r); it.bane_kills = r16(r);
+    }
+    if (it.base >= WB_COUNT || it.rarity >= RAR_COUNT || it.affix[0] >= AF_COUNT || it.affix[1] >= AF_COUNT || it.material >= MAT_COUNT ||
+        it.hidden >= AF_COUNT || it.unique > UNIQUE_COUNT || it.bane > MON_TYPE_COUNT)
+        memset(&it, 0, sizeof it);
     return it;
 }
 

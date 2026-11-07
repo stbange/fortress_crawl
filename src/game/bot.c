@@ -412,7 +412,9 @@ static void spend_points(PlayerSlot *ps) {
 
 static float weapon_score(const Item *it) {
     if (!it->used) return 0;
-    return item_damage_mult(it) / fmaxf(0.3f, item_speed_mult(it)) * (1.0f + 0.05f * it->rarity);
+    /* damage per second, with a little extra for rarity (powers) */
+    float cd = WEAPON_BASES[it->base].cooldown * fmaxf(0.3f, item_speed_mult(it));
+    return item_damage_mult(it) / fmaxf(0.1f, cd) * (1.0f + 0.05f * it->rarity);
 }
 
 static void manage_gear(Game *g, PlayerSlot *ps) {
@@ -671,6 +673,19 @@ static void summary(PlayerSlot *ps) {
           g_tele.dealt, g_tele.gold, g_tele.chests, g_tele.vaults, g_tele.scrolls, g_tele.relics, g_tele.weapons[0], g_tele.weapons[1],
           g_tele.weapons[2], g_tele.weapons[3], g_tele.weapons[4], g_tele.potions_hp, g_tele.potions_mp, g_tele.casts_attack,
           g_tele.casts_utility);
+    logf_("ARMS lost_found=%d uniques_found=%d powers_fired=%d awakened=%d banes=%d\n", g_tele.lost_found, g_tele.uniques_found,
+          g_tele.powers_fired, g_tele.awakened, g_tele.banes);
+    for (int w = 0; w < WPN_COUNT; w++) {
+        char name[128], pw[96] = "";
+        item_name(&s->equipped[w], name, sizeof name);
+        for (int k = 0; k < 2; k++)
+            if (s->equipped[w].power[k]) {
+                char t[64];
+                arms_power_text(s->equipped[w].power[k], t, sizeof t);
+                snprintf(pw + strlen(pw), sizeof pw - strlen(pw), " [%s]", t);
+            }
+        logf_("WEAPON %d: %s (rarity %d, level %d, kills %d)%s\n", w, name, s->equipped[w].rarity, s->equipped[w].level, s->equipped[w].kills, pw);
+    }
     logf_("SKILLS");
     for (int i = 0; i < SKILL_COUNT; i++) if (s->ranks[i]) logf_(" %s=%d", SKILLS[i].name, s->ranks[i]);
     logf_(" unspent=%d\nSPELLS", s->points);
