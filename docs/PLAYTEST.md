@@ -48,6 +48,8 @@ numbers say more about the bot than the game.
 
 ## 2. What to improve, most important first
 
+The remedies are planned in [`BALANCE_PLAN.md`](BALANCE_PLAN.md).
+
 ### 2.1 It is too easy to survive
 No deaths in 8 hours, potions unused, the Sanctum never needed. The reasons, in order:
 - **Heal** is a starting spell, costs 25 mana, and restores a third of your health every 6
