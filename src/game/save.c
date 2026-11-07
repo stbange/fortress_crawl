@@ -339,6 +339,7 @@ static void read_player(Rd *r, SavedPlayer *sp) {
     if (s->spell < 0 || s->spell >= SPELL_COUNT || !s->spell_rank[s->spell]) s->spell = spell_attack_id(EL_FIRE, SF_BOLT);
     s->spell_rank[spell_attack_id(EL_FIRE, SF_BOLT)] = MAXI(1, s->spell_rank[spell_attack_id(EL_FIRE, SF_BOLT)]);
     s->spell_rank[SPELL_ATTACK_COUNT + SU_THREAD] = MAXI(1, s->spell_rank[SPELL_ATTACK_COUNT + SU_THREAD]); /* everyone has it */
+    s->spell_rank[SPELL_ATTACK_COUNT + SU_SANCTUM] = MAXI(1, s->spell_rank[SPELL_ATTACK_COUNT + SU_SANCTUM]);
     for (int i = 0; i < WPN_COUNT; i++)
         if (!s->equipped[i].used || WEAPON_BASES[s->equipped[i].base].wclass != i) {
             static const int START[WPN_COUNT] = { WB_SWORD, WB_SHORTBOW, WB_STAFF };

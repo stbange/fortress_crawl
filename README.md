@@ -180,8 +180,7 @@ or *Heavy*. Deeper finds are stronger. Spare weapons can be scrapped for gold.
 lingers, arcane pierces, holy heals you, shadow steals life, earth stuns and knocks back)
 combined with a form: bolt, barrage, nova, chain, breath, orb, trap rune, halo of orbiting
 orbs, storm, meteor and aura. That makes 88 attack spells, plus 38 utility spells (see
-below). You start with two: Flame Bolt and the Golden Thread. Every other spell is found;
-the Sanctum Door often lies in a chest a little way from the gate;
+below). You start with Flame Bolt, the Golden Thread and the Sanctum Door (Heal is found);
 scrolls teach new spells or raise a
 known one's rank (up to 5). The stronger forms only drop deeper in. The Focus skill makes all
 spells stronger and cheaper.
@@ -202,7 +201,7 @@ and ice are real blocks for a while, then they crumble.
 Falls from high up hurt, at most a third of your health (Feather Fall, Levitate, Wings and
 water save you). Recall cast again within a minute takes you back to where you cast it.
 
-**The Sanctum:** the Sanctum Door (found in a chest, not known from the start) opens a door to your own castle in a pocket realm, on a
+**The Sanctum:** the Sanctum Door opens a door to your own castle in a pocket realm, on a
 floating island under an open sky: a garden with a fountain, a great hall with a throne, a
 library, and three rooms that do something. At first only the bed is made; the library's
 shrine sells the rest back to life (the bath 500 gold, the feast 1000, the library 1500, which

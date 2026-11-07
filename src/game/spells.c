@@ -123,7 +123,7 @@ int spell_learn(PlayerSlot *ps, int id) {
 void spells_give_start(Stats *s) {
     s->spell_rank[spell_attack_id(EL_FIRE, SF_BOLT)] = 1;
     s->spell_rank[SPELL_ATTACK_COUNT + SU_THREAD] = 1;
-    /* everything else, the Sanctum Door included, is found: scrolls, chests, the shop */
+    s->spell_rank[SPELL_ATTACK_COUNT + SU_SANCTUM] = 1; /* everyone has a home */
     s->spell = spell_attack_id(EL_FIRE, SF_BOLT);
 }
 

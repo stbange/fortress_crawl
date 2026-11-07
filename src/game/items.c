@@ -337,7 +337,7 @@ static bool collect(Game *g, PlayerSlot *ps, Pickup *p) {
         /* once you know a dozen spells, most scrolls deepen one you know */
         int known = 0;
         for (int k = 0; k < SPELL_COUNT; k++) known += s->spell_rank[k] > 0;
-        if (known >= 12 && !s->spell_rank[p->amount] && p->amount != SPELL_ATTACK_COUNT + SU_SANCTUM && lrand() < 0.67f) {
+        if (known >= 12 && !s->spell_rank[p->amount] && lrand() < 0.67f) {
             int pick = (int)(lrand() * known), k = 0;
             for (; k < SPELL_COUNT; k++)
                 if (s->spell_rank[k] && s->spell_rank[k] < SPELL_MAX_RANK && pick-- <= 0) break;
@@ -410,9 +410,6 @@ static bool collect(Game *g, PlayerSlot *ps, Pickup *p) {
         sfx_at(g, SFX_CHEST_OPEN, at, 1.0f);
         particles_burst(g, at, v3(1.0f, 0.8f, 0.3f), 18, 4.0f, 0.05f, true);
         for (int i = 0; i < 3; i++) loot_drop(g, p->pos, (float)p->amount, false, 0.25f);
-        /* the way home is found, not given: a chest a little way out may hold the Sanctum Door */
-        if (p->amount >= 3 && !s->spell_rank[SPELL_ATTACK_COUNT + SU_SANCTUM] && lrand() < 0.35f)
-            pickup_spawn(g, PK_SCROLL, v3_add(p->pos, v3(0, 0.7f, 0)), SPELL_ATTACK_COUNT + SU_SANCTUM, NULL, 0, 0);
         {
             int tier, region = region_at(g, p->pos, &tier);
             Item it = item_roll_region(mix64(p->key ^ 0x77), (float)p->amount + 1, lrand() < 0.5f ? RAR_MAGIC : RAR_COMMON, tier, region);
