@@ -121,7 +121,7 @@ void touch_event(Game *g, const SDL_Event *e) {
             else if (role == TB_MAP) { ps->show_map = true; ps->show_skills = false; role = TOUCH_NONE; }
             else if (role == TB_NEXT_SPELL) spell_next(ps, 1);
             else if (role == TB_POTION) { drink_potion(g, ps, ps->st.hp >= ps->st.maxhp * 0.9f); role = TOUCH_NONE; }
-            else if (role == TB_THREAD) { spell_cast_id(g, ps, SPELL_ATTACK_COUNT + SU_THREAD); role = TOUCH_NONE; }
+            else if (role == TB_THREAD) { game_thread_key(g, ps); role = TOUCH_NONE; }
             if (role == TOUCH_NONE && !ps->show_skills && !ps->show_map) {
                 if (x < W * 0.45f && !role_taken(t, TOUCH_MOVE)) {
                     role = TOUCH_MOVE;

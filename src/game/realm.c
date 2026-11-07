@@ -43,7 +43,10 @@ void realm_enter(Game *g, PlayerSlot *ps, vec3 from, float yaw) {
     s->scry_t = 0;
     move_to(g, ps, arrive_pos(), PI_F * 0.5f);
     sfx_at(g, SFX_REALM_DOOR, ps->pl.pos, 1.0f);
-    game_banner(ps, "THE SANCTUM: BATH TO THE WEST, FEAST TO THE EAST, BED UP NORTH-EAST");
+    if ((s->sanctum & (SANCTUM_BATH | SANCTUM_FEAST)) == (SANCTUM_BATH | SANCTUM_FEAST))
+        game_banner(ps, "THE SANCTUM: BATH TO THE WEST, FEAST TO THE EAST, BED UP NORTH-EAST");
+    else
+        game_banner(ps, "THE SANCTUM: YOUR BED IS MADE. THE LIBRARY'S SHRINE RESTORES THE REST, FOR GOLD");
     g->autosave_timer = 1e9f;
 }
 
@@ -75,7 +78,10 @@ static void comforts(Game *g, PlayerSlot *ps, float dt) {
     Stats *s = &ps->st;
     vec3 p = ps->pl.pos;
     /* the bath: feet in the pool */
-    if (in_rect(p, POCKET_BATH_X0, POCKET_BATH_Z0, POCKET_BATH_X1, POCKET_BATH_Z1, 0) && p.y < POCKET_G - 0.2f) {
+    bool in_bath = in_rect(p, POCKET_BATH_X0, POCKET_BATH_Z0, POCKET_BATH_X1, POCKET_BATH_Z1, 0) && p.y < POCKET_G - 0.2f;
+    if (in_bath && !(s->sanctum & SANCTUM_BATH) && ps->banner_time <= 0)
+        game_banner(ps, "THE WATER IS COLD AND STILL - RESTORE THE BATH AT THE LIBRARY SHRINE");
+    if (in_bath && (s->sanctum & SANCTUM_BATH)) {
         s->hp = fminf(s->maxhp, s->hp + s->maxhp * 0.2f * dt);
         s->burn_t = s->poison_t = s->chill_t = 0;
         if (s->refreshed_t < BATH_REFRESH - 60.0f) {
@@ -87,7 +93,10 @@ static void comforts(Game *g, PlayerSlot *ps, float dt) {
             particles_burst(g, v3_add(p, v3(0, 0.9f, 0)), v3(0.9f, 0.9f, 0.95f), 2, 0.6f, 0.08f, false);
     }
     /* the feast */
-    if (in_rect(p, POCKET_TABLE_X0, POCKET_TABLE_Z0, POCKET_TABLE_X1, POCKET_TABLE_Z1, 1.8f)) {
+    bool at_table = in_rect(p, POCKET_TABLE_X0, POCKET_TABLE_Z0, POCKET_TABLE_X1, POCKET_TABLE_Z1, 1.8f);
+    if (at_table && !(s->sanctum & SANCTUM_FEAST) && ps->banner_time <= 0)
+        game_banner(ps, "AN EMPTY TABLE - STOCK THE DINING HALL AT THE LIBRARY SHRINE");
+    if (at_table && (s->sanctum & SANCTUM_FEAST)) {
         if (s->feast_t >= 0) {
             s->feast_t += dt;
             if (s->feast_t > 1.0f) {
@@ -194,5 +203,5 @@ void realm_draw(Game *g) {
     PlayerSlot *v = g->draw_viewer;
     if (v && !realm_has(game_view_eye(v))) return;
     utility_draw_door(g, v3(POCKET_EXIT_X, (float)POCKET_G, POCKET_EXIT_Z), PI_F * 0.5f, 1.0f, true);
-    feast(g);
+    if (!v || (v->st.sanctum & SANCTUM_FEAST)) feast(g);
 }

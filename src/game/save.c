@@ -11,7 +11,7 @@
  * user's preference folder. The world itself never needs saving: the seed rebuilds it. */
 
 #define SAVE_MAGIC 0x56534346u /* "FCSV" */
-#define SAVE_VERSION 4 /* 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm */
+#define SAVE_VERSION 5 /* 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms */
 #define EXPLORED_BUDGET (1200 * 1024)
 
 /* ---------- storage backends ---------- */
@@ -154,6 +154,7 @@ static void write_player(Buf *b, const Stats *s, const Player *pl) {
     /* v4: where the Sanctum Door brought you from */
     w8(b, s->realm_return_set);
     wv(b, s->realm_return); wf(b, s->realm_return_yaw);
+    w8(b, s->sanctum); wf(b, s->library_t);
 }
 
 /* Explored cells: per chunk a 512-byte mask of the non-zero bytes, then those bytes. */
@@ -313,6 +314,12 @@ static void read_player(Rd *r, SavedPlayer *sp) {
         s->realm_return_set = r8(r) != 0;
         s->realm_return = rv(r);
         s->realm_return_yaw = rf(r);
+    }
+    if (r->ver >= 5) {
+        s->sanctum = r8(r);
+        s->library_t = rf(r);
+    } else if (r->ver == 4) {
+        s->sanctum = SANCTUM_BATH | SANCTUM_FEAST; /* they were free when this character found them */
     }
     /* sanity: a save from a broken build must not crash the game */
     if (s->level < 1 || s->level > 999) s->level = 1;

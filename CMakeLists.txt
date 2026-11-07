@@ -90,6 +90,7 @@ add_executable(fortress_crawl
   src/game/utility.c
   src/game/realm.c
   src/game/bot.c
+  src/game/shop.c
   src/render/renderer.c
   src/render/batch.c
   src/world/chunkmap.c)

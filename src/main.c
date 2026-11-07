@@ -272,6 +272,7 @@ static void demo_setup(Game *g) {
     if (!strcmp(g_demo_kind, "realmtest")) {
         /* the Sanctum's doors and comforts, step by step (log only) */
         vec3 home = p1->pl.pos;
+        s->sanctum = SANCTUM_BATH | SANCTUM_FEAST | SANCTUM_LIBRARY;
         realm_enter(g, p1, home, 1.0f);
         SDL_Log("realmtest: inside %d at %.1f %.1f %.1f, return set %d", realm_has(p1->pl.pos), p1->pl.pos.x, p1->pl.pos.y, p1->pl.pos.z,
                 s->realm_return_set);
@@ -291,6 +292,22 @@ static void demo_setup(Game *g) {
         realm_update(g, 1.0f / 30);
         SDL_Log("realmtest: out at %.1f %.1f %.1f (home %.1f %.1f %.1f) inside %d", p1->pl.pos.x, p1->pl.pos.y, p1->pl.pos.z, home.x, home.y,
                 home.z, realm_has(p1->pl.pos));
+        return;
+    }
+    if (!strcmp(g_demo_kind, "shop")) {
+        /* the SHOP tab at a shrine (use --pos next to one, e.g. the Sanctum library's) */
+        s->gold = 2600;
+        s->relics[2] = 1;
+        s->relics[5] = 2;
+        s->spell_rank[spell_attack_id(EL_FROST, SF_CHAIN)] = 2;
+        s->spell = spell_attack_id(EL_FROST, SF_CHAIN);
+        s->equipped[WPN_SWORD] = item_roll(91, 8, RAR_RARE);
+        s->weapon = WPN_SWORD;
+        for (int i = 0; i < 6; i++) s->bag[i] = item_roll(300 + (u64)i, 2, RAR_COMMON);
+        s->sanctum = SANCTUM_BATH;
+        p1->show_skills = true;
+        p1->menu_tab = TAB_SHOP;
+        p1->shop_sel = 3;
         return;
     }
     if (!strcmp(g_demo_kind, "realm")) {

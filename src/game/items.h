@@ -102,6 +102,7 @@ enum { RB_HEALTH, RB_DAMAGE, RB_MANA, RB_SPEED };
 #define RELIC_COUNT 12
 typedef struct RelicDef { const char *name; int bonus; } RelicDef;
 extern const RelicDef RELICS[RELIC_COUNT];
+extern const char *RELIC_BONUS_TEXT[4];
 
 /* ---------- things on the ground ---------- */
 

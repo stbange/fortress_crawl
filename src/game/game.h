@@ -213,6 +213,13 @@ typedef struct Stats {
     vec3 realm_return;
     float realm_return_yaw;
     float refreshed_t, well_fed_t, rest_t, feast_t;
+    u8 sanctum;          /* SANCTUM_*: the rooms bought back to life (shop.c) */
+    float library_t;     /* until the library's next scroll */
+    /* dying and coming back: the last safe ground, and a short time to return there */
+    vec3 safe_pos, fell_pos;
+    float fell_t;
+    vec3 recall_from;    /* Recall cast twice within 5 s goes back */
+    float recall_t;
     float fall_speed; /* fastest downward speed since leaving the ground (fall damage) */
     /* story (per character) */
     u8 motive;       /* 0: not chosen yet, else MOTIVE_* + 1 */
@@ -353,6 +360,7 @@ typedef struct PlayerSlot {
     int domain_cx, domain_cy, domain_cz;
     char domain_name[STORY_NAME];
     int motive_sel, story_scroll;
+    int shop_sel;
     Thread thread;
     int thread_goal;
     float thread_cast_time;
@@ -543,7 +551,8 @@ void touch_draw(Game *g);
 int touch_low_width(Game *g, int win_w, int win_h);
 
 /* Character menu tabs. */
-enum { TAB_INVENTORY, TAB_SPELLS, TAB_SKILLS, TAB_STORY, TAB_COUNT };
+enum { TAB_INVENTORY, TAB_SPELLS, TAB_SKILLS, TAB_STORY, TAB_SHOP, TAB_COUNT };
+enum { SANCTUM_BATH = 1, SANCTUM_FEAST = 2, SANCTUM_LIBRARY = 4 };
 
 /* quests.c: motives, chapters, missions, lore, named enemies */
 void story_game_init(Game *g);
@@ -637,6 +646,13 @@ Effect *effect_new(Game *g, int type, int element, int owner, vec3 pos, float li
 
 /* realm.c: the pocket realm behind the Sanctum Door */
 bool realm_has(const vec3 pos);
+/* shop.c: the SHOP tab */
+bool shop_open_here(Game *g, const PlayerSlot *ps);
+void shop_nav(Game *g, PlayerSlot *ps, int nav);
+void shop_tap(Game *g, PlayerSlot *ps, int W, int H, int top, float x, float y);
+void shop_draw(Game *g, PlayerSlot *ps, int W, int H, int top);
+/* game.c: the Golden Thread key (right after a death: back where you fell) */
+void game_thread_key(Game *g, PlayerSlot *ps);
 void realm_enter(Game *g, PlayerSlot *ps, vec3 from, float yaw);
 void realm_update(Game *g, float dt);
 void realm_draw(Game *g);

@@ -10,9 +10,9 @@
 const MonsterDef MONSTERS[MON_TYPE_COUNT] = {
     /*               hw     h     hp   dmg  speed reach atk   xp  flies  colour                      windup lvl boss title */
     { "Crawler",    0.32f, 0.6f, 18,  5,  5.2f, 0.9f, 0.9f, 8,  false, { 0.85f, 0.6f, 0.25f },  0.35f, 0, "Crawler Queen" },
-    { "Brute",      0.55f, 2.0f, 90,  16, 2.8f, 1.5f, 1.6f, 30, false, { 0.85f, 0.2f, 0.15f },  0.6f,  2, "Brute Warlord" },
+    { "Brute",      0.55f, 2.0f, 130, 16, 2.8f, 1.5f, 1.6f, 30, false, { 0.85f, 0.2f, 0.15f },  0.6f,  2, "Brute Warlord" },
     { "Wisp",       0.35f, 0.9f, 30,  9,  3.4f, 0.0f, 2.2f, 18, true,  { 0.3f, 0.55f, 1.0f },   0.35f, 2, "Wisp Matriarch" },
-    { "Horned",     0.45f, 1.2f, 45,  13, 3.6f, 1.2f, 1.4f, 22, false, { 0.5f, 0.85f, 0.3f },   0.35f, 3, "Horned King" },
+    { "Horned",     0.45f, 1.2f, 60,  13, 3.6f, 1.2f, 1.4f, 22, false, { 0.5f, 0.85f, 0.3f },   0.35f, 3, "Horned King" },
     { "Skeleton",   0.3f,  1.7f, 32,  8,  3.2f, 0.0f, 1.6f, 16, false, { 0.85f, 0.82f, 0.7f },  0.35f, 2, "Bone Lord" },
     { "Slime",      0.45f, 0.8f, 40,  7,  2.6f, 0.9f, 1.1f, 12, false, { 0.35f, 0.8f, 0.55f },  0.35f, 1, "Slime Mother" },
     { "Bat",        0.22f, 0.4f, 10,  4,  6.5f, 0.8f, 0.8f, 5,  true,  { 0.45f, 0.3f, 0.4f },   0.35f, 1, "Bat Sovereign" },
@@ -28,7 +28,7 @@ const MonsterDef MONSTERS[MON_TYPE_COUNT] = {
     { "Necromancer",0.3f,  1.7f, 40,  8,  2.8f, 0.0f, 5.0f, 34, false, { 0.3f, 0.26f, 0.36f },  0.35f, 9, "Lich" },
     { "Harpy",      0.35f, 0.9f, 24,  12, 5.5f, 0.9f, 2.8f, 18, true,  { 0.62f, 0.5f, 0.4f },   0.35f, 5, "Harpy Queen" },
     { "Hound",      0.35f, 0.8f, 28,  8,  6.0f, 0.9f, 0.8f, 13, false, { 0.42f, 0.36f, 0.3f },  0.35f, 3, "Pack Alpha" },
-    { "Troll",      0.5f,  2.1f, 110, 18, 2.4f, 1.5f, 3.0f, 40, false, { 0.42f, 0.56f, 0.4f },  0.6f,  7, "Troll King" },
+    { "Troll",      0.5f,  2.1f, 160, 18, 2.4f, 1.5f, 3.0f, 40, false, { 0.42f, 0.56f, 0.4f },  0.6f,  7, "Troll King" },
 };
 
 /* family weights per stratum:
@@ -171,7 +171,7 @@ Monster *monster_spawn(Game *g, int type, vec3 pos, int level, bool elite, vec3 
     float party = 1.0f + 0.5f * (float)MAXI(0, np - 1);
     m->maxhp = m->hp = d->hp * (1.0f + 0.18f * level) * (elite ? 3.0f : 1.0f) * party;
     m->dmg = d->dmg * (1.0f + 0.14f * level) * (elite ? 1.6f : 1.0f);
-    m->xp = d->xp * (1.0f + 0.15f * level) * (elite ? 4.0f : 1.0f);
+    m->xp = d->xp * (1.0f + 0.12f * level) * (elite ? 4.0f : 1.0f);
     m->grade = elite ? GRADE_ELITE : GRADE_NORMAL;
     m->state = MS_IDLE;
     m->chunk_key = key;
@@ -1315,7 +1315,7 @@ void monsters_update(Game *g, float dt) {
                     }
                     if (m->type == MON_BRUTE) {
                         m->close_t = hdist < 2.5f && fabsf(dy) < 1.5f ? m->close_t + dt : 0.0f;
-                        if (m->close_t > 1.5f && m->cooldown <= 0) {
+                        if (m->close_t > 1.0f && m->cooldown <= 0) {
                             sfx_monster(g, m, MSFX_ATTACK);
                             m->state = MS_WINDUP;
                             m->timer = d->windup * 1.4f;

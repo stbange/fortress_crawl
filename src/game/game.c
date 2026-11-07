@@ -109,8 +109,8 @@ PlayerSlot *game_add_player(Game *g) {
 /* XP from level L to L+1: grows 1.4 times per level, 1.3 from level 10 on (late levels
  * would otherwise take far longer than the monsters' XP grows). */
 float xp_for_level(int level) {
-    if (level < 10) return 90.0f * powf(1.4f, (float)(level - 1));
-    return 90.0f * powf(1.4f, 8.0f) * powf(1.3f, (float)(level - 9));
+    if (level < 10) return 120.0f * powf(1.4f, (float)(level - 1));
+    return 120.0f * powf(1.4f, 8.0f) * powf(1.3f, (float)(level - 9));
 }
 
 void game_add_xp(Game *g, PlayerSlot *ps, float xp) {
@@ -143,6 +143,29 @@ static void tele_hurt(float dmg) {
     g_tele.last_grade = g_tele.src_grade;
     g_tele.last_rank = g_tele.src_rank;
     g_tele.src = HS_OTHER;
+}
+
+/* The Golden Thread key, or for 15 s after coming back from death: back where you fell,
+ * for another fifth of your gold. */
+void game_thread_key(Game *g, PlayerSlot *ps) {
+    Stats *s = &ps->st;
+    if (s->fell_t > 0 && !s->dead) {
+        int cost = s->gold / 5;
+        s->gold -= cost;
+        s->fell_t = 0;
+        particles_burst(g, player_eye(&ps->pl), v3(0.9f, 0.8f, 0.5f), 20, 3.0f, 0.05f, true);
+        ps->pl.pos = s->fell_pos;
+        ps->pl.vel = v3(0, 0, 0);
+        s->fall_speed = 0;
+        s->invuln = fmaxf(s->invuln, 2.0f);
+        flash_add(g, player_eye(&ps->pl), v3(1.2f, 0.9f, 0.5f), 8.0f, 0.5f);
+        sfx_player(g, ps, SFX_SPELL_RECALL, 1.0f);
+        char buf[64];
+        snprintf(buf, sizeof buf, "BACK WHERE YOU FELL (-%d GOLD)", cost);
+        game_banner(ps, buf);
+        return;
+    }
+    spell_cast_id(g, ps, SPELL_ATTACK_COUNT + SU_THREAD);
 }
 
 void game_hurt_player(Game *g, PlayerSlot *ps, float dmg, vec3 from) {
@@ -319,6 +342,7 @@ static void menu_nav(Game *g, PlayerSlot *ps, int nav) {
     if (ps->menu_tab == TAB_INVENTORY) inventory_nav(g, ps, nav);
     else if (ps->menu_tab == TAB_SPELLS) spellbook_nav(g, ps, nav);
     else if (ps->menu_tab == TAB_STORY) story_tab_nav(g, ps, nav);
+    else if (ps->menu_tab == TAB_SHOP) { if (nav != NAV_DROP) shop_nav(g, ps, nav); }
     else if (nav != NAV_DROP) game_skills_nav(ps, nav);
 }
 
@@ -484,7 +508,7 @@ void game_event(Game *g, const SDL_Event *e) {
         case SDLK_Q: ps->spell_held = true; break;
         case SDLK_R: spell_next(ps, (SDL_GetModState() & SDL_KMOD_SHIFT) ? -1 : 1); break;
         case SDLK_H: drink_potion(g, ps, false); break;
-        case SDLK_G: spell_cast_id(g, ps, SPELL_ATTACK_COUNT + SU_THREAD); break;
+        case SDLK_G: game_thread_key(g, ps); break;
         case SDLK_J: drink_potion(g, ps, true); break;
         case SDLK_M: ps->show_map = !ps->show_map; ps->show_skills = false; break;
         case SDLK_1: ps->st.weapon = WPN_SWORD; break;
@@ -607,7 +631,7 @@ static void read_pad(Game *g, PlayerSlot *ps, PlayerInput *in, float dt) {
     if (PRESSED(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER)) ps->st.weapon = (ps->st.weapon + 1) % WPN_COUNT;
     if (PRESSED(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER)) ps->st.weapon = (ps->st.weapon + WPN_COUNT - 1) % WPN_COUNT;
     if (PRESSED(SDL_GAMEPAD_BUTTON_LEFT_STICK)) ps->sprint_toggle = !ps->sprint_toggle;
-    if (PRESSED(SDL_GAMEPAD_BUTTON_RIGHT_STICK)) spell_cast_id(g, ps, SPELL_ATTACK_COUNT + SU_THREAD);
+    if (PRESSED(SDL_GAMEPAD_BUTTON_RIGHT_STICK)) game_thread_key(g, ps);
     if (fabsf(lx) < 0.1f && fabsf(ly) < 0.1f) ps->sprint_toggle = false;
 
     if (fabsf(lx) + fabsf(ly) > 0) { in->move_x = lx; in->move_z = -ly; }
@@ -666,6 +690,8 @@ static void update_player(Game *g, PlayerSlot *ps, const PlayerInput *in, float 
             /* death costs: a fifth of the gold carried, and the shrine gives back only half
              * your health and mana; the Sanctum bed restores fully */
             bool home = realm_has(s->respawn);
+            s->fell_pos = s->safe_pos;
+            s->fell_t = realm_has(s->safe_pos) || v3_len(v3_sub(s->safe_pos, s->respawn)) < 20.0f ? 0.0f : 15.0f;
             int lost = s->gold / 5;
             s->gold -= lost;
             s->hp = s->maxhp * (home ? 1.0f : 0.5f);
@@ -678,13 +704,24 @@ static void update_player(Game *g, PlayerSlot *ps, const PlayerInput *in, float 
                 if (g->mons[i].alive && v3_len(v3_sub(g->mons[i].pos, s->respawn)) < 16.0f) g->mons[i].alive = false;
             s->invuln = 2.0f;
             char buf[96];
-            if (home) snprintf(buf, sizeof buf, "YOU WAKE IN YOUR OWN BED (-%d GOLD)", lost);
+            if (s->fell_t > 0)
+                snprintf(buf, sizeof buf, "-%d GOLD. %s: BACK WHERE YOU FELL (-%d MORE)", lost, ps->pad && !ps->keyboard ? "R-STICK" : "G", s->gold / 5);
+            else if (home) snprintf(buf, sizeof buf, "YOU WAKE IN YOUR OWN BED (-%d GOLD)", lost);
             else snprintf(buf, sizeof buf, "THE SHRINE BRINGS YOU BACK, WEAKENED (-%d GOLD)", lost);
             game_banner(ps, buf);
         }
         return;
     }
     s->invuln = fmaxf(0.0f, s->invuln - dt);
+    if (s->fell_t > 0) s->fell_t -= dt;
+    if (s->recall_t > 0) s->recall_t -= dt;
+    if (s->library_t > 0) s->library_t -= dt;
+    /* the last ground that was safe to stand on (where "back where you fell" leads) */
+    if (ps->pl.on_ground && !ps->pl.fly && s->since_hurt > 1.0f) {
+        bool known;
+        Block under = chunkmap_block(&g->map, (int)floorf(ps->pl.pos.x), (int)floorf(ps->pl.pos.y - 0.05f), (int)floorf(ps->pl.pos.z), &known);
+        if (known && under != B_LAVA) s->safe_pos = ps->pl.pos;
+    }
     /* do not simulate until the ground under the player exists */
     bool ground_known = game_solid(g, (int)floorf(ps->pl.pos.x), (int)floorf(ps->pl.pos.y) - 1, (int)floorf(ps->pl.pos.z)) >= 0;
     utility_player_physics(g, ps);
@@ -795,7 +832,7 @@ static SkillLayout skills_layout(int W, int H) {
 
 /* ---------- character menu: tabs ---------- */
 
-static const char *TAB_NAMES[TAB_COUNT] = { "ITEMS", "SPELLS", "SKILLS", "STORY" };
+static const char *TAB_NAMES[TAB_COUNT] = { "ITEMS", "SPELLS", "SKILLS", "STORY", "SHOP" };
 
 static void tab_rect(int W, int t, float *x, float *y, float *w, float *h) {
     *w = W < 440 ? 52.0f : 72.0f;
@@ -818,6 +855,8 @@ void game_menu_tap(Game *g, PlayerSlot *ps, int W, int H, float x, float y) {
         spellbook_tap(g, ps, spellbook_hit(ps, W, H, MENU_TOP, x, y));
     } else if (ps->menu_tab == TAB_STORY) {
         story_tab_nav(g, ps, y < H / 2 ? NAV_UP : NAV_DOWN); /* tap the upper or lower half to scroll */
+    } else if (ps->menu_tab == TAB_SHOP) {
+        shop_tap(g, ps, W, H, MENU_TOP, x, y);
     } else {
         int hit = game_skills_hit(ps, W, H, x, y);
         if (hit == -2) game_skills_nav(ps, NAV_LEFT);
@@ -1065,6 +1104,7 @@ static void draw_menu(Game *g, PlayerSlot *ps, int W, int H) {
     if (ps->menu_tab == TAB_INVENTORY) inventory_draw(g, ps, W, H, MENU_TOP);
     else if (ps->menu_tab == TAB_SPELLS) spellbook_draw(g, ps, W, H, MENU_TOP);
     else if (ps->menu_tab == TAB_STORY) story_draw_tab(g, ps, W, H, MENU_TOP);
+    else if (ps->menu_tab == TAB_SHOP) shop_draw(g, ps, W, H, MENU_TOP);
     else draw_skills(g, ps, W, H);
 }
 

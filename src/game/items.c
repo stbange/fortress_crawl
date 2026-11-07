@@ -35,7 +35,7 @@ const RelicDef RELICS[RELIC_COUNT] = {
     { "Iron Crown", RB_HEALTH }, { "Saint's Finger", RB_DAMAGE }, { "Cloud Feather", RB_SPEED }, { "Star Shard", RB_MANA },
     { "Frost Lily", RB_HEALTH }, { "Jade Idol", RB_DAMAGE }, { "Gothic Rose", RB_MANA }, { "Drowned Bell", RB_SPEED },
 };
-static const char *RELIC_BONUS_TEXT[4] = { "+6% health", "+5% damage", "+8% mana", "+3% speed" };
+const char *RELIC_BONUS_TEXT[4] = { "+6% health", "+5% damage", "+8% mana", "+3% speed" };
 
 vec3 rarity_color(int r) {
     static const vec3 C[RAR_COUNT] = { { 0.8f, 0.78f, 0.72f }, { 0.45f, 0.65f, 1.0f }, { 1.0f, 0.85f, 0.3f }, { 1.0f, 0.5f, 0.15f },
@@ -235,7 +235,7 @@ void loot_drop(Game *g, vec3 pos, float level, bool elite, float luck) {
     vec3 p = v3_add(pos, v3(0, 0.5f, 0));
     if (lrand() < 0.55f + luck) pickup_spawn(g, PK_GOLD, p, (int)((1 + level * 0.6f + lrand() * 5.0f) * k), NULL, 0, 0);
     if (lrand() < (level < 3 ? 0.04f : 0.08f) + (elite ? 0.4f : 0.0f) + luck) pickup_spawn(g, lrand() < 0.6f ? PK_POTION_HP : PK_POTION_MP, p, 1, NULL, 0, 0);
-    if (lrand() < 0.035f + (elite ? 0.35f : 0.0f) + luck * 0.6f) pickup_spawn(g, PK_SCROLL, p, random_scroll(level), NULL, 0, 0);
+    if (lrand() < 0.025f + (elite ? 0.35f : 0.0f) + luck * 0.6f) pickup_spawn(g, PK_SCROLL, p, random_scroll(level), NULL, 0, 0);
     int tier, region = region_at(g, pos, &tier);
     if (lrand() < 0.045f + 0.004f * tier + (elite ? 0.5f : 0.0f) + luck) {
         Item it = item_roll_region(mix64((u64)(lrand() * 1e9f)), level, elite ? RAR_MAGIC : RAR_COMMON, tier, region);
@@ -309,6 +309,15 @@ static bool collect(Game *g, PlayerSlot *ps, Pickup *p) {
         return true;
     }
     case PK_SCROLL: {
+        /* once you know a dozen spells, most scrolls deepen one you know */
+        int known = 0;
+        for (int k = 0; k < SPELL_COUNT; k++) known += s->spell_rank[k] > 0;
+        if (known >= 12 && !s->spell_rank[p->amount] && lrand() < 0.67f) {
+            int pick = (int)(lrand() * known), k = 0;
+            for (; k < SPELL_COUNT; k++)
+                if (s->spell_rank[k] && s->spell_rank[k] < SPELL_MAX_RANK && pick-- <= 0) break;
+            if (k < SPELL_COUNT) p->amount = k;
+        }
         int rank = spell_learn(ps, p->amount);
         g_tele.scrolls++;
         sfx_player(g, ps, SFX_PICKUP_SCROLL, 1.0f);
@@ -361,8 +370,10 @@ static bool collect(Game *g, PlayerSlot *ps, Pickup *p) {
             pickup_spawn(g, PK_GOLD, v3_add(p->pos, v3(0, 0.6f, 0)), 20 + level * 3, NULL, 0, 0);
             pickup_spawn(g, PK_POTION_HP, v3_add(p->pos, v3(0, 0.6f, 0)), 1, NULL, 0, 0);
             int tier, region = region_at(g, p->pos, &tier);
-            Item it = item_roll_region(mix64(p->key ^ 0x7A), (float)level + 3, lrand() < 0.25f ? RAR_EPIC : RAR_RARE, tier, region);
+            Item it = item_roll_region(mix64(p->key ^ 0x7A), (float)level + 3, lrand() < 0.25f ? RAR_LEGENDARY : RAR_EPIC, tier, region);
             pickup_spawn(g, PK_WEAPON, v3_add(p->pos, v3(0, 0.7f, 0)), 0, &it, 0, 0);
+            /* and always a relic: a solved puzzle is worth more than ten chests */
+            pickup_spawn(g, PK_RELIC, v3_add(p->pos, v3(0.4f, 0.8f, 0)), (int)(mix64(p->key ^ 0x5E1) % RELIC_COUNT), NULL, mix64(p->key ^ 0x5E2), 0);
             game_banner(ps, "THE VAULT'S HOARD");
             sfx_at(g, SFX_HOARD_OPEN, at, 1.0f);
             return true;

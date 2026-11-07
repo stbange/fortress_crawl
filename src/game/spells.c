@@ -410,8 +410,16 @@ static bool cast_utility_do(Game *g, PlayerSlot *ps, int u, int rank) {
         return true;
     case SU_RECALL:
         particles_burst(g, eye, v3(0.9f, 0.8f, 0.5f), 20, 3.0f, 0.05f, true);
-        ps->pl.pos = s->respawn;
-        ps->pl.yaw = s->respawn_yaw;
+        if (s->recall_t > 0) {
+            /* the second cast within a minute: back to where the first one was cast */
+            ps->pl.pos = s->recall_from;
+            s->recall_t = 0;
+        } else {
+            s->recall_from = ps->pl.pos;
+            s->recall_t = 60.0f;
+            ps->pl.pos = s->respawn;
+            ps->pl.yaw = s->respawn_yaw;
+        }
         ps->pl.vel = v3(0, 0, 0);
         s->fall_speed = 0;
         flash_add(g, player_eye(&ps->pl), v3(1.0f, 0.85f, 0.5f), 8.0f, 0.5f);
@@ -425,7 +433,14 @@ bool spell_cast(Game *g, PlayerSlot *ps) { return spell_cast_id(g, ps, ps->st.sp
 
 bool spell_cast_id(Game *g, PlayerSlot *ps, int id) {
     Stats *s = &ps->st;
-    if (s->dead || s->spell_cd > 0 || id < 0 || id >= SPELL_COUNT || !s->spell_rank[id]) return false;
+    if (s->dead || id < 0 || id >= SPELL_COUNT || !s->spell_rank[id]) return false;
+    bool recall_back = id == SPELL_ATTACK_COUNT + SU_RECALL && s->recall_t > 0; /* the way back is free */
+    if (s->spell_cd > 0 && !recall_back) return false;
+    if (recall_back) {
+        cast_utility(g, ps, SU_RECALL, s->spell_rank[id]);
+        s->spell_cd = 0.5f;
+        return true;
+    }
     SpellInfo si;
     spell_info(id, &si);
     float cost = si.mana * (1.0f - 0.15f * s->ranks[SK_FOCUS]);
