@@ -414,6 +414,7 @@ Done:
 - Stories S1 + S2: motives, metaplot chapters, named enemies, domains, traces, missions (6.8).
 - Traps, puzzles (levers, plates, statues, light beams) and vaults; lava burns (6.9).
 - 38 utility spells and the Sanctum, a castle in a pocket realm (6.10).
+- A playtest bot (`--bot`) and the notes from 16 hours of automated play: [`PLAYTEST.md`](PLAYTEST.md).
 - Screenshot and demo modes (`--shot`, `--demo combat|sword|death|skills|map|coop|menu|
   inventory|spells|loot|magic|bestiary|motive|story|read|named|storytest|vault|levers|plates|
   statues|beam|darts|spikes|flames|mechtest|cast|realmtest`, `--shot-time`,
