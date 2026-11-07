@@ -401,7 +401,12 @@ void carve_helix_w(GenCtx *g, int cx, int cz, int y0, int y1, int phase, bool pr
                 int c = MAXI(abs(dx), abs(dz));
                 Block v;
                 if (c <= 1) v = B_PILLAR;
-                else v = (floormod(wy - phase, 16) == helix_sector(dx, dz)) ? B_FLOOR : B_AIR;
+                else {
+                    /* two interleaved flights half a turn apart: a missed step is a drop of
+                     * at most 7 blocks onto the other flight, not a whole turn (16) */
+                    int sec = helix_sector(dx, dz);
+                    v = floormod(wy - phase, 16) == sec || floormod(wy - phase + 8, 16) == sec ? B_FLOOR : B_AIR;
+                }
                 g_put(g, x, y, z, v);
                 if (protect) g_protect(g, x, y, z);
             }
@@ -423,6 +428,15 @@ void carve_shafts(GenCtx *g) {
             ni = g_add_node(g, lx + DIR_X[d] * 3, p->y_low - g->oy, lz + DIR_Z[d] * 3, 3, 4);
         } else if (p->y == g->oy) {
             carve_helix_w(g, p->x, p->z, g->oy, p->y_up + 3, p->phase, true);
+            /* a gilded rim round the well at the top, so it is seen before it is fallen into */
+            for (int dz = -3; dz <= 3; dz++)
+                for (int dx = -3; dx <= 3; dx++) {
+                    if (MAXI(abs(dx), abs(dz)) != 3) continue;
+                    int x = lx + dx, y = p->y_up - 1 - g->oy, z = lz + dz;
+                    if (!g_in(x, y, z) || g_prot(g, x, y, z) || !block_solid(g->b[cidx(x, y, z)])) continue;
+                    if (g_in(x, y + 1, z) && block_solid(g->b[cidx(x, y + 1, z)])) continue; /* a wall, not floor */
+                    g->b[cidx(x, y, z)] = B_ACCENT;
+                }
             d = p->exit_dir;
             ni = g_add_node(g, lx + DIR_X[d] * 3, p->y_up - g->oy, lz + DIR_Z[d] * 3, 3, 4);
         }

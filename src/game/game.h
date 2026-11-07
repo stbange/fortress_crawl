@@ -80,6 +80,9 @@ typedef struct Monster {
     float level;     /* danger level it was made for (loot quality) */
     /* utility spells on it: charmed (fights for a player), afraid, a portal just taken */
     float charm_t, fear_t, portal_cd;
+    /* a target it cannot get to: how long without getting closer, the closest it got, and
+     * how long it then leaves you alone */
+    float giveup_t, giveup_d, sulk_t;
     i16 charmer;     /* player slot it fights for */
     u8 alt_kind;     /* this tick's target: 0 a player, 1 a decoy or lure, 2 a monster, 3 follows its charmer */
     i16 alt_idx;     /* that decoy (effect) or monster */

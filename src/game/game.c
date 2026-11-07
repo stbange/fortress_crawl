@@ -696,7 +696,8 @@ static void update_player(Game *g, PlayerSlot *ps, const PlayerInput *in, float 
             Block in_b = chunkmap_block(&g->map, (int)floorf(ps->pl.pos.x), (int)floorf(ps->pl.pos.y), (int)floorf(ps->pl.pos.z), &known);
             if (s->fall_speed > 21.0f && !ps->pl.fly && ps->pl.move_mode == MOVE_WALK && in_b != B_WATER) {
                 tele_src(HS_FALL, 0, 0, 0);
-                game_hurt_player(g, ps, s->maxhp * 0.035f * (s->fall_speed - 21.0f), v3_add(ps->pl.pos, ps->pl.vel));
+                /* hurts, but never more than a third of your health: a misstep is not death */
+                game_hurt_player(g, ps, fminf(0.35f, 0.035f * (s->fall_speed - 21.0f)) * s->maxhp, v3_add(ps->pl.pos, ps->pl.vel));
             }
             s->fall_speed = 0;
         }

@@ -493,6 +493,7 @@ void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int 
         m->last_hitter = attacker;
         if (!g->players[attacker].st.dead) m->target = attacker; /* turn on whoever hurts you */
     }
+    m->sulk_t = 0;
     if (!m->awake) { sfx_monster(g, m, MSFX_ALERT); m->awake = true; m->state = MS_CHASE; wake_neighbours(g, m); }
     vec3 dir = v3_sub(m->pos, from);
     dir.y = 0;
@@ -1125,7 +1126,8 @@ void monsters_update(Game *g, float dt) {
         bool los = dist < 40.0f && phys_line_of_sight(c, eye, game_solid, g);
         if (all_dead) { m->awake = false; m->state = MS_IDLE; }
         if (m->alt_kind && !m->awake) { m->awake = true; m->state = MS_CHASE; }
-        if (!m->awake && !all_dead) {
+        if (m->sulk_t > 0) m->sulk_t -= dt;
+        if (!m->awake && !all_dead && m->sulk_t <= 0) {
             /* mimics wait until you are right next to them */
             if (m->type == MON_MIMIC ? (hdist < 2.4f && fabsf(dy) < 1.5f) : (dist < 7.0f || (dist < 24.0f && los))) {
                 sfx_monster(g, m, MSFX_ALERT);
@@ -1136,6 +1138,20 @@ void monsters_update(Game *g, float dt) {
         } else if (dist > 60.0f) {
             m->awake = false;
             m->state = MS_IDLE;
+        }
+        /* a melee monster that cannot get closer to its target for 6 s gives up for a while
+         * (stuck in a pit, below a ledge): no endless pacing under the player */
+        bool ranged = d->flies || m->type == MON_SKELETON || m->type == MON_WISP || m->type == MON_SHAMAN || m->type == MON_EYE ||
+                      m->type == MON_NECRO || m->type == MON_WORM;
+        if (m->awake && !ranged && !m->alt_kind && m->state == MS_CHASE && !all_dead) {
+            if (hdist < d->reach + d->hw * m->scale + 0.6f && fabsf(dy) < 1.8f) m->giveup_t = 0, m->giveup_d = hdist;
+            else if (hdist < m->giveup_d - 1.0f || m->giveup_t <= 0) { m->giveup_d = hdist; m->giveup_t = dt; }
+            else if ((m->giveup_t += dt) > 6.0f) {
+                m->awake = false;
+                m->state = MS_IDLE;
+                m->sulk_t = 10.0f;
+                m->giveup_t = 0;
+            }
         }
         vec3 want = v3(0, 0, 0);
         float speed = d->speed * (m->elite ? 1.1f : 1.0f) * (m->slow_t > 0 ? 0.45f : 1.0f) * (m->rank >= 6 ? 1.15f : 1.0f) *

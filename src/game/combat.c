@@ -297,15 +297,20 @@ static void sword_strike(Game *g, PlayerSlot *ps, bool whirl) {
     for (int i = 0; i < MAX_MONSTERS; i++) {
         Monster *m = &g->mons[i];
         if (!m->alive || m->hidden) continue;
-        vec3 c = v3_add(m->pos, v3(0, MONSTERS[m->type].h * m->scale * 0.5f, 0));
-        vec3 d = v3_sub(c, eye);
+        float mh = MONSTERS[m->type].h * m->scale;
+        vec3 c = v3_add(m->pos, v3(0, mh * 0.5f, 0)), top = v3_add(m->pos, v3(0, mh * 0.9f, 0));
+        /* reach is measured from the chest, and goes further down than up: a slime a step
+         * below can be struck as it strikes you */
+        vec3 chest = v3_add(eye, v3(0, -0.5f, 0));
+        vec3 d = v3_sub(c, chest);
         float dy = d.y;
         d.y = 0;
         float dist = v3_len(d) - MONSTERS[m->type].hw * m->scale;
-        if (dist > range || fabsf(dy) > 2.2f) continue;
+        if (dist > range || dy > 2.2f || dy < -2.8f) continue;
         float ang = acosf(clampf(v3_dot(v3_norm(d), fwd), -1.0f, 1.0f));
         if (ang > arc * 0.5f && dist > 0.4f) continue;
-        if (!phys_line_of_sight(eye, c, game_solid, g)) continue;
+        /* over a ledge's edge: seeing its top is enough */
+        if (!phys_line_of_sight(eye, c, game_solid, g) && !phys_line_of_sight(eye, top, game_solid, g)) continue;
         if (hit_all) {
             weapon_hit(g, ps, m, WPN_SWORD, dmg, ps->pl.pos, knock);
             hits++;
