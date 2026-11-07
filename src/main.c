@@ -281,19 +281,20 @@ static void demo_setup(Game *g) {
     if (!strcmp(g_demo_kind, "realmtest")) {
         /* the Sanctum's doors and comforts, step by step (log only) */
         vec3 home = p1->pl.pos;
-        s->sanctum = SANCTUM_BATH | SANCTUM_FEAST | SANCTUM_LIBRARY;
+        sanctum_set_stage(g, SP_BATH, 1);
+        sanctum_set_stage(g, SP_DINING, 2);
         realm_enter(g, p1, home, 1.0f);
         SDL_Log("realmtest: inside %d at %.1f %.1f %.1f, return set %d", realm_has(p1->pl.pos), p1->pl.pos.x, p1->pl.pos.y, p1->pl.pos.z,
                 s->realm_return_set);
         s->hp = 10; s->burn_t = 5;
-        p1->pl.pos = v3(28.5f, POCKET_G - 1.0f, 60.5f); /* in the bath */
+        p1->pl.pos = v3(POCKET_BATH_X0 + 3.5f, POCKET_G - 1.0f, POCKET_BATH_Z0 + 3.5f); /* in the bath */
         for (int k = 0; k < 30; k++) realm_update(g, 1.0f / 30);
         SDL_Log("realmtest: bath hp %.0f/%.0f burn %.1f refreshed %.0f", s->hp, s->maxhp, s->burn_t, s->refreshed_t);
         float before = s->maxhp;
-        p1->pl.pos = v3(POCKET_TABLE_X0 - 1.0f, (float)POCKET_G, 60.5f); /* at the table */
+        p1->pl.pos = v3(POCKET_TABLE_X0 - 1.0f, (float)POCKET_G, POCKET_TABLE_Z0 + 5.5f); /* at the table */
         for (int k = 0; k < 60; k++) realm_update(g, 1.0f / 30);
         SDL_Log("realmtest: feast well fed %.0f maxhp %.0f -> %.0f hp %.0f", s->well_fed_t, before, s->maxhp, s->hp);
-        p1->pl.pos = v3(POCKET_BED_X0 - 1.0f, (float)POCKET_G, 106.5f); /* by the bed */
+        p1->pl.pos = v3(POCKET_BED_X0 - 1.0f, (float)POCKET_G, POCKET_BED_Z0 + 2.5f); /* by the bed */
         for (int k = 0; k < 90; k++) realm_update(g, 1.0f / 30);
         SDL_Log("realmtest: bed respawn %.1f %.1f %.1f (in realm %d)", s->respawn.x, s->respawn.y, s->respawn.z, realm_has(s->respawn));
         p1->gate_cd = 0;
@@ -313,10 +314,27 @@ static void demo_setup(Game *g) {
         s->equipped[WPN_SWORD] = item_roll(91, 8, RAR_RARE);
         s->weapon = WPN_SWORD;
         for (int i = 0; i < 6; i++) s->bag[i] = item_roll(300 + (u64)i, 2, RAR_COMMON);
-        s->sanctum = SANCTUM_BATH;
+        g->sanctum.keystones = 2;
+        for (int i = 0; i < 3; i++) g->sanctum.stash[i] = item_roll(700 + (u64)i, 6, RAR_RARE);
         p1->show_skills = true;
         p1->menu_tab = TAB_SHOP;
         p1->shop_sel = 3;
+        return;
+    }
+    if (!strcmp(g_demo_kind, "sanctum")) {
+        /* the Sanctum with every plot at one stage (--cast N picks it; 0 = the start), seen from
+         * above the court; --pos and --look move the camera */
+        int st = g_demo_cast < 0 ? 0 : g_demo_cast > SANCTUM_STAGES ? SANCTUM_STAGES : g_demo_cast;
+        if (st > 0)
+            for (int k = 0; k < SP_COUNT; k++) sanctum_set_stage(g, k, st);
+        if (!realm_has(p1->pl.pos)) {
+            realm_enter(g, p1, p1->pl.pos, 1.0f);
+            p1->pl.pos = v3(64.0f, POCKET_G + 40.0f, 140.0f);
+            p1->pl.yaw = -PI_F * 0.5f;
+            p1->pl.pitch = -0.5f;
+        }
+        p1->pl.fly = true;
+        p1->banner_time = 0;
         return;
     }
     if (!strcmp(g_demo_kind, "realm")) {

@@ -363,7 +363,7 @@ static bool collect(Game *g, PlayerSlot *ps, Pickup *p) {
         s->bag[slot] = p->item;
         g_tele.weapons[p->item.rarity % 5]++;
         if (p->item.unique && p->key) looted_add(g, p->key); /* a legendary of this world: found for good */
-        if (p->item.unique) g_tele.uniques_found++;
+        if (p->item.unique) { g_tele.uniques_found++; sanctum_trophy_unique(g, p->item.unique - 1); }
         if (p->item.base >= WB_CLASSIC) g_tele.lost_found++;
         sfx_player(g, ps, SFX_PICKUP_WEAPON, 1.0f);
         item_name(&p->item, name, sizeof name);
@@ -385,6 +385,14 @@ static bool collect(Game *g, PlayerSlot *ps, Pickup *p) {
         return false; /* read, not taken (quests.c) */
     case PK_QUEST:
         return story_collect_quest(g, ps, p);
+    case PK_KEYSTONE:
+        g->sanctum.keystones++;
+        sfx_player(g, ps, SFX_PICKUP_RELIC, 1.0f);
+        flash_add(g, at, v3(0.5f, 0.8f, 1.3f), 8.0f, 0.5f);
+        snprintf(buf, sizeof buf, "A KEYSTONE (%d) - FOR BUILDING THE SANCTUM", g->sanctum.keystones);
+        game_banner(ps, buf);
+        if (p->key) looted_add(g, p->key);
+        return true;
     case PK_CHEST:
         looted_add(g, p->key);
         if (p->amount & CHEST_VAULT) g_tele.vaults++;
@@ -400,6 +408,7 @@ static bool collect(Game *g, PlayerSlot *ps, Pickup *p) {
             int tier, region = region_at(g, p->pos, &tier);
             Item it = item_roll_region(mix64(p->key ^ 0x7A), (float)level + 3, lrand() < 0.25f ? RAR_LEGENDARY : RAR_EPIC, tier, region);
             pickup_spawn(g, PK_WEAPON, v3_add(p->pos, v3(0, 0.7f, 0)), 0, &it, 0, 0);
+            pickup_spawn(g, PK_KEYSTONE, v3_add(p->pos, v3(-0.4f, 0.8f, 0)), 0, NULL, 0, 0); /* and a keystone */
             /* and always a relic: a solved puzzle is worth more than ten chests */
             pickup_spawn(g, PK_RELIC, v3_add(p->pos, v3(0.4f, 0.8f, 0)), (int)(mix64(p->key ^ 0x5E1) % RELIC_COUNT), NULL, mix64(p->key ^ 0x5E2), 0);
             game_banner(ps, "THE VAULT'S HOARD");
@@ -501,6 +510,10 @@ void pickups_draw(Game *g, vec3 eye) {
             if (p->item.rarity >= RAR_RARE) batch3d_octa(v3_add(c, v3(0, 0.75f, 0)), 0.04f, 0.06f, p->t * 2.0f, col, true);
             break;
         }
+        case PK_KEYSTONE: /* a wedge of pale stone with a blue rune */
+            batch3d_box(c, v3(0.16f, 0.2f, 0.1f), p->t * 1.2f, v3(0.75f * l.x + 0.1f, 0.78f * l.y + 0.1f, 0.85f * l.z + 0.15f), false);
+            batch3d_box(c, v3(0.04f, 0.12f, 0.105f), p->t * 1.2f, v3(0.5f, 0.8f, 1.3f), true);
+            break;
         case PK_RELIC:
             batch3d_octa(c, 0.18f, 0.26f, p->t * 1.5f, v3(1.0f, 0.85f, 0.35f), true);
             batch3d_octa(c, 0.08f, 0.34f, -p->t * 2.0f, v3(1.0f, 1.0f, 0.8f), true);

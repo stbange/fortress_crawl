@@ -27,7 +27,13 @@
 
 static inline int cidx(int x, int y, int z) { return (y * CHUNK + z) * CHUNK + x; }
 
-typedef struct World { u64 seed; } World;
+typedef struct World {
+    u64 seed;
+    /* the Sanctum's build stages (SP_*, pocket.h), read by the generator; sanctum_gen counts
+     * every change, so chunks generated from an older state are made again */
+    u8 sanctum[16];
+    u32 sanctum_gen;
+} World;
 
 typedef struct Structure {
     u8 type, variant;

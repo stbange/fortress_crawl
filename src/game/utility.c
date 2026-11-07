@@ -507,14 +507,10 @@ bool utility_cast(Game *g, PlayerSlot *ps, int u, int rank) {
 
     case SU_SANCTUM: {
         if (realm_has(f)) return fail(ps, "YOU ARE ALREADY HOME");
-        for (int i = 0; i < MAX_EFFECTS; i++)
-            if (g->effects[i].alive && g->effects[i].type == EF_DOOR && g->effects[i].owner == ps->index) g->effects[i].alive = false;
-        vec3 at;
-        if (!stand_spot(g, v3_add(f, v3_scale(fwd, 2.2f)), &at)) at = v3_add(f, v3_scale(fwd, 1.2f));
-        Effect *e = effect_new(g, EF_DOOR, EL_HOLY, ps->index, at, 30.0f, 0, 0.9f);
-        if (!e) return false;
-        e->yaw = ps->pl.yaw + PI_F; /* facing you */
-        game_banner(ps, "THE SANCTUM DOOR OPENS - STEP THROUGH");
+        if (ps->ritual_t > 0) return false;
+        /* the ritual: three seconds in a circle of light; a hit breaks it (game_hurt_player) */
+        ps->ritual_t = 3.0f;
+        game_banner(ps, "THE RITUAL BEGINS - THREE SECONDS, AND DO NOT GET HIT");
         return true;
     }
     default: return false;
@@ -525,7 +521,38 @@ bool utility_cast(Game *g, PlayerSlot *ps, int u, int rank) {
 
 static void tick(float *t, float dt) { if (*t > 0) *t = fmaxf(0.0f, *t - dt); }
 
+/* The ritual is done: the door stands before you for 30 seconds. */
+static void open_door(Game *g, PlayerSlot *ps) {
+    for (int i = 0; i < MAX_EFFECTS; i++)
+        if (g->effects[i].alive && g->effects[i].type == EF_DOOR && g->effects[i].owner == ps->index) g->effects[i].alive = false;
+    vec3 f = feet_of(ps), fwd = flat_dir(ps->pl.yaw), at;
+    if (!stand_spot(g, v3_add(f, v3_scale(fwd, 2.2f)), &at)) at = v3_add(f, v3_scale(fwd, 1.2f));
+    Effect *e = effect_new(g, EF_DOOR, EL_HOLY, ps->index, at, 30.0f, 0, 0.9f);
+    if (!e) return;
+    e->yaw = ps->pl.yaw + PI_F; /* facing you */
+    sfx_at(g, SFX_REALM_DOOR, at, 1.0f);
+    flash_add(g, v3_add(at, v3(0, 1.2f, 0)), v3(1.3f, 1.0f, 0.6f), 10.0f, 0.6f);
+    game_banner(ps, "THE SANCTUM DOOR OPENS - STEP THROUGH");
+}
+
+void utility_ritual_break(Game *g, PlayerSlot *ps) {
+    if (ps->ritual_t <= 0) return;
+    ps->ritual_t = 0;
+    ps->st.spell_cd = fmaxf(ps->st.spell_cd, 5.0f);
+    particles_burst(g, v3_add(ps->pl.pos, v3(0, 0.3f, 0)), v3(1.0f, 0.85f, 0.5f), 20, 4.0f, 0.05f, true);
+    sfx_player(g, ps, SFX_SPELL_FIZZLE, 1.0f);
+    game_banner(ps, "THE RITUAL BREAKS");
+}
+
 static void player_timers(Game *g, PlayerSlot *ps, float dt) {
+    if (ps->ritual_t > 0) {
+        if (ps->st.dead || realm_has(ps->pl.pos)) ps->ritual_t = 0;
+        else if ((ps->ritual_t -= dt) <= 0) { ps->ritual_t = 0; open_door(g, ps); }
+        else if (fmodf(ps->ritual_t * 10.0f, 1.0f) < dt * 10.0f) {
+            float a = ps->ritual_t * 4.0f;
+            particles_burst(g, v3_add(ps->pl.pos, v3(cosf(a) * 1.2f, 0.1f, sinf(a) * 1.2f)), v3(1.0f, 0.85f, 0.5f), 2, 1.5f, 0.05f, true);
+        }
+    }
     Stats *s = &ps->st;
     bool had_wings = s->wings_t > 0, had_lev = s->levitate_t > 0;
     tick(&s->levitate_t, dt); tick(&s->wings_t, dt); tick(&s->glide_t, dt); tick(&s->feather_t, dt); tick(&s->climb_t, dt);
@@ -709,6 +736,13 @@ void utility_draw_door(Game *g, vec3 p, float yaw, float open, bool home) {
 }
 
 void utility_draw_world(Game *g, PlayerSlot *viewer) {
+    for (int i = 0; i < MAX_PLAYERS; i++) {
+        PlayerSlot *ps = &g->players[i];
+        if (!ps->active || ps->ritual_t <= 0) continue;
+        float k = 1.0f - ps->ritual_t / 3.0f; /* the circle closes as the ritual goes on */
+        ring(ps->pl.pos, 1.3f, 24, g->time * 1.5f, v3(1.0f, 0.85f, 0.45f), 0.06f);
+        ring(ps->pl.pos, 1.3f * (1.0f - k) + 0.3f, 12, -g->time * 3.0f, v3(1.2f, 1.0f, 0.6f), 0.05f);
+    }
     for (int i = 0; i < MAX_EFFECTS; i++) {
         Effect *e = &g->effects[i];
         if (!e->alive || e->type < EF_DECOY) continue;

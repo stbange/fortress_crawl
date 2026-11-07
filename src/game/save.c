@@ -12,7 +12,7 @@
 
 #define SAVE_MAGIC 0x56534346u /* "FCSV" */
 #define SAVE_VERSION 6 /* 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms;
-                          6: weapons with materials, powers, legendaries and memory */
+                          6: weapons with materials, powers, legendaries and memory; 7: the Sanctum per world */
 #define EXPLORED_BUDGET (1200 * 1024)
 
 /* ---------- storage backends ---------- */
@@ -227,6 +227,17 @@ bool game_save(Game *g) {
         w32(&b, (u32)g->lore[i].a); w32(&b, (u32)g->lore[i].b); w32(&b, (u32)g->lore[i].c);
     }
     write_explored(&b, g);
+    /* the world's Sanctum */
+    w8(&b, SP_COUNT);
+    for (int i = 0; i < SP_COUNT; i++) w8(&b, g->world.sanctum[i]);
+    w32(&b, (u32)g->sanctum.keystones);
+    w16(&b, STASH_SIZE);
+    for (int i = 0; i < STASH_SIZE; i++) witem(&b, &g->sanctum.stash[i]);
+    w16(&b, UNIQUE_COUNT);
+    for (int i = 0; i < UNIQUE_COUNT; i++) w8(&b, g->sanctum.trophy[i]);
+    w16(&b, (u16)g->sanctum.nnamed);
+    for (int i = 0; i < g->sanctum.nnamed; i++) w64(&b, g->sanctum.named[i]);
+    wf(&b, g->sanctum.library_t);
     char key[64];
     save_key(g->opt.seed, key, sizeof key);
     bool ok = store_write(key, b.d, b.n);
@@ -406,6 +417,47 @@ bool game_load(Game *g) {
             if (mask[k >> 3] & (1 << (k & 7))) bits[k] = r8(&r);
         if (!r.bad && r.ver >= 3) explore_import(g, cx, cy, cz, bits); /* old maps show old layouts */
     }
+    if (r.ver >= 7) {
+        int np = r8(&r);
+        for (int i = 0; i < np; i++) {
+            u8 v = r8(&r);
+            if (i < SP_COUNT) g->world.sanctum[i] = (u8)MINI(v, SANCTUM_STAGES);
+        }
+        g->sanctum.keystones = (int)r32(&r);
+        int ns = r16(&r);
+        for (int i = 0; i < ns; i++) {
+            Item it = ritem(&r);
+            if (i < STASH_SIZE) g->sanctum.stash[i] = it;
+        }
+        int nt = r16(&r);
+        for (int i = 0; i < nt; i++) {
+            u8 v = r8(&r);
+            if (i < UNIQUE_COUNT) g->sanctum.trophy[i] = v;
+        }
+        int nn = r16(&r);
+        for (int i = 0; i < nn; i++) {
+            u64 k = r64(&r);
+            if (i < MAX_TROPHY_NAMED) g->sanctum.named[g->sanctum.nnamed++] = k;
+        }
+        g->sanctum.library_t = rf(&r);
+        if (r.bad) { /* a broken tail: the Sanctum as a new world has it */
+            memset(&g->sanctum, 0, sizeof g->sanctum);
+            world_init(&g->world, g->world.seed);
+        }
+    } else {
+        /* before: the comforts were bought per character; the world keeps what any of them had */
+        for (int i = 0; i < MAX_PLAYERS; i++) {
+            if (!g->saved[i].valid) continue;
+            u8 f = g->saved[i].st.sanctum;
+            if (f & SANCTUM_BATH) g->world.sanctum[SP_BATH] = (u8)MAXI(g->world.sanctum[SP_BATH], 1);
+            if (f & SANCTUM_FEAST) g->world.sanctum[SP_DINING] = (u8)MAXI(g->world.sanctum[SP_DINING], 1);
+            if (f & SANCTUM_LIBRARY) {
+                g->world.sanctum[SP_ISLAND] = (u8)MAXI(g->world.sanctum[SP_ISLAND], 2);
+                g->world.sanctum[SP_LIBRARY] = (u8)MAXI(g->world.sanctum[SP_LIBRARY], 2);
+            }
+        }
+    }
+    g->world.sanctum_gen++;
     free(d);
     SDL_Log("Loaded the save of world %s: %d characters, %u chests and relics taken, %u map chunks", g->opt.seed_text,
             g->saved[0].valid + g->saved[1].valid + g->saved[2].valid + g->saved[3].valid, nl, nc);

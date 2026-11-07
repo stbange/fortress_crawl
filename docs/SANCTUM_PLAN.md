@@ -1,9 +1,10 @@
 # The Sanctum: implementation plan
 
-Status: **plan only.** Today the Sanctum is a finished castle on a large island, the same for
-everyone, with the bath, the feast and the library bought back with gold
-(`gen_pocket.c`, `realm.c`, `shop.c`). This plan turns it into a home that starts as a ruin
-and grows, and gives it a clear place in the game.
+Status: **implemented** (steps 1-6 of section 5, November 2026). The Sanctum is one per
+world, starts as a ruin and is built up plot by plot in the SHOP tab at home; keystones drop
+from vault hoards, named enemies and bosses; the door is a ritual. Still open: the drafting
+table as a thing to use (building is in the SHOP tab, anywhere in the Sanctum), the shop
+counter and stash as places (both work anywhere at home), and the questions in section 6.
 
 Decisions (November 2026):
 1. **One Sanctum per world**, shared by everyone playing it (split screen now, online later).

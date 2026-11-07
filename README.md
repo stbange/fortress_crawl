@@ -12,7 +12,7 @@ This is an early prototype. It has **world generation, lighting, the retro rende
 Hexen-style combat against twenty kinds of monsters, 21 weapon types (each world knows its
 own four lost arts) with rarities, affixes, materials, powers, legendaries and a memory of
 their kills, 126 spells (38 of them utility spells such as flight, portals and a conjured keep), a
-pocket realm with your own castle, loot, chests and relics, an inventory, a classless skill tree,
+home in the sky that grows from a ruin into a castle, loot, chests and relics, an inventory, a classless skill tree,
 shrines, an explored-cells map, split-screen co-op for up to four players, saving, and
 generated stories: a motive per character, an endless metaplot of named enemies, inscriptions,
 notes of the dead and bounty boards**, and **sound**: every monster, weapon, spell, trap and
@@ -55,12 +55,12 @@ for the full plan and [`docs/STORY.md`](docs/STORY.md) for how the stories work.
 | A light beam puzzle: turn the mirrors toward the lock | The watchers must look at the gate |
 | ![Spike trap](docs/screenshots/trap_spikes.png) | ![Flame vent](docs/screenshots/trap_flames.png) |
 | Spikes stab every few seconds | A flame vent |
-| ![The Sanctum](docs/screenshots/sanctum.png) | ![The feast](docs/screenshots/sanctum_feast.png) |
-| The Sanctum: your castle in the pocket realm, behind the Sanctum Door | The feast in the dining hall: Well Fed |
-| ![The bath](docs/screenshots/sanctum_bath.png) | ![Warden's Keep](docs/screenshots/spell_keep.png) |
-| The bath hall: Refreshed | Warden's Keep, a conjured keep of real stone |
-| ![The shop](docs/screenshots/shop.png) | |
-| The SHOP tab at the Sanctum library's shrine | |
+| ![The Sanctum](docs/screenshots/sanctum.png) | ![The Sanctum built](docs/screenshots/sanctum_built.png) |
+| The Sanctum at the start: a ruined hall on a small island | Every plot at stage 3: towers, walls, the garden, the domed library |
+| ![The hall](docs/screenshots/sanctum_hall.png) | ![The shop](docs/screenshots/shop.png) |
+| The hall at stage 2: a roof, coloured glass, a chandelier | The SHOP tab at home: building, the stash, everything for sale |
+| ![Warden's Keep](docs/screenshots/spell_keep.png) | |
+| Warden's Keep, a conjured keep of real stone | |
 
 ## Build
 
@@ -201,16 +201,24 @@ and ice are real blocks for a while, then they crumble.
 Falls from high up hurt, at most a third of your health (Feather Fall, Levitate, Wings and
 water save you). Recall cast again within a minute takes you back to where you cast it.
 
-**The Sanctum:** the Sanctum Door opens a door to your own castle in a pocket realm, on a
-floating island under an open sky: a garden with a fountain, a great hall with a throne, a
-library, and three rooms that do something. At first only the bed is made; the library's
-shrine sells the rest back to life (the bath 500 gold, the feast 1000, the library 1500, which
-then gives a free scroll every 20 minutes). **Bathe** in the pool of the bath hall (wounds
-close, burns and poison wash off, and you are *Refreshed*: mana flows twice as fast for 15
-minutes), sit down at the **feast** in the dining hall (everything restored and *Well Fed*:
-20% more health that comes back by itself, for 20 minutes), and **rest** in the bedchamber
-(you will wake there when you fall, and the game is saved). The door in the garden takes you
-back to where you opened it. Food and cooking are planned next: see
+**The Sanctum:** the Sanctum Door opens a door to your home on a floating island far above
+the world, one per world and shared by everyone playing it. Opening it is a **3-second
+ritual**: a circle of light forms round you (you move slowly inside it), and any hit breaks it
+(mana spent, 5 seconds to wait). The home starts as a ruin: a broken hall with a bed and a
+campfire on a small island, a forecourt with the door back. It **grows**: the island is a grid
+of 4 x 4 plots of 32 m, and every plot (the island itself, the hall, the court, the bath, the
+dining hall, the library, the garden, the armory) is built up in up to three stages, for gold
+and **keystones**, a rare find (one in every vault hoard, one from every named enemy from
+danger level 6, and now and then from a boss). The second island stage makes room for the
+library, garden and armory; the third adds towers, an outer wall and waterfalls. What you
+build appears at once. **Bathe** in the pool (wounds close, burns and poison wash off,
+*Refreshed*: mana flows twice as fast, 10 to 25 minutes by stage), sit down at the **table**
+(everything restored and *Well Fed*: 20% more health that comes back by itself, 10 to 30
+minutes), **rest** in the bed (you will wake there when you fall, and the game is saved). The
+library gives a free scroll every 20 minutes (12 with the dome); the armory shows the
+legendaries you found on racks, the banners of the named enemies you killed and statues for
+the chapters you finished. The **stash** keeps 30 weapons the bag has no room for. The door
+in the court takes you back to where you opened it. Food and cooking are planned next: see
 [`docs/FOOD.md`](docs/FOOD.md).
 
 **Stories:** every character picks a motive (revenge, glory, riches or truth). It turns the
@@ -309,7 +317,7 @@ fortress_crawl [--seed N] [--pos x y z] [--look yaw pitch] [--fly] [--radius n] 
                [--shot file.bmp] [--shot-time seconds]
                [--demo combat|sword|death|skills|map|coop|menu|inventory|spells|loot|magic|bestiary|
                        motive|story|read|named|storytest|vault|levers|plates|statues|beam|
-                       darts|spikes|flames|mechtest|cast|realmtest|shop] [--cast n]
+                       darts|spikes|flames|mechtest|cast|realmtest|shop|sanctum] [--cast n]
                [--bot STYLE] [--bot-minutes n] [--bot-log file]
                [--players n] [--test-pad] [--touch] [--fresh] [--persist] [--fullbright] [--chapter n]
 ```
@@ -332,7 +340,8 @@ that joins, walks, turns and attacks, to test the gamepad path without hardware.
 `--demo cast --cast n` casts utility spell n (the order of the spell book, 0 = Heal,
 37 = Sanctum Door) in an open place and steps back to look at it; `--demo realmtest` walks
 through the Sanctum (door, bath, feast, bed, door home) and logs each step. `--demo shop --pos
-51.5 9608 101.5` opens the shop at the Sanctum library's shrine. `--bot STYLE` plays by itself
+47.5 9608 80.5` opens the shop at home in the Sanctum; `--demo sanctum --cast N` shows the
+Sanctum from above with every plot at stage N (0 is the start). `--bot STYLE` plays by itself
 (see [`docs/PLAYTEST.md`](docs/PLAYTEST.md)). `--touch`
 shows the touch controls from the start.
 
@@ -343,8 +352,9 @@ Thread key (G, right stick click, PATH) takes you back where you fell, for anoth
 
 **The shop** (the SHOP tab of the character menu): anywhere, scrap every weapon in the bag
 worse than the one you wear. At a shrine: health potions (you carry at most 5) and mana
-potions, a rank for the active spell, new affixes for the weapon in hand, another of a relic
-you carry, and at the Sanctum library's shrine the rooms of the Sanctum.
+potions. At home in the Sanctum, everything: potions, a rank for the active spell, new
+affixes for the weapon in hand, another of a relic you carry, the library's scroll, the
+stash, and building the Sanctum (each plot's next stage, its cost and what it brings).
 
 ## The world farther out
 

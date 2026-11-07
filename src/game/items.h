@@ -163,7 +163,7 @@ extern const char *RELIC_BONUS_TEXT[4];
 /* ---------- things on the ground ---------- */
 
 /* PK_TRACE: something to read (amount = TR_*), PK_QUEST: an item a mission asks for. */
-enum { PK_GOLD, PK_POTION_HP, PK_POTION_MP, PK_SCROLL, PK_WEAPON, PK_RELIC, PK_CHEST, PK_TRACE, PK_QUEST, PK_COUNT };
+enum { PK_GOLD, PK_POTION_HP, PK_POTION_MP, PK_SCROLL, PK_WEAPON, PK_RELIC, PK_CHEST, PK_TRACE, PK_QUEST, PK_KEYSTONE, PK_COUNT };
 
 typedef struct Pickup {
     bool alive;

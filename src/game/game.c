@@ -174,6 +174,7 @@ void game_hurt_player(Game *g, PlayerSlot *ps, float dmg, vec3 from) {
     if (s->ranks[SK_LAST_STAND] && s->hp < s->maxhp * 0.3f) dmg *= 0.5f;
     if (s->stoneskin_t > 0) dmg *= 0.5f;
     s->scry_t = 0; /* a blow breaks Clairvoyance */
+    utility_ritual_break(g, ps); /* and the Sanctum ritual */
     if (s->ward > 0) {
         /* the ward takes it first */
         float absorbed = fminf(s->ward, dmg);
@@ -726,7 +727,6 @@ static void update_player(Game *g, PlayerSlot *ps, const PlayerInput *in, float 
     s->invuln = fmaxf(0.0f, s->invuln - dt);
     if (s->fell_t > 0) s->fell_t -= dt;
     if (s->recall_t > 0) s->recall_t -= dt;
-    if (s->library_t > 0) s->library_t -= dt;
     /* the last ground that was safe to stand on (where "back where you fell" leads) */
     if (ps->pl.on_ground && !ps->pl.fly && s->since_hurt > 1.0f) {
         bool known;

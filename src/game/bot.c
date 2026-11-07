@@ -234,7 +234,7 @@ static vec3 mon_centre(const Monster *m) { return v3_add(m->pos, v3(0, MONSTERS[
 static bool want_pickup(const PlayerSlot *ps, const Pickup *p) {
     const Stats *s = &ps->st;
     switch (p->kind) {
-    case PK_GOLD: case PK_SCROLL: case PK_RELIC: case PK_CHEST: case PK_QUEST: return true;
+    case PK_GOLD: case PK_SCROLL: case PK_RELIC: case PK_CHEST: case PK_QUEST: case PK_KEYSTONE: return true;
     case PK_POTION_HP: return s->potions_hp < POTION_HP_MAX;
     case PK_POTION_MP: return s->potions_mp < POTION_MP_MAX;
     case PK_WEAPON: {
@@ -255,10 +255,9 @@ static void plan(PlayerSlot *ps) {
     if (realm_has(feet)) {
         vec3 to;
         const Stats *s = &ps->st;
-        bool want_feast = !(s->sanctum & SANCTUM_FEAST) && s->gold >= 1000, want_bath = !(s->sanctum & SANCTUM_BATH) && s->gold >= 500;
-        if ((want_feast || want_bath) && !B.shopped_realm) to = v3(51.5f, POCKET_G, 101.5f); /* the library's shrine */
-        else if (s->well_fed_t <= 0 && (s->sanctum & SANCTUM_FEAST)) to = v3(POCKET_TABLE_X0 - 1.5f, POCKET_G, (POCKET_TABLE_Z0 + POCKET_TABLE_Z1) * 0.5f);
-        else if (s->refreshed_t <= 0 && (s->sanctum & SANCTUM_BATH)) to = v3((POCKET_BATH_X0 + POCKET_BATH_X1) * 0.5f, POCKET_G - 1, (POCKET_BATH_Z0 + POCKET_BATH_Z1) * 0.5f);
+        int ds = sanctum_stage(G, SP_DINING), bs = sanctum_stage(G, SP_BATH);
+        if (s->well_fed_t <= 0 && ds >= 1) to = v3(POCKET_TABLE_X0 - 1.5f, POCKET_G, (ds == 1 ? POCKET_TABLE_Z0_SHORT + POCKET_TABLE_Z1_SHORT : POCKET_TABLE_Z0 + POCKET_TABLE_Z1) * 0.5f);
+        else if (s->refreshed_t <= 0 && bs >= 1) to = v3((POCKET_BATH_X0 + POCKET_BATH_X1) * 0.5f, POCKET_G - 1, (POCKET_BATH_Z0 + POCKET_BATH_Z1) * 0.5f);
         else if (B.realm_rested < 1) to = v3(POCKET_BED_X0 - 1.5f, POCKET_G, (POCKET_BED_Z0 + POCKET_BED_Z1) * 0.5f);
         else to = v3(POCKET_EXIT_X, POCKET_G, POCKET_EXIT_Z);
         /* the realm is bigger than the search: walk toward the far goal through the nearest cell */
@@ -773,10 +772,18 @@ bool bot_step(Game *g, PlayerInput *in, float dt) {
         B.next_shop = B.t + 30.0f;
         int bought = 0;
         if (realm_has(ps->pl.pos)) {
-            if (shop_buy_kind(g, ps, SH_FEAST)) bought++;
-            if (shop_buy_kind(g, ps, SH_BATH)) bought++;
-            if (s->gold > 3000 && shop_buy_kind(g, ps, SH_LIBRARY)) bought++;
+            /* build up the Sanctum: the comforts first, then wider, then the rest */
+            static const int ORDER[SP_COUNT] = { SP_DINING, SP_BATH, SP_ISLAND, SP_LIBRARY, SP_ARMORY, SP_GARDEN, SP_HALL, SP_COURT };
+            for (int k = 0; k < SP_COUNT; k++)
+                if (s->gold > 400 && shop_buy_arg(g, ps, SH_BUILD, ORDER[k])) {
+                    bought++;
+                    logf_("%7.1f BUILD plot %d stage %d (gold left %d, keystones %d)\n", B.t, ORDER[k], sanctum_stage(g, ORDER[k]), s->gold,
+                          g->sanctum.keystones);
+                }
             if (shop_buy_kind(g, ps, SH_SCROLL)) bought++;
+            int used = 0;
+            for (int i = 0; i < BAG_SIZE; i++) used += s->bag[i].used;
+            if (used > BAG_SIZE - 4 && shop_buy_kind(g, ps, SH_STORE)) bought++;
             B.shopped_realm = true;
         }
         while (s->potions_hp < POTION_HP_MAX && shop_buy_kind(g, ps, SH_POTION_HP)) bought++;
@@ -808,6 +815,7 @@ bool bot_step(Game *g, PlayerInput *in, float dt) {
                 return true;
             }
         }
+        if (ps->ritual_t > 0 && !realm_has(ps->pl.pos)) return true; /* the ritual: stand still */
         B.realm_phase = realm_has(ps->pl.pos) ? 2 : 0;
         B.npath = 0;
     }

@@ -730,6 +730,7 @@ void combat_update(Game *g, float dt) {
         if (s->chill_t > 0) { s->chill_t -= dt; ps->pl.speed_mult *= 0.6f; }
         if (s->stoneskin_t > 0) ps->pl.speed_mult *= 0.75f;
         if (s->steed_t > 0) ps->pl.speed_mult *= 1.9f;
+        if (ps->ritual_t > 0) ps->pl.speed_mult *= 0.4f; /* slow, inside the circle */
         if (s->burn_t > 0) {
             s->burn_t -= dt;
             game_dot_player(g, ps, s->burn_dps * dt);

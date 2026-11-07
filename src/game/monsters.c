@@ -525,7 +525,9 @@ void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int 
         if (m->elite) flash_add(g, c, v3(1.0f, 0.6f, 0.3f), 8.0f, 0.4f);
         loot_drop(g, m->pos, m->level, m->elite, m->named_kind ? 0.5f : 0.0f);
         if (m->story_key) story_on_kill(g, m);
+        if (m->named_kind && m->story_key) sanctum_trophy_named(g, m->story_key);
         if (m->named_kind && m->story_key && m->level >= 6.0f) {
+            pickup_spawn(g, PK_KEYSTONE, v3_add(m->pos, v3(0.5f, 0.6f, 0)), 0, NULL, 0, 0); /* named enemies far out carry a keystone */
             /* a named enemy carries one of this world's legendaries (each is found once) */
             int id = (int)(m->story_key % UNIQUE_COUNT);
             u64 key = mix64(g->world.seed ^ 0x11E6ULL ^ (u64)id * 0x9E3779B9ULL) | 1;
@@ -552,6 +554,7 @@ void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int 
             Item it = item_roll_region(seed, m->level + 2.0f, RAR_RARE, tier, region);
             pickup_spawn(g, PK_WEAPON, v3_add(m->pos, v3(0, 0.8f, 0)), 0, &it, 0, 0);
             loot_drop(g, m->pos, m->level + 2.0f, true, 0.5f);
+            if ((mix64(m->chunk_key ^ 0x4E15ULL) & 3) == 0) pickup_spawn(g, PK_KEYSTONE, v3_add(m->pos, v3(-0.5f, 0.6f, 0)), 0, NULL, 0, 0);
             flash_add(g, c, v3_scale(m->glow, 1.5f), 14.0f, 0.8f);
             particles_burst(g, c, m->glow, 30, 6.0f, 0.1f, true);
             if (!m->named_kind) sfx_at(g, SFX_NAMED_DEATH, c, 1.0f);

@@ -209,6 +209,7 @@ static bool submit_gen(ChunkMap *m, int cx, int cy, int cz) {
     c->state = CH_GENERATING;
     c->has_mesh = c->mesh_queued = false;
     c->pins = 0;
+    c->gen_id = m->world->sanctum_gen;
     GenJob *g = calloc(1, sizeof *g);
     g->base.run = gen_run;
     g->base.done = gen_done;
@@ -324,6 +325,26 @@ bool chunkmap_set_block(ChunkMap *m, int wx, int wy, int wz, Block b) {
     c->blocks[cidx(lx, ly, lz)] = b;
     c->remesh = true;
     for (int i = 0; i < nn; i++) nb[i]->remesh = true;
+    return true;
+}
+
+bool chunkmap_regenerate(ChunkMap *m, int cx, int cy, int cz) {
+    Chunk *c = chunkmap_get(m, cx, cy, cz);
+    if (!editable(c)) return false;
+    for (int dz = -1; dz <= 1; dz++)
+        for (int dy = -1; dy <= 1; dy++)
+            for (int dx = -1; dx <= 1; dx++) {
+                Chunk *n = chunkmap_get(m, cx + dx, cy + dy, cz + dz);
+                if (n && n->state == CH_READY && (n->pins > 0 || n->mesh_queued)) return false;
+            }
+    c->gen_id = m->world->sanctum_gen;
+    world_generate_chunk(m->world, cx, cy, cz, c->blocks, &c->info);
+    for (int dz = -1; dz <= 1; dz++)
+        for (int dy = -1; dy <= 1; dy++)
+            for (int dx = -1; dx <= 1; dx++) {
+                Chunk *n = chunkmap_get(m, cx + dx, cy + dy, cz + dz);
+                if (n && n->state == CH_READY) n->remesh = true;
+            }
     return true;
 }
 

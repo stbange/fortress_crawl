@@ -13,7 +13,14 @@ static const u8 PORTAL_SIZE[P_TYPE_COUNT][2] = { { 3, 4 }, { 1, 2 }, { 1, 1 }, {
 #define SUPER 6            /* megastructure placement grid, in chunks */
 #define STRUCT_CHANCE 0.7f
 
-void world_init(World *w, u64 seed) { w->seed = seed; }
+void world_init(World *w, u64 seed) {
+    memset(w, 0, sizeof *w);
+    w->seed = seed;
+    /* a new world's Sanctum: a small island, a ruined hall, the court with the door home */
+    w->sanctum[SP_ISLAND] = 1;
+    w->sanctum[SP_HALL] = 1;
+    w->sanctum[SP_COURT] = 1;
+}
 
 bool world_is_exterior(int cx, int cy, int cz) {
     return cy >= 0 && cx >= -3 && cx <= -1 && cz >= -2 && cz <= 1;

@@ -390,12 +390,17 @@ in `src/world/mech.h`.
   the enemy projectiles' time.
 - **Fall damage** above about 9 m of free fall, unless something slows the fall or you land
   in water.
-- **The Sanctum** (`src/world/gen_pocket.c`, `src/game/realm.c`, `src/world/pocket.h`): a
-  castle on a floating island at chunk layer 300, built by hand from fills: garden, great
-  hall, bath hall, dining hall, library with a shrine, bedchamber, four towers. No monsters,
-  no loot, no traces; its own warm palette (flavor `FL_SANCTUM`, arch `ARCH_POCKET`). The bath
-  gives *Refreshed* (mana x2), the feast *Well Fed* (+20% health, regeneration), the bed sets
-  the respawn and saves. The door home is kept in the save (version 4).
+- **The Sanctum** (`src/world/gen_pocket.c`, `src/game/realm.c`, `src/world/pocket.h`), see
+  [`SANCTUM_PLAN.md`](SANCTUM_PLAN.md): one per world (`Game.sanctum`: keystones, a stash of
+  30, trophies, the library's timer; save version 7, older saves migrate their rooms). A
+  floating island at chunk layer 300 on a grid of 4 x 4 plots of 32 m; each plot has a stage
+  0-3 in `World.sanctum`, which the generator reads. Building a stage bumps
+  `World.sanctum_gen`; chunks generated under an older one are generated again at once
+  (`chunkmap_regenerate`). The door is a 3-second ritual (`PlayerSlot.ritual_t`) that a hit
+  breaks. No monsters, no loot, no traces; its own palette (flavor `FL_SANCTUM`, arch
+  `ARCH_POCKET`) and a night sky with three moons. The bath gives *Refreshed* (mana x2), the
+  table *Well Fed* (+20% health, regeneration), the bed sets the respawn and saves; the full
+  shop is here.
 - **Food and cooking** are planned in [`FOOD.md`](FOOD.md).
 
 ## 7. Status
@@ -418,7 +423,7 @@ Done:
 - Weapons that differ from world to world (arms.c): nine lost arts of which a world knows four,
   materials by region, powers (trigger + effect), twenty legendaries per world, and weapons that
   remember their kills (titles at 30 of a kind, a hidden affix at 75).
-- A plan for a Sanctum that starts as a ruin and grows: [`SANCTUM_PLAN.md`](SANCTUM_PLAN.md).
+- A Sanctum that starts as a ruin and grows, built with gold and keystones: [`SANCTUM_PLAN.md`](SANCTUM_PLAN.md).
 - The balance pass from those notes ([`BALANCE_PLAN.md`](BALANCE_PLAN.md)): danger that keeps up,
   a costlier death, a shop for gold, melee across ledges, safer stairs, a nearer first chapter.
 - Screenshot and demo modes (`--shot`, `--demo combat|sword|death|skills|map|coop|menu|

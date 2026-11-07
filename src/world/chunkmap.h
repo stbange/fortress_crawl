@@ -28,6 +28,7 @@ typedef struct Chunk {
     int theme_slot;
     int pins; /* mesh jobs currently reading this chunk */
     bool remesh; /* a block changed: build the mesh again */
+    u32 gen_id;  /* the world's sanctum_gen when it was generated */
 } Chunk;
 
 typedef struct ChunkStats {
@@ -57,6 +58,9 @@ void chunkmap_update(ChunkMap *m, const vec3 *centres, int ncentres);
 void chunkmap_draw(ChunkMap *m, vec3 cam);
 /* Loaded chunk or NULL. */
 Chunk *chunkmap_get(ChunkMap *m, int cx, int cy, int cz);
+/* Generates a loaded chunk again (on this thread) and meshes it and its neighbours again;
+ * false if it is busy (being meshed or read by a mesh job): try again next frame. */
+bool chunkmap_regenerate(ChunkMap *m, int cx, int cy, int cz);
 /* Block at world coordinates; *known is false if the chunk is not generated yet. */
 Block chunkmap_block(ChunkMap *m, int wx, int wy, int wz, bool *known);
 /* Light at a world cell (r, g, b, fire as 0..15); false if not known yet. */
