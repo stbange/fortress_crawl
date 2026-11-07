@@ -439,6 +439,7 @@ Known gaps:
   and draw-call time of one. Gamepad buttons cannot be remapped yet.
 - Touch controls are tested in an emulated phone browser only; feel and real-device speed
   still need checking (the web build generates chunks on the main thread).
+  A plan for easier steering on touch: [`TOUCH_PLAN.md`](TOUCH_PLAN.md).
 
 ## 8. Milestones
 
