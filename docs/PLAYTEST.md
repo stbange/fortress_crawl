@@ -151,3 +151,39 @@ SDL_AUDIO_DRIVER=dummy xvfb-run -a ./build/fortress_crawl --seed 42 --fresh --mu
 A 30-minute run takes 2-5 minutes. The log has a status line every 15 s, events (DEATH
 with its cause, LEVEL, TIER, FALL, CLOSECALL, STALEMATE, HARDSTUCK, REALM) and a summary:
 damage taken by source and by monster, kills by kind and grade, loot, skills and spells.
+
+## 4. After the balance pass
+
+The changes of [`BALANCE_PLAN.md`](BALANCE_PLAN.md) were made in six steps, with a batch of
+16 runs after each; the last batch had 32 runs on five seeds (1337, 42, 777, 2024, 99, 7).
+Before (the second round above) and after, per half hour of play:
+
+| Measure | Target | Before | After |
+|---|---|---|---|
+| Deaths, delver / explorer / cautious | 1-3 / 0-2 / 0-1 | 0 / 0 / 0 | 1.5 / 0.4 / 0 |
+| Close calls (below 15% health) | 2-6 | 0.1 | 1.9 (delvers 10-13) |
+| Runs without a health potion | under a quarter | 12 of 16 | 11 of 32 (archers and casters) |
+| First kill (median) | within 90 s | 218 s | 75 s |
+| Most levels in any 3 minutes (median) | at most 3 | 4 | 3 |
+| Gold left at the end (median) | under 1000 | 1140 | 671 |
+| Stalemates per run | 0-1 | 1.6 | 0 |
+| Fall damage share | under 3% | 5% | 0% |
+| Chapters finished, quester | 1-2 | 0 | 1.4 (2-3 after the death-loop fix) |
+| Damage per kill: brute / horned / troll | 10-25 | 4 / 3 / 5 | 30 / 60 / 24 |
+
+What the batches found along the way, and was fixed:
+- **Slimes a step below a ledge** could still bite through the edge: monster blows now need a
+  clear line too (three of four deaths in the step-4 batch).
+- **A death loop**: one quester woke 61 times next to a horned boss with half its health.
+  Now monsters within 30 m of the respawn are cleared, a boss hunting you there goes back
+  for 45 s, you are safe for 4 s, and a second death within two minutes restores you fully.
+  The same seed then gave 3 deaths and 3 chapters.
+- **Burns and poison** killed delvers still holding potions: a health potion now ends them.
+
+Still open:
+- Archers and casters rarely get hurt (they keep their distance and the bot aims
+  perfectly); a person will be hit more often. Worth a human playtest of ranged play.
+- Far out (tier 3-4) the delver dies 4-7 times: an elite there hits for half its health.
+  That is the intended wall for pushing too far, but the warning signs could be clearer
+  (the region name, a danger colour on the compass line).
+- Getting stuck: about 6 hard-stuck events per run; most are the bot's pathfinding.

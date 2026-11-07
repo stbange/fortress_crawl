@@ -1,6 +1,20 @@
 # Balance and pacing: implementation plan
 
-Status: **plan only.** This answers the problems found by the automated playtests in
+Status: **done** (November 2026); results in [`PLAYTEST.md`](PLAYTEST.md), section 4.
+Where the implementation differs from the plan:
+- E1: the stairs already had a solid centre; the falls were through the ring of steps, so
+  the spiral got a second, interleaved flight (a missed step drops at most 7 blocks).
+- A5: walking up to the shrine after a death does not restore fully (you respawn right next
+  to it); instead a second death within two minutes restores fully, against death loops.
+- B2: levels need 120 x 1.4^(L-1) XP (1.3 from level 10), monster XP grows 12% per level.
+- A4: brutes, horned beasts and trolls also got more health (130, 60, 160), or they died
+  before their new attacks came.
+- H: going back where you fell uses the Golden Thread key for 15 s after a death; Recall
+  goes back when cast again within a minute (its cooldown would not allow 3 s).
+- Added from the playtests: monster blows need a clear line; potions end burns and poison;
+  respawn clears 30 m and sends a waiting boss away.
+
+Original plan: This answers the problems found by the automated playtests in
 [`PLAYTEST.md`](PLAYTEST.md). Each change names where it goes in the code and what number
 the playtest bot should show afterwards, so every step can be checked with a batch of runs
 (`--bot STYLE --bot-minutes 30`) before and after. Estimates are for one developer.
