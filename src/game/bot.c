@@ -73,7 +73,9 @@ typedef struct Bot {
     float avoid_until;
     float vertical_until; /* the thread's end is reached: now go up or down the stairs */
     bool low;
-    int realm_trips, realm_phase;
+    int realm_trips, realm_phase, realm_failed;
+    int builds;
+    float next_home; /* a trip home to spend gold, not before this */
     float max_dist, max_depth, max_height;
     int max_tier;
     float time_in_fight;
@@ -603,13 +605,16 @@ static void survive(Game *g, PlayerSlot *ps, bool in_fight) {
         drink_potion(g, ps, false);
     if (s->mana < s->maxmana * 0.15f && s->potions_mp > 0 && ps->potion_cd <= 0 && in_fight && B.style == BS_CASTER) drink_potion(g, ps, true);
     /* a trip home when worn out and nobody is close */
-    if (!in_fight && !realm_has(ps->pl.pos) && s->hp < s->maxhp * 0.5f && s->potions_hp == 0 && s->spell_cd <= 0 && B.realm_phase == 0) {
+    bool worn = s->hp < s->maxhp * 0.5f && s->potions_hp == 0;
+    bool rich = s->gold >= 2000 && B.t >= B.next_home; /* ranks, relics and building are sold at home */
+    if (!in_fight && !realm_has(ps->pl.pos) && (worn || rich) && s->spell_cd <= 0 && B.realm_phase == 0) {
         if (cast_util(g, ps, SU_SANCTUM)) {
             B.realm_phase = 1;
             B.realm_trips++;
             B.shopped_realm = false;
             B.realm_rested = 0;
-            logf_("%7.1f REALM trip (hp %.0f/%.0f)\n", B.t, s->hp, s->maxhp);
+            B.next_home = B.t + 600.0f;
+            logf_("%7.1f REALM trip (%s, hp %.0f/%.0f, gold %d)\n", B.t, worn ? "worn" : "gold", s->hp, s->maxhp, s->gold);
         }
     }
 }
@@ -652,10 +657,10 @@ static const char *SRC_NAMES[HS_COUNT] = { "melee", "projectile", "blast", "trap
 static void summary(PlayerSlot *ps) {
     Stats *s = &ps->st;
     logf_("SUMMARY style=%s minutes=%.1f level=%d kills=%d deaths=%d gold=%d max_gate_dist=%.0f max_tier=%d max_depth=%.0f max_height=%.0f "
-          "cells=%d stuck=%d hard_stuck=%d realm_trips=%d chapter=%d missions=%d lore=%d fights=%d avg_fight=%.1f fight_share=%.0f%% "
+          "cells=%d stuck=%d hard_stuck=%d realm_trips=%d realm_failed=%d keystones=%d builds=%d chapter=%d missions=%d lore=%d fights=%d avg_fight=%.1f fight_share=%.0f%% "
           "replans=%d no_goal=%d stalemates=%d close_calls=%d\n",
           STYLE_NAMES[B.style], B.t / 60.0f, s->level, s->kills, B.deaths, s->gold, B.max_dist, B.max_tier, B.max_depth, B.max_height,
-          nvisited, B.stuck_total, B.hard_stuck, B.realm_trips, s->chapter + 1, s->nmissions, G->nlore, B.fights,
+          nvisited, B.stuck_total, B.hard_stuck, B.realm_trips, B.realm_failed, G->sanctum.keystones, B.builds, s->chapter + 1, s->nmissions, G->nlore, B.fights,
           B.fights ? B.fight_time_total / B.fights : 0.0f, 100.0f * B.time_in_fight / fmaxf(1.0f, B.t), B.replans, B.no_goal, B.stalemates, B.close_calls);
     float total = 0;
     for (int i = 0; i < HS_COUNT; i++) total += g_tele.taken[i];
@@ -777,6 +782,7 @@ bool bot_step(Game *g, PlayerInput *in, float dt) {
             for (int k = 0; k < SP_COUNT; k++)
                 if (s->gold > 400 && shop_buy_arg(g, ps, SH_BUILD, ORDER[k])) {
                     bought++;
+                    B.builds++;
                     logf_("%7.1f BUILD plot %d stage %d (gold left %d, keystones %d)\n", B.t, ORDER[k], sanctum_stage(g, ORDER[k]), s->gold,
                           g->sanctum.keystones);
                 }
@@ -817,6 +823,11 @@ bool bot_step(Game *g, PlayerInput *in, float dt) {
         }
         if (ps->ritual_t > 0 && !realm_has(ps->pl.pos)) return true; /* the ritual: stand still */
         B.realm_phase = realm_has(ps->pl.pos) ? 2 : 0;
+        if (!B.realm_phase) {
+            B.realm_failed++;
+            B.next_home = B.t + 30.0f; /* try again soon */
+            logf_("%7.1f REALM trip failed (the ritual broke or the door closed)\n", B.t);
+        }
         B.npath = 0;
     }
     if (B.realm_phase == 2 && !realm_has(ps->pl.pos)) {
