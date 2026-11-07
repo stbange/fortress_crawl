@@ -183,7 +183,7 @@ Monster *monster_spawn(Game *g, int type, vec3 pos, int level, bool elite, vec3 
     int tier, region = world_region(&g->world, floordiv((int)floorf(pos.x), CHUNK), floordiv((int)floorf(pos.y), CHUNK),
                                     floordiv((int)floorf(pos.z), CHUNK), &tier);
     m->rank = (u8)tier;
-    m->element = (u8)(tier >= 2 ? region_element(region) : EL_NONE);
+    m->element = (u8)(tier >= 1 ? region_element(region) : EL_NONE);
     m->maxhp = m->hp = m->maxhp * (1.0f + 0.06f * tier);
     m->dmg *= 1.0f + 0.08f * tier;
     m->xp *= 1.0f + 0.05f * tier;
@@ -258,8 +258,18 @@ static void spawn_chunk(Game *g, Chunk *c) {
     ThemeInfo ti;
     theme_info(ci->theme, &ti);
     vec3 tint = v3(ti.mat[B_ACCENT].r / 255.0f, ti.mat[B_ACCENT].g / 255.0f, ti.mat[B_ACCENT].b / 255.0f);
+    /* half the melee packs bring someone to shoot or heal from behind */
+    int support = -1;
+    bool melee_pack = main_type != MON_SKELETON && main_type != MON_WISP && main_type != MON_SHAMAN && main_type != MON_MIMIC;
+    if (level >= 2 && n >= 2 && melee_pack && rng_chance(&r, 0.5f)) {
+        static const int SUP[3] = { MON_SKELETON, MON_WISP, MON_SHAMAN };
+        int k = rng_range(&r, 0, 2);
+        if (level < MONSTERS[SUP[k]].min_level) k = rng_range(&r, 0, 1);
+        if (level >= MONSTERS[SUP[k]].min_level) support = SUP[k];
+    }
     for (int i = 0; i < n; i++) {
         int type = (level > 1 && rng_chance(&r, 0.3f)) ? pick_weighted(rng_float(&r), w, MON_TYPE_COUNT) : main_type;
+        if (i == n - 1 && support >= 0) type = support;
         bool elite = level > 2 && rng_chance(&r, 0.04f + 0.004f * level + 0.015f * tier);
         int head = (int)ceilf(MONSTERS[type].h * (elite ? 1.35f : 1.0f)) + (MONSTERS[type].flies ? 1 : 0);
         for (int attempt = 0; attempt < 40; attempt++) {
@@ -480,7 +490,9 @@ void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int 
         /* the shield takes blows from the front: go round it */
         vec3 fw = v3(cosf(m->yaw), 0, sinf(m->yaw)), to = v3_sub(from, m->pos);
         to.y = 0;
-        if (v3_len(to) > 0.05f && v3_dot(fw, v3_norm(to)) > 0.45f) {
+        float facing = v3_len(to) > 0.05f ? v3_dot(fw, v3_norm(to)) : 0.0f;
+        if (facing < -0.45f) dmg *= 2.0f; /* its back is bare: going round pays */
+        if (facing > 0.45f) {
             dmg *= 0.25f;
             vec3 sh = v3_add(monster_centre(m), v3_scale(fw, MONSTERS[m->type].hw * m->scale + 0.1f));
             particles_burst(g, sh, v3(1.0f, 0.85f, 0.5f), 6, 3.0f, 0.03f, true);
@@ -572,7 +584,7 @@ static void monster_strike(Game *g, Monster *m, PlayerSlot *ps, float dmg, vec3 
     tele_src(HS_MELEE, m->type, m->grade, m->rank);
     game_hurt_player(g, ps, dmg, from);
     if (m->element == EL_NONE || was_dead) return;
-    player_element_hit(g, ps, m->element, dmg);
+    player_element_hit(g, ps, m->element, dmg * (m->rank < 3 ? 0.5f : 1.0f)); /* faint in the first regions */
     if (m->element == EL_SHADOW) m->hp = fminf(m->maxhp, m->hp + dmg * 0.5f);
 }
 
@@ -591,7 +603,13 @@ static void enemy_fire(Game *g, Monster *m, vec3 target) {
             p->owner = m->charmer;
         }
         p->pos = v3_add(monster_centre(m), v3(0, arrow ? 0.4f : 0.0f, 0));
-        p->vel = v3_scale(v3_norm(v3_sub(target, p->pos)), arrow ? 20.0f : 11.0f);
+        vec3 dir = v3_norm(v3_sub(target, p->pos));
+        if (arrow) { /* about 2 degrees of spread: a target on the move is often missed */
+            u64 h = mix64((u64)(g->time * 1000.0f) ^ ((u64)(m - g->mons) << 20) ^ (u64)i);
+            float a = ((float)(h & 0xFFFF) / 65536.0f - 0.5f) * 0.07f, b = ((float)((h >> 16) & 0xFFFF) / 65536.0f - 0.5f) * 0.05f;
+            dir = v3_norm(v3(dir.x * cosf(a) - dir.z * sinf(a), dir.y + b, dir.x * sinf(a) + dir.z * cosf(a)));
+        }
+        p->vel = v3_scale(dir, arrow ? 20.0f : 11.0f);
         p->dmg = m->dmg;
         p->life = 4.0f;
         p->last_hit = p->owner >= 0 ? (int)(m - g->mons) : -1;
@@ -873,6 +891,10 @@ static void windup_release(Game *g, Monster *m, const MCtx *x) {
         if (m->aux == 1) troll_throw(g, m, m->charge_dir);
         else sweep(g, m, d->reach + d->hw * m->scale + 1.0f, 80.0f, 1.2f, 6.0f);
         m->aux = 0;
+        break;
+    case MON_SKELETON:
+        if (x->los) monster_volley(g, m, v3_add(x->eye, v3(0, -0.2f, 0)));
+        m->cooldown = d->attack_time;
         break;
     case MON_BRUTE:
         if (m->aux == 1) { /* the slam: it has had enough of you standing there */
@@ -1238,9 +1260,12 @@ void monsters_update(Game *g, float dt) {
                 else if (m->type == MON_SKELETON) {
                     /* archer: keeps its distance and shoots */
                     if (los && dist < 24.0f && m->cooldown <= 0) {
+                        /* the bow creaks a moment before the arrow flies: time to step aside */
                         sfx_monster(g, m, MSFX_ATTACK);
-                        monster_volley(g, m, v3_add(eye, v3(0, -0.2f, 0)));
+                        m->state = MS_WINDUP;
+                        m->timer = 0.35f;
                         m->cooldown = d->attack_time;
+                        break;
                     }
                     if (los && dist < 16.0f) {
                         vec3 side = v3(-hdir.z, 0, hdir.x);
