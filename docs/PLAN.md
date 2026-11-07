@@ -418,6 +418,7 @@ Done:
 - Weapons that differ from world to world (arms.c): nine lost arts of which a world knows four,
   materials by region, powers (trigger + effect), twenty legendaries per world, and weapons that
   remember their kills (titles at 30 of a kind, a hidden affix at 75).
+- A plan for a Sanctum that starts as a ruin and grows: [`SANCTUM_PLAN.md`](SANCTUM_PLAN.md).
 - The balance pass from those notes ([`BALANCE_PLAN.md`](BALANCE_PLAN.md)): danger that keeps up,
   a costlier death, a shop for gold, melee across ledges, safer stairs, a nearer first chapter.
 - Screenshot and demo modes (`--shot`, `--demo combat|sword|death|skills|map|coop|menu|
