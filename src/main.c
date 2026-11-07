@@ -16,6 +16,7 @@
 #include "engine/gl.h"
 #include "engine/jobs.h"
 #include "game/game.h"
+#include "game/bot.h"
 #include "render/batch.h"
 
 static const char *g_demo_kind;
@@ -77,6 +78,9 @@ static bool parse_args(Options *o, int argc, char **argv) {
         else if (!strcmp(a, "--grade") && i + 1 < argc) g_demo_grade = atoi(argv[++i]);
         else if (!strcmp(a, "--mon") && i + 1 < argc) g_demo_mon = atoi(argv[++i]);
         else if (!strcmp(a, "--cast") && i + 1 < argc) g_demo_cast = atoi(argv[++i]);
+        else if (!strcmp(a, "--bot") && i + 1 < argc) o->bot = argv[++i];
+        else if (!strcmp(a, "--bot-log") && i + 1 < argc) o->bot_log = argv[++i];
+        else if (!strcmp(a, "--bot-minutes") && i + 1 < argc) o->bot_minutes = strtof(argv[++i], NULL);
         else if (!strcmp(a, "--sound")) o->sound = true;
         else if (!strcmp(a, "--chapter") && i + 1 < argc) o->demo_chapter = atoi(argv[++i]) - 1;
         else {
@@ -931,6 +935,24 @@ static void frame(void *user) {
     vec3 centres[MAX_PLAYERS];
     int ncentres = game_centres(g, centres);
     chunkmap_update(&g->map, centres, ncentres);
+    if (g->opt.bot) {
+        /* playtest: as fast as the world loads, drawing now and then */
+        static int frames;
+        static bool started;
+        if (!started) { bot_init(g, g->opt.bot, g->opt.bot_log, g->opt.bot_minutes); started = true; }
+        u64 t0 = SDL_GetTicksNS();
+        while (SDL_GetTicksNS() - t0 < 30000000ull && chunkmap_settled(&g->map, player_eye(&g->players[0].pl))) {
+            if (!bot_step(g, &in, DT)) { a->running = false; break; }
+            game_update(g, &in, DT);
+        }
+        if (++frames % 20 == 0) {
+            for (int i = 0; i < MAX_PLAYERS; i++)
+                if (g->players[i].active) game_update_atmosphere(g, &g->players[i], frame_dt);
+            game_render(g);
+            SDL_GL_SwapWindow(a->win);
+        }
+        return;
+    }
     a->acc += frame_dt;
     while (a->acc >= DT) {
         game_update(g, &in, DT);

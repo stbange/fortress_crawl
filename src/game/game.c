@@ -125,9 +125,22 @@ void game_add_xp(Game *g, PlayerSlot *ps, float xp) {
     }
 }
 
+Tele g_tele;
+
+static void tele_hurt(float dmg) {
+    int src = g_tele.src >= 0 && g_tele.src < HS_COUNT ? g_tele.src : HS_OTHER;
+    g_tele.taken[src] += dmg;
+    if (src == HS_MELEE || src == HS_PROJ || src == HS_BLAST) g_tele.taken_mon[g_tele.src_mon & 31] += dmg;
+    g_tele.last_src = src;
+    g_tele.last_mon = g_tele.src_mon;
+    g_tele.last_grade = g_tele.src_grade;
+    g_tele.last_rank = g_tele.src_rank;
+    g_tele.src = HS_OTHER;
+}
+
 void game_hurt_player(Game *g, PlayerSlot *ps, float dmg, vec3 from) {
     Stats *s = &ps->st;
-    if (s->dead || ps->pl.fly || s->invuln > 0) return;
+    if (s->dead || ps->pl.fly || s->invuln > 0) { g_tele.src = HS_OTHER; return; }
     if (s->ranks[SK_LAST_STAND] && s->hp < s->maxhp * 0.3f) dmg *= 0.5f;
     if (s->stoneskin_t > 0) dmg *= 0.5f;
     s->scry_t = 0; /* a blow breaks Clairvoyance */
@@ -140,6 +153,7 @@ void game_hurt_player(Game *g, PlayerSlot *ps, float dmg, vec3 from) {
         sfx_player(g, ps, SFX_WARD_ABSORB, 1.0f);
         if (dmg <= 0) return;
     }
+    tele_hurt(dmg);
     s->hp -= dmg;
     s->hurt = fminf(1.0f, s->hurt + 0.35f + dmg / s->maxhp);
     s->since_hurt = 0;
@@ -161,6 +175,8 @@ void game_hurt_player(Game *g, PlayerSlot *ps, float dmg, vec3 from) {
 void game_dot_player(Game *g, PlayerSlot *ps, float dmg) {
     Stats *s = &ps->st;
     if (s->dead || ps->pl.fly || s->invuln > 0 || dmg <= 0) return;
+    g_tele.src = HS_DOT;
+    tele_hurt(dmg);
     s->hp -= dmg;
     s->since_hurt = 0;
     if (s->hp <= 0) {
@@ -679,6 +695,7 @@ static void update_player(Game *g, PlayerSlot *ps, const PlayerInput *in, float 
             bool known;
             Block in_b = chunkmap_block(&g->map, (int)floorf(ps->pl.pos.x), (int)floorf(ps->pl.pos.y), (int)floorf(ps->pl.pos.z), &known);
             if (s->fall_speed > 21.0f && !ps->pl.fly && ps->pl.move_mode == MOVE_WALK && in_b != B_WATER) {
+                tele_src(HS_FALL, 0, 0, 0);
                 game_hurt_player(g, ps, s->maxhp * 0.035f * (s->fall_speed - 21.0f), v3_add(ps->pl.pos, ps->pl.vel));
             }
             s->fall_speed = 0;
@@ -724,7 +741,7 @@ void game_update(Game *g, const PlayerInput *kb, float dt) {
     g->play_time += dt;
     /* autosave (not in screenshot and test runs) */
     g->autosave_timer += dt;
-    if (!g->opt.shot && g->autosave_timer > 30.0f) {
+    if (!g->opt.shot && !g->opt.bot && g->autosave_timer > 30.0f) {
         g->autosave_timer = 0;
         game_save(g);
     }

@@ -321,6 +321,7 @@ static void update_plate(Game *g, Device *d) {
             sfx_at(g, SFX_PLATE_WRONG, c, 1.0f);
             flash_add(g, c, v3(1.2f, 0.5f, 0.15f), 5.0f, 0.3f);
             particles_burst(g, c, v3(1.0f, 0.45f, 0.1f), 16, 3.0f, 0.06f, true);
+            tele_src(HS_TRAP, 0, 0, 0);
             game_hurt_player(g, who, 3.0f + v->level * 0.5f, v3(c.x, c.y - 1.0f, c.z));
             game_banner(who, "THE WRONG STONE - THE LAMPS GO OUT");
         }
@@ -355,6 +356,7 @@ static void trap_hit(Game *g, Device *d, vec3 c, float half, float top, float dm
         if (!ps->active || ps->st.dead || (mask && (*mask & (1u << i)))) continue;
         vec3 f = ps->pl.pos;
         if (fabsf(f.x - c.x) < half && fabsf(f.z - c.z) < half && f.y > d->y - 0.3f && f.y < d->y + top) {
+            tele_src(HS_TRAP, 0, 0, 0);
             game_hurt_player(g, ps, dmg, v3(f.x, f.y - 1.0f, f.z));
             if (mask) *mask |= (u8)(1u << i);
         }
@@ -458,6 +460,7 @@ static void update_lava(Game *g, PlayerSlot *ps, float dt) {
     if (b != B_LAVA || ps->lava_t > 0) return;
     ps->lava_t = 0.4f;
     sfx_player(g, ps, SFX_LAVA_BURN, 1.0f);
+    tele_src(HS_LAVA, 0, 0, 0);
     game_hurt_player(g, ps, 4.0f + ps->st.maxhp * 0.04f, v3(f.x, f.y - 2.0f, f.z));
     particles_burst(g, v3(f.x, f.y + 0.1f, f.z), v3(1.0f, 0.5f, 0.1f), 8, 2.0f, 0.05f, true);
     if (ps->banner_time <= 0) game_banner(ps, "THE LAVA BURNS");

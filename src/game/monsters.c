@@ -473,6 +473,7 @@ static void bloater_burst(Game *g, Monster *m, float mult);
 void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int attacker) {
     if (!m->alive || m->hidden) return; /* vanished or underground */
     if (m->rank >= 4) dmg *= 0.85f; /* armoured, far out */
+    if (attacker >= 0) g_tele.dealt += fminf(dmg, m->hp);
     if (m->type == MON_KNIGHT && m->state != MS_STUN) {
         /* the shield takes blows from the front: go round it */
         vec3 fw = v3(cosf(m->yaw), 0, sinf(m->yaw)), to = v3_sub(from, m->pos);
@@ -549,6 +550,7 @@ void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int 
             if (!ps->active) continue;
             if (i == killer) {
                 ps->st.kills++;
+                g_tele.kills[m->type & 31][m->grade % 3]++;
                 game_add_xp(g, ps, m->xp);
             } else if (v3_len(v3_sub(ps->pl.pos, m->pos)) < 30.0f) {
                 game_add_xp(g, ps, m->xp * 0.5f);
@@ -561,6 +563,7 @@ void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int 
 static void monster_strike(Game *g, Monster *m, PlayerSlot *ps, float dmg, vec3 from) {
     if (m->alt_kind && utility_monster_strike(g, m, dmg)) return; /* a decoy, a lure, or a charmed foe's enemy */
     bool was_dead = ps->st.dead;
+    tele_src(HS_MELEE, m->type, m->grade, m->rank);
     game_hurt_player(g, ps, dmg, from);
     if (m->element == EL_NONE || was_dead) return;
     player_element_hit(g, ps, m->element, dmg);
@@ -725,6 +728,7 @@ static void bloater_burst(Game *g, Monster *m, float mult) {
         if (!ps->active || ps->st.dead) continue;
         float d = v3_len(v3_sub(player_eye(&ps->pl), c));
         if (d > r) continue;
+        tele_src(HS_BLAST, m->type, m->grade, m->rank);
         game_hurt_player(g, ps, m->dmg * mult * (1.0f - 0.5f * d / r), c);
         player_element_hit(g, ps, el, m->dmg * mult);
     }

@@ -13,6 +13,7 @@
 #include "world/chunkmap.h"
 #include "world/layout.h"
 #include "world/pocket.h"
+#include "game/tele.h"
 #include "world/story.h"
 
 #define MAX_MONSTERS 320
@@ -256,6 +257,9 @@ typedef struct Options {
     bool sound;    /* --sound: sound even in screenshot runs (audio tests) */
     bool auto_motive; /* screenshot runs: pick a motive without asking */
     int demo_chapter; /* --chapter n: story demos start at chapter n */
+    const char *bot;  /* --bot STYLE: a playtest bot plays player 1 (bot.c) */
+    const char *bot_log;
+    float bot_minutes;
 } Options;
 
 /* On-screen touch controls for player 1 (phones and tablets). */

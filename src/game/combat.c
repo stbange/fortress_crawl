@@ -185,6 +185,7 @@ static void boulder_burst(Game *g, Projectile *p, vec3 at) {
         if (!ps->active || ps->st.dead) continue;
         float d = v3_len(v3_sub(v3_add(ps->pl.pos, v3(0, 0.6f, 0)), at));
         if (d > p->radius) continue;
+        tele_src(HS_BLAST, 31, 0, 0);
         game_hurt_player(g, ps, p->dmg * (1.0f - 0.5f * d / p->radius), at);
         if (p->element != EL_NONE) player_element_hit(g, ps, p->element, p->dmg * 0.5f);
     }
@@ -239,6 +240,7 @@ static void update_projectiles(Game *g, float dt0) {
                             continue;
                         }
                         sfx_at(g, p->kind == PJ_ENEMY_ARROW ? SFX_HIT_ARROW : SFX_ENEMY_FIRE_HIT, p->pos, 1.0f);
+                        tele_src(HS_PROJ, p->kind == PJ_ENEMY_ARROW ? MON_SKELETON : 30, 0, 0);
                         game_hurt_player(g, ps, p->dmg, v3_sub(p->pos, step));
                         if (p->element != EL_NONE) player_element_hit(g, ps, p->element, p->dmg);
                         particles_burst(g, p->pos, proj_color(p), 10, 3.0f, 0.05f, true);

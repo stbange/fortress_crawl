@@ -297,6 +297,7 @@ static bool collect(Game *g, PlayerSlot *ps, Pickup *p) {
     case PK_GOLD:
         sfx_player(g, ps, SFX_PICKUP_GOLD, 1.0f);
         s->gold += p->amount;
+        g_tele.gold += p->amount;
         particles_burst(g, at, v3(1.0f, 0.85f, 0.3f), 4, 1.5f, 0.03f, true);
         return true;
     case PK_POTION_HP:
@@ -309,6 +310,7 @@ static bool collect(Game *g, PlayerSlot *ps, Pickup *p) {
     }
     case PK_SCROLL: {
         int rank = spell_learn(ps, p->amount);
+        g_tele.scrolls++;
         sfx_player(g, ps, SFX_PICKUP_SCROLL, 1.0f);
         SpellInfo si;
         spell_info(p->amount, &si);
@@ -325,6 +327,7 @@ static bool collect(Game *g, PlayerSlot *ps, Pickup *p) {
             return false;
         }
         s->bag[slot] = p->item;
+        g_tele.weapons[p->item.rarity % 5]++;
         sfx_player(g, ps, SFX_PICKUP_WEAPON, 1.0f);
         item_name(&p->item, name, sizeof name);
         snprintf(buf, sizeof buf, "%s %s", p->item.rarity >= RAR_RARE ? RARITY_NAMES[p->item.rarity] : "FOUND", name);
@@ -333,6 +336,7 @@ static bool collect(Game *g, PlayerSlot *ps, Pickup *p) {
     }
     case PK_RELIC:
         s->relics[p->amount]++;
+        g_tele.relics++;
         sfx_player(g, ps, SFX_PICKUP_RELIC, 1.0f);
         stats_refresh(ps);
         snprintf(buf, sizeof buf, "RELIC: %s (%s)", RELICS[p->amount].name, RELIC_BONUS_TEXT[RELICS[p->amount].bonus]);
@@ -346,6 +350,8 @@ static bool collect(Game *g, PlayerSlot *ps, Pickup *p) {
         return story_collect_quest(g, ps, p);
     case PK_CHEST:
         looted_add(g, p->key);
+        if (p->amount & CHEST_VAULT) g_tele.vaults++;
+        else g_tele.chests++;
         if (p->amount & CHEST_VAULT) {
             /* a vault's hoard: gold, potions, a rare weapon at least */
             int level = p->amount & 0xFFFF;
@@ -512,6 +518,7 @@ void drink_potion(Game *g, PlayerSlot *ps, bool mana) {
     if (*n <= 0) { game_banner(ps, mana ? "NO MANA POTIONS" : "NO HEALTH POTIONS"); return; }
     if (mana ? s->mana >= s->maxmana : s->hp >= s->maxhp) return;
     (*n)--;
+    if (mana) g_tele.potions_mp++; else g_tele.potions_hp++;
     if (mana) s->mana = fminf(s->maxmana, s->mana + s->maxmana * 0.6f);
     else s->hp = fminf(s->maxhp, s->hp + s->maxhp * 0.5f);
     ps->potion_cd = 0.6f;
