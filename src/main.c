@@ -321,6 +321,99 @@ static void demo_setup(Game *g) {
         p1->shop_sel = 3;
         return;
     }
+    if (!strcmp(g_demo_kind, "foodtest") || !strcmp(g_demo_kind, "foodcheck")) {
+        /* food and cooking, step by step (log only); foodcheck reads back what foodtest saved */
+        if (!strcmp(g_demo_kind, "foodcheck")) {
+            SDL_Log("foodtest: loaded larder %d, dishes %d, recipes %08x, meal %d q%d %.0f s", food_held(s), food_dishes_held(s), s->recipes, s->meal,
+                    s->meal_q, s->meal_t);
+            SDL_Log("foodtest: loaded Sanctum dining stage %d", sanctum_stage(g, SP_DINING));
+            return;
+        }
+        /* every recipe: can some ingredients make it (or does an earlier one always win)? */
+        int reached[RC_ALL] = { 0 };
+        u8 ing[4];
+        for (int a = 0; a < FD_COUNT; a++)
+            for (int b = a; b < FD_COUNT; b++) {
+                ing[0] = (u8)a; ing[1] = (u8)b;
+                reached[food_match(ing, 2)]++;
+                for (int c = b; c < FD_COUNT; c++) {
+                    ing[2] = (u8)c;
+                    reached[food_match(ing, 3)]++;
+                    for (int d = c; d < FD_COUNT; d++) {
+                        ing[3] = (u8)d;
+                        reached[food_match(ing, 4)]++;
+                    }
+                }
+            }
+        int missing = 0;
+        for (int r = 0; r < RECIPE_COUNT; r++)
+            if (!reached[r]) { SDL_Log("foodtest: recipe %s is never made", RECIPES[r].name); missing++; }
+        SDL_Log("foodtest: %d of %d recipes can be made (simple meals from %d combinations)", RECIPE_COUNT - missing, RECIPE_COUNT, reached[RC_SIMPLE]);
+        /* cooking in the Sanctum kitchen */
+        sanctum_set_stage(g, SP_DINING, 3);
+        realm_enter(g, p1, p1->pl.pos, 1.0f);
+        p1->pl.pos = v3(plot_x(SP_DINING) + 10.5f, (float)POCKET_G, plot_z(SP_DINING) + 10.5f);
+        SDL_Log("foodtest: cook place %d (kitchen %d)", food_cook_place(g, p1), CP_KITCHEN);
+        for (int f = 0; f < FD_COUNT; f++) s->food[f] = 3;
+        float hp0 = s->maxhp;
+        static const u8 POTS[][4] = { { FD_HARE, FD_PEPPER }, { FD_MUTTON, FD_SALT }, { FD_PEPPER, FD_ONION, FD_SPICES, FD_OIL }, { FD_GRAIN, FD_MILK, FD_SALT } };
+        static const int NPOT[] = { 2, 2, 4, 3 };
+        for (int k = 0; k < 4; k++) {
+            p1->npot = 0;
+            for (int i = 0; i < NPOT[k]; i++) food_pot_add(g, p1, POTS[k][i]);
+            int r = food_match(p1->pot, p1->npot), q = food_quality(p1->pot, p1->npot, CP_KITCHEN);
+            bool ok = food_cook(g, p1);
+            SDL_Log("foodtest: cooked %d -> %s q%d (%s)", k, RECIPES[r].name, q, ok ? "ok" : "FAILED");
+        }
+        SDL_Log("foodtest: dishes %d, recipes %08x, larder %d", food_dishes_held(s), s->recipes, food_held(s));
+        p1->potion_cd = 0;
+        bool ate = food_eat_dish(g, p1, 20, food_quality((const u8[]){ FD_GRAIN, FD_MILK, FD_SALT }, 3, CP_KITCHEN), CP_KITCHEN); /* root mash */
+        SDL_Log("foodtest: ate root mash %d: max hp %.0f -> %.0f, meal %d for %.0f s", ate, hp0, s->maxhp, s->meal, s->meal_t);
+        p1->potion_cd = 0;
+        food_eat_raw(g, p1, FD_FROSTBERRY);
+        SDL_Log("foodtest: raw frost berry: snack %d, frost res %.0f", s->snack, food_fx(s, ME_FROST_RES));
+        if (g->opt.persist) SDL_Log("foodtest: saved %d", game_save(g));
+        return;
+    }
+    if (!strcmp(g_demo_kind, "food")) {
+        /* the FOOD tab at the kitchen, with a full larder, some dishes and a pot started */
+        sanctum_set_stage(g, SP_DINING, 3);
+        realm_enter(g, p1, p1->pl.pos, 1.0f);
+        p1->pl.pos = v3(plot_x(SP_DINING) + 10.5f, (float)POCKET_G, plot_z(SP_DINING) + 10.5f);
+        static const int HAVE[] = { FD_HARE, FD_EGG, FD_MILK, FD_CAVE_FISH, FD_HONEY, FD_MUSHROOM, FD_GLOWCAP, FD_HERB, FD_PEPPER, FD_FROSTBERRY, FD_GRAIN, FD_SALT };
+        for (int i = 0; i < (int)ARRAY_LEN(HAVE); i++) s->food[HAVE[i]] = (u8)(1 + i % 4);
+        s->dishes[1][1][CP_CAMPFIRE] = 2;
+        s->dishes[15][2][CP_KITCHEN] = 1;
+        s->recipes = (1u << 0) | (1u << 1) | (1u << 2) | (1u << 6) | (1u << 15) | (1u << 20);
+        s->meal = 3; s->meal_q = 0; s->meal_t = 431;
+        food_pot_add(g, p1, FD_HARE);
+        food_pot_add(g, p1, FD_MUSHROOM);
+        food_pot_add(g, p1, FD_HERB);
+        p1->show_skills = true;
+        p1->menu_tab = TAB_FOOD;
+        p1->food_sel = 2;
+        return;
+    }
+    if (!strcmp(g_demo_kind, "wildlife")) {
+        /* the animals in a row in an open place (--cast N: only kind N) */
+        demo_place(g, p1);
+        vec3 f = v3(cosf(p1->pl.yaw), 0, sinf(p1->pl.yaw)), r = v3(-f.z, 0, f.x);
+        int n = 0;
+        for (int k = 0; k < CR_COUNT; k++) {
+            if (g_demo_cast >= 0 && k != g_demo_cast) continue;
+            if (k == CR_FISH) continue; /* needs water */
+            float row = (float)(n % 6) - 2.5f, dist = 4.0f + (float)(n / 6) * 2.5f;
+            vec3 p = v3_add(v3_add(p1->pl.pos, v3_scale(f, g_demo_cast >= 0 ? 2.5f : dist)), v3_scale(r, g_demo_cast >= 0 ? 0 : row * 1.3f));
+            p.y = p1->pl.pos.y;
+            if (k == CR_CARP) p.y += 1.5f;
+            Critter *c = wildlife_spawn(g, k, p);
+            if (c) { c->yaw = p1->pl.yaw + PI_F + 0.6f; c->state = CS_GRAZE; c->timer = 99; c->home = p; }
+            n++;
+        }
+        p1->pl.pitch = -0.25f;
+        p1->st.invis_t = 30.0f; /* so they do not run */
+        return;
+    }
     if (!strcmp(g_demo_kind, "sanctum")) {
         /* the Sanctum with every plot at one stage (--cast N picks it; 0 = the start), seen from
          * above the court; --pos and --look move the camera */

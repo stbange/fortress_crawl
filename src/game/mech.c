@@ -461,7 +461,7 @@ static void update_lava(Game *g, PlayerSlot *ps, float dt) {
     ps->lava_t = 0.4f;
     sfx_player(g, ps, SFX_LAVA_BURN, 1.0f);
     tele_src(HS_LAVA, 0, 0, 0);
-    game_hurt_player(g, ps, 4.0f + ps->st.maxhp * 0.04f, v3(f.x, f.y - 2.0f, f.z));
+    game_hurt_player(g, ps, (4.0f + ps->st.maxhp * 0.04f) * (1.0f - food_fx(&ps->st, ME_LAVA)), v3(f.x, f.y - 2.0f, f.z));
     particles_burst(g, v3(f.x, f.y + 0.1f, f.z), v3(1.0f, 0.5f, 0.1f), 8, 2.0f, 0.05f, true);
     if (ps->banner_time <= 0) game_banner(ps, "THE LAVA BURNS");
 }

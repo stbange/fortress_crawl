@@ -76,6 +76,16 @@ typedef struct Bot {
     int realm_trips, realm_phase, realm_failed;
     int builds;
     float next_home; /* a trip home to spend gold, not before this */
+    Critter *prey;   /* an animal it hunts, until hunt_until */
+    float hunt_until, next_hunt, next_cook;
+    u64 prey_key, skip_prey[8];  /* animals it gave up on */
+    float skip_until[8];
+    int nskip;
+    int pick_i;                  /* the pickup it is going for, and since when */
+    float pick_since;
+    int skip_pick[8];            /* pickups it could not get to */
+    float skip_pick_until[8];
+    int nskip_pick;
     float max_dist, max_depth, max_height;
     int max_tier;
     float time_in_fight;
@@ -244,6 +254,7 @@ static bool want_pickup(const PlayerSlot *ps, const Pickup *p) {
         return false;
     }
     case PK_TRACE: return B.style == BS_QUESTER && ps->reading_key != p->key;
+    case PK_FOOD: return s->food[p->amount] < 20;
     default: return false;
     }
 }
@@ -294,19 +305,32 @@ static void plan(PlayerSlot *ps) {
         }
     }
     /* things worth picking up */
-    int best = -1;
+    int best = -1, best_i = -1;
     float bscore = 1e9f;
     for (int i = 0; i < MAX_PICKUPS; i++) {
         Pickup *p = &G->pickups[i];
         if (!p->alive || !want_pickup(ps, p)) continue;
+        bool skip = false;
+        for (int k = 0; k < 8; k++) skip |= B.skip_pick[k] == i + 1 && B.t < B.skip_pick_until[k];
+        if (skip) continue;
         if (v3_len(v3_sub(p->pos, feet)) > BR) continue;
         int ri = reach_index(p->pos);
         if (ri < 0) continue;
         float sc = dist_[ri] - (p->kind == PK_CHEST ? 15.0f : 0.0f) - (p->kind == PK_RELIC ? 20.0f : 0.0f);
         int max_d = B.style == BS_QUESTER && ps->thread.n > 1 ? 10 : 60; /* the quester keeps to its thread */
-        if (sc < bscore && dist_[ri] < max_d) { bscore = sc; best = ri; }
+        if (sc < bscore && dist_[ri] < max_d) { bscore = sc; best = ri; best_i = i; }
     }
     if (best >= 0) {
+        /* the same one for long: it cannot be picked up from where the path ends */
+        if (best_i != B.pick_i) { B.pick_i = best_i; B.pick_since = B.t; }
+        else if (B.t - B.pick_since > 25.0f) {
+            int k = B.nskip_pick++ % 8;
+            B.skip_pick[k] = best_i + 1;
+            B.skip_pick_until[k] = B.t + 300.0f;
+            logf_("%7.1f PICKUP out of reach (kind %d at %.1f %.1f %.1f)\n", B.t, G->pickups[best_i].kind, G->pickups[best_i].pos.x,
+                  G->pickups[best_i].pos.y, G->pickups[best_i].pos.z);
+            B.pick_i = -1;
+        }
         B.goal_kind = 1;
         set_path_to(best);
         int x, y, z;
@@ -619,6 +643,103 @@ static void survive(Game *g, PlayerSlot *ps, bool in_fight) {
     }
 }
 
+/* ---------- food: hunt what crosses the path, cook at fires, eat before going on ---------- */
+
+/* The best dish the larder makes here: the most ingredients, a known recipe or a new one. */
+static bool best_pot(PlayerSlot *ps, int place, u8 *out, int *nout) {
+    const Stats *s = &ps->st;
+    int have[FD_COUNT], nh = 0;
+    for (int f = 0; f < FD_COUNT; f++) if (s->food[f]) have[nh++] = f;
+    int best = -1;
+    u8 pot[4];
+    for (int n = MINI(4, place + 1); n >= 2 && best < 0; n--) {
+        int ix[4] = { 0, 0, 0, 0 };
+        /* combinations with repetition, limited by what is held */
+        for (;;) {
+            bool ok = true;
+            for (int k = 0; k < n && ok; k++) {
+                int cnt = 0;
+                for (int j = 0; j < n; j++) cnt += ix[j] == ix[k];
+                ok = s->food[have[ix[k]]] >= cnt;
+            }
+            if (ok && nh) {
+                for (int k = 0; k < n; k++) pot[k] = (u8)have[ix[k]];
+                int r = food_match(pot, n);
+                if (r != RC_SIMPLE) {
+                    memcpy(out, pot, (size_t)n);
+                    *nout = n;
+                    best = r;
+                    break;
+                }
+            }
+            int k = n - 1;
+            while (k >= 0 && ix[k] >= nh - 1) k--;
+            if (k < 0) break;
+            ix[k]++;
+            for (int j = k + 1; j < n; j++) ix[j] = ix[k];
+        }
+    }
+    return best >= 0;
+}
+
+static bool bot_food(Game *g, PlayerSlot *ps, PlayerInput *in, float dt) {
+    Stats *s = &ps->st;
+    /* eat when there is no meal */
+    if (!(s->meal && s->meal_t > 0) && s->well_fed_t <= 0 && food_dishes_held(s) && ps->potion_cd <= 0) {
+        if (food_eat_best(g, ps)) logf_("%7.1f EAT %s (q%d, %.0f s)\n", B.t, RECIPES[s->meal - 1].name, s->meal_q, s->meal_t);
+    }
+    /* cook at a fire */
+    int place = food_cook_place(g, ps);
+    if (place != CP_NONE && B.t >= B.next_cook && food_held(s) >= 2) {
+        B.next_cook = B.t + 20.0f;
+        for (int k = 0; k < 3; k++) {
+            u8 pot[4];
+            int n;
+            if (!best_pot(ps, place, pot, &n)) break;
+            ps->npot = 0;
+            for (int i = 0; i < n; i++) food_pot_add(g, ps, pot[i]);
+            int r = food_match(ps->pot, ps->npot);
+            if (!food_cook(g, ps)) break;
+            logf_("%7.1f COOK %s at place %d (%d ingredients)\n", B.t, RECIPES[r].name, place, n);
+        }
+    }
+    /* hunt an animal close by, for a few seconds at most */
+    if (realm_has(ps->pl.pos)) return false;
+    if (B.prey && (!B.prey->alive || B.prey->key != B.prey_key)) {
+        logf_("%7.1f HUNT done\n", B.t);
+        B.prey = NULL;
+    }
+    if (B.prey && B.t > B.hunt_until) { /* out of reach: leave it alone for two minutes */
+        int k = B.nskip++ % 8;
+        B.skip_prey[k] = B.prey_key;
+        B.skip_until[k] = B.t + 120.0f;
+        logf_("%7.1f HUNT gave up\n", B.t);
+        B.prey = NULL;
+    }
+    if (!B.prey && B.t >= B.next_hunt) {
+        B.next_hunt = B.t + 1.0f;
+        Critter *c = wildlife_nearest(g, ps->pl.pos, 9.0f, true);
+        bool skip = false;
+        for (int k = 0; k < 8 && c; k++) skip |= B.skip_prey[k] == c->key && B.t < B.skip_until[k];
+        bool ranged = s->weapon != WPN_SWORD;
+        if (c && !skip && c->kind != CR_HIVE && (ranged || fabsf(c->pos.y - ps->pl.pos.y) < 1.2f) &&
+            phys_line_of_sight(player_eye(&ps->pl), v3_add(c->pos, v3(0, 0.2f, 0)), game_solid, g)) {
+            B.prey = c;
+            B.prey_key = c->key;
+            B.hunt_until = B.t + 6.0f;
+            B.next_hunt = B.t + 4.0f;
+        }
+    }
+    if (!B.prey) return false;
+    vec3 c = v3_add(B.prey->pos, v3(0, 0.15f, 0));
+    face(ps, c, 10.0f, dt);
+    float hd = sqrtf((c.x - ps->pl.pos.x) * (c.x - ps->pl.pos.x) + (c.z - ps->pl.pos.z) * (c.z - ps->pl.pos.z));
+    bool ranged = s->weapon != WPN_SWORD;
+    if (!ranged && hd > 1.4f) in->move_z = 1.0f;
+    ps->pad_attack = facing(ps, c, ranged ? 0.1f : 0.4f) && (ranged || hd < 2.2f);
+    return true;
+}
+
 /* ---------- the loop ---------- */
 
 void bot_init(Game *g, const char *style, const char *log_path, float minutes) {
@@ -658,10 +779,11 @@ static void summary(PlayerSlot *ps) {
     Stats *s = &ps->st;
     logf_("SUMMARY style=%s minutes=%.1f level=%d kills=%d deaths=%d gold=%d max_gate_dist=%.0f max_tier=%d max_depth=%.0f max_height=%.0f "
           "cells=%d stuck=%d hard_stuck=%d realm_trips=%d realm_failed=%d keystones=%d builds=%d chapter=%d missions=%d lore=%d fights=%d avg_fight=%.1f fight_share=%.0f%% "
-          "replans=%d no_goal=%d stalemates=%d close_calls=%d\n",
+          "replans=%d no_goal=%d stalemates=%d close_calls=%d food=%d hunted=%d harvested=%d cooked=%d eaten=%d recipes=%d\n",
           STYLE_NAMES[B.style], B.t / 60.0f, s->level, s->kills, B.deaths, s->gold, B.max_dist, B.max_tier, B.max_depth, B.max_height,
           nvisited, B.stuck_total, B.hard_stuck, B.realm_trips, B.realm_failed, G->sanctum.keystones, B.builds, s->chapter + 1, s->nmissions, G->nlore, B.fights,
-          B.fights ? B.fight_time_total / B.fights : 0.0f, 100.0f * B.time_in_fight / fmaxf(1.0f, B.t), B.replans, B.no_goal, B.stalemates, B.close_calls);
+          B.fights ? B.fight_time_total / B.fights : 0.0f, 100.0f * B.time_in_fight / fmaxf(1.0f, B.t), B.replans, B.no_goal, B.stalemates, B.close_calls,
+          g_tele.food, g_tele.hunted, g_tele.harvested, g_tele.cooked, g_tele.eaten, __builtin_popcount(s->recipes));
     float total = 0;
     for (int i = 0; i < HS_COUNT; i++) total += g_tele.taken[i];
     logf_("DAMAGE_TAKEN total=%.0f", total);
@@ -879,6 +1001,7 @@ bool bot_step(Game *g, PlayerInput *in, float dt) {
         return true;
     }
     if (B.goal_kind == 2) B.npath = 0;
+    if (bot_food(g, ps, in, dt)) return true;
 
     /* stuck? */
     if (B.t >= B.stuck_check) {

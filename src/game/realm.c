@@ -23,6 +23,27 @@ void sanctum_set_stage(Game *g, int plot, int stage) {
     if (plot < 0 || plot >= SP_COUNT) return;
     g->world.sanctum[plot] = (u8)clampf((float)stage, 0, SANCTUM_STAGES);
     g->world.sanctum_gen++; /* the island's chunks are generated again (realm_update) */
+    if (plot == SP_GARDEN || plot == SP_ISLAND) wildlife_spawn_home(g); /* hens, hives, fish */
+}
+
+/* The garden grows food: herbs from stage 1, fruit under the trees from stage 2. It grows
+ * back every 20 minutes (keys by span, like the plants in the world). */
+static void garden_harvest(Game *g) {
+    int gs = sanctum_stage(g, SP_GARDEN);
+    if (sanctum_stage(g, SP_ISLAND) < 2 || gs < 1) return;
+    static const int HERBS[][2] = { { 38, 20 }, { 53, 26 }, { 62, 14 }, { 80, 18 }, { 92, 22 }, { 44, 12 } };
+    static const int TREES[][2] = { { 40, 9 }, { 60, 11 }, { 72, 26 }, { 88, 10 }, { 42, 28 }, { 90, 28 } };
+    u64 epoch = (u64)(g->play_time / 1200.0f);
+    for (int i = 0; i < 6 + (gs >= 2 ? 6 : 0); i++) {
+        bool tree = i >= 6;
+        int x = tree ? TREES[i - 6][0] : HERBS[i][0], z = tree ? TREES[i - 6][1] : HERBS[i][1];
+        if (!tree && i >= 3 + gs) continue; /* more herbs as the garden grows */
+        u64 key = mix64(0x6A4DE0ULL ^ (epoch << 16) ^ (u64)i) | 1;
+        if (looted_has(g, key) || pickup_find_key(g, key)) continue;
+        if (game_solid(g, x, POCKET_G - 1, z) != 1 || game_solid(g, x, POCKET_G, z) != 0) continue;
+        int food = tree ? ((i & 1) ? FD_FROSTBERRY : FD_MELON) : FD_HERB;
+        pickup_spawn(g, PK_FOOD, v3(x + 0.5f, (float)POCKET_G, z + 0.5f), food, NULL, key, 0);
+    }
 }
 
 static vec3 arrive_pos(void) { return v3(POCKET_ARRIVE_X, (float)POCKET_G, POCKET_ARRIVE_Z); }
@@ -108,13 +129,16 @@ static void comforts(Game *g, PlayerSlot *ps, float dt) {
             if (s->feast_t > 1.0f) {
                 static const float FED[4] = { 0, 600.0f, 1200.0f, 1800.0f };
                 s->feast_t = -1; /* until you step away */
-                bool was_fed = s->well_fed_t > 0;
-                s->well_fed_t = FED[ds];
-                if (!was_fed) stats_refresh(ps);
+                bool cooked = s->meal && s->meal_t > 0;
+                if (!cooked) { /* the feast is a meal: one you cooked yourself keeps its place */
+                    s->well_fed_t = FED[ds];
+                    stats_refresh(ps);
+                }
                 restore(ps);
                 sfx_at(g, SFX_REALM_FEAST, p, 1.0f);
-                game_banner(ps, ds == 1 ? "A SIMPLE MEAL - WELL FED: MORE HEALTH, AND IT COMES BACK BY ITSELF"
-                                        : "A FEAST - WELL FED: MORE HEALTH, AND IT COMES BACK BY ITSELF");
+                game_banner(ps, cooked ? "A BITE AT THE TABLE - YOU KEEP THE MEAL YOU COOKED"
+                                : ds == 1 ? "A SIMPLE MEAL - WELL FED: MORE HEALTH, AND IT COMES BACK BY ITSELF"
+                                          : "A FEAST - WELL FED: MORE HEALTH, AND IT COMES BACK BY ITSELF");
                 particles_burst(g, v3_add(p, v3(0, 1.2f, 0)), v3(1.0f, 0.8f, 0.4f), 18, 2.0f, 0.05f, true);
             }
         }
@@ -150,7 +174,11 @@ void realm_update(Game *g, float dt) {
     if (g->sanctum.library_t > 0) g->sanctum.library_t -= dt;
     bool any = false;
     for (int i = 0; i < MAX_PLAYERS; i++) any |= g->players[i].active && realm_has(g->players[i].pl.pos);
-    if (any) regenerate(g);
+    if (any) {
+        regenerate(g);
+        static float harvest_t;
+        if ((harvest_t -= dt) <= 0) { harvest_t = 2.0f; garden_harvest(g); }
+    }
     for (int i = 0; i < MAX_PLAYERS; i++) {
         PlayerSlot *ps = &g->players[i];
         if (!ps->active || ps->st.dead || !realm_has(ps->pl.pos)) continue;

@@ -11,8 +11,9 @@
  * user's preference folder. The world itself never needs saving: the seed rebuilds it. */
 
 #define SAVE_MAGIC 0x56534346u /* "FCSV" */
-#define SAVE_VERSION 6 /* 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms;
-                          6: weapons with materials, powers, legendaries and memory; 7: the Sanctum per world */
+#define SAVE_VERSION 8 /* 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms;
+                          6: weapons with materials, powers, legendaries and memory; 7: the Sanctum per world (written by one
+                          build still marked 6); 8: food (the larder, dishes, recipes, the meal) */
 #define EXPLORED_BUDGET (1200 * 1024)
 
 /* ---------- storage backends ---------- */
@@ -160,6 +161,13 @@ static void write_player(Buf *b, const Stats *s, const Player *pl) {
     w8(b, s->realm_return_set);
     wv(b, s->realm_return); wf(b, s->realm_return_yaw);
     w8(b, s->sanctum); wf(b, s->library_t);
+    /* v8: food */
+    wbytes(b, s->food, FD_COUNT);
+    w8(b, RC_ALL); w8(b, DISH_QUALITIES); w8(b, CP_COUNT);
+    wbytes(b, &s->dishes[0][0][0], (int)sizeof s->dishes);
+    w32(b, s->recipes);
+    w8(b, s->meal); w8(b, s->meal_q); wf(b, s->meal_t); wf(b, s->meal_len);
+    w8(b, s->snack); wf(b, s->snack_t);
 }
 
 /* Explored cells: per chunk a 512-byte mask of the non-zero bytes, then those bytes. */
@@ -344,6 +352,18 @@ static void read_player(Rd *r, SavedPlayer *sp) {
     } else if (r->ver == 4) {
         s->sanctum = SANCTUM_BATH | SANCTUM_FEAST; /* they were free when this character found them */
     }
+    if (r->ver >= 8) {
+        rbytes(r, s->food, FD_COUNT);
+        for (int i = 0; i < FD_COUNT; i++) s->food[i] = (u8)MINI(s->food[i], 20);
+        int nr = r8(r), nq = r8(r), np = r8(r);
+        if (nr == RC_ALL && nq == DISH_QUALITIES && np == CP_COUNT) rbytes(r, &s->dishes[0][0][0], (int)sizeof s->dishes);
+        else { u8 skip[2048]; rbytes(r, skip, (int)sizeof skip); } /* another layout: the dishes are lost, not the save */
+        s->recipes = r32(r);
+        s->meal = r8(r); s->meal_q = r8(r); s->meal_t = rf(r); s->meal_len = rf(r);
+        s->snack = r8(r); s->snack_t = rf(r);
+        if (s->meal > RC_ALL || s->meal_q >= DISH_QUALITIES || !(s->meal_t >= 0 && s->meal_t < 1e5f)) { s->meal = 0; s->meal_t = 0; }
+        if (s->snack > FD_COUNT || !(s->snack_t >= 0 && s->snack_t < 1e4f)) { s->snack = 0; s->snack_t = 0; }
+    }
     /* sanity: a save from a broken build must not crash the game */
     if (s->level < 1 || s->level > 999) s->level = 1;
     if (s->weapon < 0 || s->weapon >= WPN_COUNT) s->weapon = 0;
@@ -417,7 +437,7 @@ bool game_load(Game *g) {
             if (mask[k >> 3] & (1 << (k & 7))) bits[k] = r8(&r);
         if (!r.bad && r.ver >= 3) explore_import(g, cx, cy, cz, bits); /* old maps show old layouts */
     }
-    if (r.ver >= 7) {
+    if (r.ver >= 7 || (r.ver == 6 && r.at < r.n)) { /* (one build wrote the Sanctum under version 6) */
         int np = r8(&r);
         for (int i = 0; i < np; i++) {
             u8 v = r8(&r);

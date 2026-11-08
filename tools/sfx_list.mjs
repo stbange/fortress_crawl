@@ -246,6 +246,24 @@ export const SOUNDS = [
   { id: "equip", dur: 0.6, text: "equipping a weapon, leather and steel sliding into hand" },
   { id: "bag_full", dur: 0.5, text: "error buzz, dull wooden knock, inventory full" },
 
+  // ---------------- food and wildlife ----------------
+  { id: "pickup_food", dur: 0.6, v: 2, text: "picking up food, soft rustle of leaves and a light thump into a leather pouch" },
+  { id: "eat", dur: 1.2, v: 2, text: "eating a hearty meal, chewing and a satisfied sigh, crunchy bread and meat" },
+  { id: "eat_raw", dur: 0.7, text: "a quick crunchy bite into a raw fruit or root" },
+  { id: "cook", dur: 2.5, text: "cooking over a fire, sizzling pan, bubbling pot, crackling flames and a wooden spoon stirring" },
+  { id: "recipe_learned", dur: 1.4, text: "a new recipe learned, warm pleasant chime with a soft page turn" },
+  { id: "milk", dur: 1.2, text: "milking a goat into a wooden pail, rhythmic splashing, a contented bleat" },
+  { id: "hen", dur: 1.0, v: 2, text: "a hen clucking softly and pecking at the ground" },
+  { id: "hen_flee", dur: 1.0, text: "startled hen squawks and flutters its wings in panic" },
+  { id: "goat", dur: 1.0, v: 2, text: "a mountain goat bleats, echoing off rock" },
+  { id: "bees", dur: 2.0, text: "a swarm of bees buzzing around a hive" },
+  { id: "bees_angry", dur: 1.5, text: "an angry swarm of bees buzzing loudly and stinging" },
+  { id: "wings_flutter", dur: 0.8, v: 2, text: "a small bird bursts into flight, quick fluttering wings" },
+  { id: "critter_squeak", dur: 0.6, v: 2, text: "a small animal squeaks in fright and scurries away" },
+  { id: "critter_death", dur: 0.6, text: "a small animal is struck down, soft thud and a last squeak" },
+  { id: "fish_splash", dur: 0.8, v: 2, text: "a fish splashes in shallow water" },
+  { id: "salamander_hiss", dur: 0.8, text: "a fire salamander hisses and dives into bubbling lava" },
+
   // ---------------- story and menus ----------------
   { id: "read_note", dur: 1.0, text: "unfolding old parchment, paper rustle" },
   { id: "chapter_done", dur: 3.0, text: "dark epic fantasy victory sting, low brass and timpani swell" },

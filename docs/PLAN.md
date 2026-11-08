@@ -401,7 +401,14 @@ in `src/world/mech.h`.
   `ARCH_POCKET`) and a night sky with three moons. The bath gives *Refreshed* (mana x2), the
   table *Well Fed* (+20% health, regeneration), the bed sets the respawn and saves; the full
   shop is here.
-- **Food and cooking** are planned in [`FOOD.md`](FOOD.md).
+- **Wildlife, food and cooking** ([`FOOD.md`](FOOD.md)): `wildlife.c` places 13 kinds of
+  neutral animals per chunk by stratum and flavor (with the monsters, `spawn_chunk`); they
+  flee, are hunted (meat drops) or give eggs, milk, honey and jelly; a hunted one is gone for
+  its 15-minute span (looted keys by epoch). Plants and larder goods are pickups (`PK_FOOD`)
+  that grow back every 20 minutes. `food.c`: 36 ingredients with tags, 32 recipes as lists of
+  tags (matched by trying every assignment), dish quality from hearty and rare ingredients
+  and the kitchen, one meal at a time (`food_fx` sums the meal, a raw snack and the feast and
+  is read where health, mana, damage, speed, resistances and spells are computed).
 
 ## 7. Status
 
@@ -424,6 +431,7 @@ Done:
   materials by region, powers (trigger + effect), twenty legendaries per world, and weapons that
   remember their kills (titles at 30 of a kind, a hidden affix at 75).
 - A Sanctum that starts as a ruin and grows, built with gold and keystones: [`SANCTUM_PLAN.md`](SANCTUM_PLAN.md).
+- Wildlife, 36 ingredients, cooking and 32 recipes: [`FOOD.md`](FOOD.md).
 - The balance pass from those notes ([`BALANCE_PLAN.md`](BALANCE_PLAN.md)): danger that keeps up,
   a costlier death, a shop for gold, melee across ledges, safer stairs, a nearer first chapter.
 - Screenshot and demo modes (`--shot`, `--demo combat|sword|death|skills|map|coop|menu|

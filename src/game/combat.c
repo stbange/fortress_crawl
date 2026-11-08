@@ -16,13 +16,16 @@ void stats_refresh(PlayerSlot *ps) {
     ps->st.maxhp = stats_max_hp(&ps->st) * (1.0f + relic_bonus(&ps->st, RB_HEALTH));
     ps->st.maxmana = stats_max_mana(&ps->st) * (1.0f + relic_bonus(&ps->st, RB_MANA));
     ps->pl.speed_mult = (1.0f + 0.12f * ps->st.ranks[SK_FLEET_FOOT]) * (1.0f + relic_bonus(&ps->st, RB_SPEED));
-    if (ps->st.well_fed_t > 0) ps->st.maxhp *= 1.2f; /* a feast in the Sanctum */
+    /* the meal (a feast in the Sanctum, or a dish) */
+    ps->st.maxhp *= 1.0f + food_fx(&ps->st, ME_MAXHP);
+    ps->st.maxmana *= 1.0f + food_fx(&ps->st, ME_MAXMANA);
+    ps->st.mana = fminf(ps->st.mana, ps->st.maxmana);
     ps->st.hp = fminf(ps->st.hp, ps->st.maxhp);
 }
 
 /* Damage factor of the equipped weapon of a class, with relics. */
 static float weapon_mult(const Stats *s, int wclass) {
-    return item_damage_mult(&s->equipped[wclass]) * (1.0f + relic_bonus(s, RB_DAMAGE));
+    return item_damage_mult(&s->equipped[wclass]) * (1.0f + relic_bonus(s, RB_DAMAGE)) * (1.0f + food_fx(s, ME_DAMAGE));
 }
 
 /* A hit with a weapon: its elemental affix adds the element's effect. */
@@ -75,6 +78,12 @@ static void weapon_hit_ex(Game *g, PlayerSlot *ps, Monster *m, int wclass, float
     if ((wb->flags & WBF_STUN) && m->alive && m->grade != GRADE_BOSS && m->state != MS_STUN) {
         m->state = MS_STUN;
         m->timer = 0.5f;
+    }
+    /* a curry in you: now and then a hit sets the foe alight */
+    float ig = food_fx(&ps->st, ME_IGNITE);
+    if (ig > 0 && m->alive && (float)((h >> 20) & 0xFFFF) / 65536.0f < ig) {
+        m->burn_t = 3.0f;
+        m->burn_dps = fmaxf(m->burn_dps, dmg * 0.15f);
     }
     weapon_powers(g, ps, wclass, m, dmg, crit, full);
 }
@@ -307,6 +316,7 @@ static void explode(Game *g, int owner, vec3 at, float dmg, float radius, const 
         float d = v3_len(v3_sub(c, at));
         if (d < radius) monster_damage(g, m, dmg * (1.0f - 0.5f * d / radius), at, 4.0f, owner);
     }
+    if (owner >= 0) wildlife_hit(g, at, radius, dmg, EL_FIRE, owner);
 }
 
 static void chain_lightning(Game *g, int owner, Monster *from, float dmg) {
@@ -442,7 +452,7 @@ static void update_projectiles(Game *g, float dt0) {
                         }
                         sfx_at(g, p->kind == PJ_ENEMY_ARROW ? SFX_HIT_ARROW : SFX_ENEMY_FIRE_HIT, p->pos, 1.0f);
                         tele_src(HS_PROJ, p->kind == PJ_ENEMY_ARROW ? MON_SKELETON : 30, 0, 0);
-                        game_hurt_player(g, ps, p->dmg, v3_sub(p->pos, step));
+                        game_hurt_player(g, ps, p->dmg * (1.0f - food_fx(&ps->st, ME_PROJ_RES)), v3_sub(p->pos, step));
                         if (p->element != EL_NONE) player_element_hit(g, ps, p->element, p->dmg);
                         particles_burst(g, p->pos, proj_color(p), 10, 3.0f, 0.05f, true);
                         p->alive = false;
@@ -461,6 +471,9 @@ static void update_projectiles(Game *g, float dt0) {
                     break;
                 }
             }
+            if (p->alive && p->owner >= 0 && p->kind != PJ_NOVA && wildlife_hit(g, p->pos, 0.0f, p->dmg, p->element, p->owner) &&
+                p->wbase != WB_CHAKRAM)
+                p->alive = false;
         }
         /* trailing sparks for spells */
         bool magic_arrow = p->kind == PJ_ARROW && (p->element != EL_NONE || p->rarity > RAR_COMMON);
@@ -526,6 +539,8 @@ static void sword_strike(Game *g, PlayerSlot *ps, bool whirl) {
     }
     if (hits) {
         s->hp = fminf(s->maxhp, s->hp + 3.0f * s->ranks[SK_BLOODTHIRST] * hits);
+    } else if (wildlife_strike(g, ps, eye, fwd, range, arc, dmg)) {
+        sfx_at(g, SFX_HIT_WALL, v3_add(eye, v3_scale(fwd, 1.0f)), 0.4f);
     } else {
         /* sparks when hitting a wall */
         vec3 look = dir_from_angles(ps->pl.yaw, ps->pl.pitch);
@@ -648,7 +663,7 @@ static void try_attack(Game *g, PlayerSlot *ps, bool alt) {
     utility_player_attacked(ps);
     const Item *it = &s->equipped[s->weapon];
     const WeaponBase *wb = &WEAPON_BASES[it->base];
-    float speed = item_speed_mult(it) * (s->haste_t > 0 ? 0.7f : 1.0f);
+    float speed = item_speed_mult(it) * (s->haste_t > 0 ? 0.7f : 1.0f) / (1.0f + food_fx(s, ME_ATTACK_SPEED));
     switch (s->weapon) {
     case WPN_SWORD:
         if (alt) {
@@ -725,7 +740,8 @@ void combat_update(Game *g, float dt) {
         for (int k = 0; k < PE_COUNT; k++) if (ps->pow_cd[k] > 0) ps->pow_cd[k] -= dt;
         if (s->ward_t > 0 && (s->ward_t -= dt) <= 0) s->ward = 0;
         if (s->haste_t > 0) s->haste_t -= dt;
-        ps->pl.speed_mult = (1.0f + 0.12f * s->ranks[SK_FLEET_FOOT]) * (1.0f + relic_bonus(s, RB_SPEED)) * (s->haste_t > 0 ? 1.4f : 1.0f);
+        ps->pl.speed_mult = (1.0f + 0.12f * s->ranks[SK_FLEET_FOOT]) * (1.0f + relic_bonus(s, RB_SPEED)) * (s->haste_t > 0 ? 1.4f : 1.0f) *
+                            (1.0f + food_fx(s, ME_SPEED));
         /* monsters' elements: burning and poison eat health, a chill slows */
         if (s->chill_t > 0) { s->chill_t -= dt; ps->pl.speed_mult *= 0.6f; }
         if (s->stoneskin_t > 0) ps->pl.speed_mult *= 0.75f;
@@ -738,21 +754,22 @@ void combat_update(Game *g, float dt) {
         }
         if (s->poison_t > 0) { s->poison_t -= dt; game_dot_player(g, ps, s->poison_dps * dt); }
         if (s->dead) continue;
-        s->mana = fminf(s->maxmana, s->mana + (3.0f + 0.1f * s->level) * (s->refreshed_t > 0 ? 2.0f : 1.0f) * dt);
+        s->mana = fminf(s->maxmana, s->mana + (3.0f + 0.1f * s->level) * (s->refreshed_t > 0 ? 2.0f : 1.0f) * (1.0f + food_fx(s, ME_MANA_REGEN)) * dt);
         /* wounds close only out of a fight: some time unhurt and nothing awake close by */
         if (s->since_hurt > 6.0f) {
             bool calm = true;
             for (int k = 0; k < MAX_MONSTERS && calm; k++)
                 calm = !(g->mons[k].alive && g->mons[k].awake && g->mons[k].charm_t <= 0 &&
                          v3_len(v3_sub(g->mons[k].pos, ps->pl.pos)) < 12.0f);
-            if (calm) s->hp = fminf(s->maxhp, s->hp + (1.5f + 2.0f * s->ranks[SK_SECOND_WIND]) * dt);
+            if (calm) s->hp = fminf(s->maxhp, s->hp + (1.5f + 2.0f * s->ranks[SK_SECOND_WIND]) * (1.0f + food_fx(s, ME_REGEN)) * dt);
         }
-        if (s->well_fed_t > 0) s->hp = fminf(s->maxhp, s->hp + s->maxhp * 0.004f * dt); /* well fed: slowly, even in a fight */
+        /* well fed (the feast) and some meals: slowly, even in a fight */
+        s->hp = fminf(s->maxhp, s->hp + s->maxhp * food_fx(s, ME_FIGHT_REGEN) * dt);
         bool mouse = ps->keyboard && (g->mouse || g->opt.demo);
         bool touch = ps->keyboard && g->touch.active;
         bool attack = (mouse && ps->attack_held) || ps->pad_attack || (touch && g->touch.held[TB_ATTACK]);
         bool alt = (mouse && ps->alt_held) || ps->pad_alt || (touch && g->touch.held[TB_ALT]);
-        if (attack && s->cooldown <= 0 && mech_use(g, ps)) {
+        if (attack && s->cooldown <= 0 && (mech_use(g, ps) || wildlife_use(g, ps))) {
             /* struck a lever, a statue or a mirror */
             s->cooldown = s->swing_len = s->swing = 0.45f;
             s->swing_kind = 0;

@@ -232,6 +232,8 @@ static void spawn_chunk(Game *g, Chunk *c) {
             for (int k = 0; k < g->nshrines && !known; k++) known = v3_len(v3_sub(g->shrines[k], sp)) < 0.5f;
             if (!known) g->shrines[g->nshrines++] = sp;
         }
+    wildlife_spawn_chunk(g, c); /* animals, outside and at home too */
+    if (ci->arch == ARCH_EXTERIOR) loot_place_in_chunk(g, c); /* herbs */
     if (ci->arch == ARCH_EXTERIOR || ci->arch == ARCH_POCKET) return; /* nothing hostile outside or at home */
 
     loot_place_in_chunk(g, c);
@@ -331,6 +333,7 @@ void monsters_spawn_for_chunks(Game *g) {
         mo->alive = false;
         spawned_remove(g, mo->chunk_key);
     }
+    wildlife_despawn_far(g);
     for (int i = 0; i < m->pool_cap; i++) {
         Chunk *c = &m->pool[i];
         if (!c->used || c->state != CH_READY || !c->has_mesh) continue;

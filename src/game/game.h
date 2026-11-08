@@ -4,6 +4,7 @@
 #include <SDL3/SDL.h>
 
 #include "core/fmath.h"
+#include "game/food.h"
 #include "game/items.h"
 #include "game/physics.h"
 #include "game/player.h"
@@ -228,6 +229,13 @@ typedef struct Stats {
     vec3 recall_from;    /* Recall cast twice within 5 s goes back */
     float recall_t;
     float fall_speed; /* fastest downward speed since leaving the ground (fall damage) */
+    /* food (food.c): the larder, cooked dishes (recipe, quality, where cooked), the recipes
+     * known, the meal eaten (recipe + 1) and a raw snack (food + 1) */
+    u8 food[FD_COUNT];
+    u8 dishes[RC_ALL][DISH_QUALITIES][CP_COUNT];
+    u32 recipes;
+    u8 meal, meal_q, snack;
+    float meal_t, meal_len, snack_t;
     /* story (per character) */
     u8 motive;       /* 0: not chosen yet, else MOTIVE_* + 1 */
     int chapter;
@@ -369,6 +377,9 @@ typedef struct PlayerSlot {
     char domain_name[STORY_NAME];
     int motive_sel, story_scroll;
     int shop_sel;
+    int food_sel;           /* the FOOD tab's row */
+    u8 pot[4];              /* ingredients in the pot (food ids) */
+    int npot;
     /* weapon powers (combat.c): hits per weapon class, and each effect's cooldown */
     u16 hits[WPN_COUNT];
     float pow_cd[PE_COUNT];
@@ -404,6 +415,22 @@ typedef struct Sanctum {
     float library_t;                    /* until the library's next scroll */
 } Sanctum;
 
+/* Neutral wildlife (wildlife.c): never attacks, monsters ignore it, gives food. */
+enum { CR_HARE, CR_HEN, CR_GOAT, CR_RAM, CR_FISH, CR_CARP, CR_CRAB, CR_SALAMANDER, CR_GROUSE, CR_BEETLE, CR_SNAIL, CR_HIVE, CR_QUAIL, CR_COUNT };
+enum { CS_GRAZE, CS_WALK, CS_FLEE, CS_HIDE };
+typedef struct Critter {
+    bool alive, on_ground;
+    u8 kind, state, hp;
+    vec3 pos, vel, home, color;
+    float yaw, timer, anim, flash;
+    float ready_t;  /* milk, honey or eggs: seconds until there is some again */
+    float calm_t;   /* a hive: smoked (fire) */
+    float angry_t;  /* a hive: its bees sting */
+    float sound_t;
+    u64 key, chunk_key;
+} Critter;
+#define MAX_CRITTERS 128
+
 /* A temporary block change by a spell: to while it lasts, back to from afterwards. */
 typedef struct WorldEdit {
     int x, y, z;
@@ -430,6 +457,7 @@ typedef struct Game {
     Flash flashes[MAX_FLASHES];
     Pickup pickups[MAX_PICKUPS];
     Effect effects[MAX_EFFECTS];
+    Critter critters[MAX_CRITTERS];
     /* chests and relics already taken (keys) */
     u64 *looted;
     int looted_cap, looted_count;
@@ -575,7 +603,7 @@ void touch_draw(Game *g);
 int touch_low_width(Game *g, int win_w, int win_h);
 
 /* Character menu tabs. */
-enum { TAB_INVENTORY, TAB_SPELLS, TAB_SKILLS, TAB_STORY, TAB_SHOP, TAB_COUNT };
+enum { TAB_INVENTORY, TAB_SPELLS, TAB_SKILLS, TAB_STORY, TAB_SHOP, TAB_FOOD, TAB_COUNT };
 enum { SANCTUM_BATH = 1, SANCTUM_FEAST = 2, SANCTUM_LIBRARY = 4 };
 
 /* quests.c: motives, chapters, missions, lore, named enemies */
@@ -696,6 +724,7 @@ void items_give_start(Stats *s);
 void pickups_update(Game *g, float dt);
 void pickups_draw(Game *g, vec3 eye);
 void pickup_spawn(Game *g, int kind, vec3 pos, int amount, const Item *item, u64 key, u64 chunk_key);
+Pickup *pickup_find_key(Game *g, u64 key); /* a placed pickup still lying there */
 void loot_drop(Game *g, vec3 pos, float level, bool elite, float luck);
 void loot_place_in_chunk(Game *g, Chunk *c);
 void pickups_despawn_chunk(Game *g, u64 chunk_key);
@@ -713,6 +742,39 @@ void spellbook_nav(Game *g, PlayerSlot *ps, int nav);
 int inventory_hit(PlayerSlot *ps, int W, int H, int top, float x, float y);
 int spellbook_hit(PlayerSlot *ps, int W, int H, int top, float x, float y);
 float relic_bonus(const Stats *s, int bonus);
+
+/* food.c: the larder, cooking, meals */
+float food_fx(const Stats *s, int effect);          /* ME_* from the meal, a snack and the feast */
+int food_cook_place(Game *g, const PlayerSlot *ps); /* CP_* where the player stands */
+void food_give(Game *g, PlayerSlot *ps, int food, int n);
+bool food_cook(Game *g, PlayerSlot *ps);            /* cooks what is in the pot */
+bool food_pot_add(Game *g, PlayerSlot *ps, int food);
+bool food_eat_dish(Game *g, PlayerSlot *ps, int recipe, int q, int place);
+bool food_eat_best(Game *g, PlayerSlot *ps);        /* the quick key: the best dish held */
+bool food_eat_raw(Game *g, PlayerSlot *ps, int food);
+void food_feast(PlayerSlot *ps);                    /* the Sanctum's feast replaces a meal */
+void food_update(Game *g, float dt);
+void food_nav(Game *g, PlayerSlot *ps, int nav);
+void food_tap(Game *g, PlayerSlot *ps, int W, int H, int top, float x, float y);
+void food_draw(Game *g, PlayerSlot *ps, int W, int H, int top);
+void food_draw_model(int food, vec3 c, float yaw, float s, vec3 light);
+int food_held(const Stats *s);                      /* ingredients in the larder */
+int food_dishes_held(const Stats *s);
+
+/* wildlife.c: animals that do not fight */
+void wildlife_spawn_chunk(Game *g, Chunk *c);
+void wildlife_spawn_home(Game *g);
+Critter *wildlife_spawn(Game *g, int kind, vec3 pos); /* demos */                  /* the Sanctum garden's hens, hives and fish */
+void wildlife_update(Game *g, float dt);
+void wildlife_draw(Game *g, PlayerSlot *viewer);
+void wildlife_despawn_far(Game *g);
+/* A blow from a player: true if it struck an animal. */
+bool wildlife_strike(Game *g, PlayerSlot *ps, vec3 eye, vec3 fwd, float range, float arc, float dmg);
+/* A projectile or blast at p: true if it hit an animal (radius 0: a point). */
+bool wildlife_hit(Game *g, vec3 p, float radius, float dmg, int element, int owner);
+/* The attack key next to a goat with milk: milks it. */
+bool wildlife_use(Game *g, PlayerSlot *ps);
+Critter *wildlife_nearest(Game *g, vec3 p, float max_dist, bool huntable);
 
 /* explore.c */
 void explore_update(Game *g, PlayerSlot *ps, float dt);

@@ -1,10 +1,12 @@
 # Food and cooking: implementation plan
 
-Status: **plan only** (revised November 2026: no food from monsters, neutral wildlife
-instead, more ingredients and recipes, fitted to the growing Sanctum). The only food in the
-game so far is the feast on the Sanctum's dining table (`src/game/realm.c`), which gives
-**Well Fed** for 10 to 30 minutes by the dining hall's stage. This plan grows that into
-wildlife, ingredients, cooking and meals. Estimates are for one developer working full time.
+Status: **implemented** (November 2026): `src/game/wildlife.c` (the animals), `src/game/food.c`
+(ingredients, recipes, the larder, cooking, meals, the FOOD tab), plants and larders in
+`items.c`, the garden's food in `realm.c`, save version 8. Differences from the plan below:
+eggs lie where hens and quail sit rather than in separate nests; the Sky-carp pie makes you
+drift down slowly instead of a short glide; the cookbook is part of the FOOD tab (N), not the
+Story tab; a cooked meal keeps its place when you walk past the Sanctum's table (the feast
+heals you but does not replace it).
 
 ## 1. Goals
 

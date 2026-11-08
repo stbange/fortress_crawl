@@ -59,6 +59,8 @@ for the full plan and [`docs/STORY.md`](docs/STORY.md) for how the stories work.
 | The Sanctum at the start: a ruined hall on a small island | Every plot at stage 3: towers, walls, the garden, the domed library |
 | ![The hall](docs/screenshots/sanctum_hall.png) | ![The shop](docs/screenshots/shop.png) |
 | The hall at stage 2: a roof, coloured glass, a chandelier | The SHOP tab at home: building, the stash, everything for sale |
+| ![Wildlife](docs/screenshots/wildlife.png) | ![The FOOD tab](docs/screenshots/food.png) |
+| Wildlife: hares, hens, goats, rams, crabs, salamanders, grouse, beetles, snails, a hive, quail | The FOOD tab in the Sanctum kitchen: the pot, dishes, the larder, the cookbook |
 | ![Warden's Keep](docs/screenshots/spell_keep.png) | |
 | Warden's Keep, a conjured keep of real stone | |
 
@@ -218,8 +220,34 @@ minutes), **rest** in the bed (you will wake there when you fall, and the game i
 library gives a free scroll every 20 minutes (12 with the dome); the armory shows the
 legendaries you found on racks, the banners of the named enemies you killed and statues for
 the chapters you finished. The **stash** keeps 30 weapons the bag has no room for. The door
-in the court takes you back to where you opened it. Food and cooking are planned next: see
-[`docs/FOOD.md`](docs/FOOD.md).
+in the court takes you back to where you opened it.
+
+**Wildlife, food and cooking** ([`docs/FOOD.md`](docs/FOOD.md)): the world is not only
+monsters. Thirteen kinds of **animals** live in it and never attack: cave hares in the mines and
+roots, hens in castle kitchens, goats on the spires and aeries, rams on the clouds, blind fish
+in underground pools, sky carp floating in heaven, crabs on the drowned and coral shores,
+ember salamanders on lava edges, frost grouse in the north, quail on the steppe, glow beetles
+in the fungal deep, salt snails, and beehives in the hanging gardens. Monsters ignore them;
+they flee when you come close (crouch to get closer, or go invisible). **Hunt** them for meat
+(one or two hits, a bow is best), or **take without killing**: eggs from where hens and quail
+sit, milk from a goat (the attack key standing at it), honey from a hive (smoke it with any
+fire spell first, or the bees sting), jelly from a glow beetle. *Lure* draws them, *Reveal the
+Hidden* shows nests and hives, frost on a pool floats the fish up. Hunted animals come back
+after about 15 minutes. **Plants** grow by region (mushrooms and glow caps in the deep,
+ember peppers in the hells, frost berries in the north, sun melons in the south, jade leaves
+and bamboo in the east, sea grapes in the west, star fruit only very far out) and grow back
+every 20 minutes, and the **larders** of built places hold grain, salt, oil, wine and trade
+spices: 36 ingredients in all, each with tags (meat, fish, sweet, sharp, salty, fire...).
+**Cook** at any fire, brazier or hearth (two ingredients), at the Sanctum dining hall's
+fireplace (three) or in its kitchen (four, and better dishes): 32 **recipes** made of tags, so
+any meat with something sharp is a spicy skewer. Recipes are learned by cooking them; the
+FOOD tab (N) shows the larder, your dishes and the cookbook with hints for the ones you do not
+know. **Eat** a dish (K, or from the tab) for a meal of 10 to 20 minutes: more health, mana or
+damage, speed, resistances, mana that flows faster, spells that cost less, a light that shows
+hidden things... One meal at a time; the feast on the Sanctum's table is one too. Raw
+ingredients give a small taste of their strongest tag for a minute and a half. The Sanctum
+garden grows herbs, fruit under its trees, keeps hens (stage 2), beehives and fish in its pond
+(stage 3).
 
 **Stories:** every character picks a motive (revenge, glory, riches or truth). It turns the
 world's endless metaplot into chapters: a named captain, then the general above it, then the
@@ -264,8 +292,9 @@ last and shows what is saved; *New characters* (press twice) deletes the save of
 | Q (or middle mouse button) | cast the selected spell (hold for breath spells) |
 | R / Shift+R | next / previous known spell |
 | H / J | drink a health / mana potion |
+| K / N | eat the best dish you carry / the FOOD tab (cooking at a fire, the larder, the cookbook) |
 | G | Golden Thread: a fading line to your story target (again: next mission) |
-| TAB, I, B, L | character menu: last tab, inventory, spellbook, story; SHOP is the fifth tab (Q/E or [ ] switch tabs) |
+| TAB, I, B, L | character menu: last tab, inventory, spellbook, story; SHOP and FOOD are the fifth and sixth tabs (Q/E or [ ] switch tabs) |
 | in the menu | arrows or WASD select, Enter equips / uses / learns / makes a spell active, Del or X scraps a weapon |
 | M | map of the cells you have seen |
 | Space, Shift, Ctrl | jump, sprint, crouch (you duck and crawl automatically in low tunnels) |
@@ -317,7 +346,8 @@ fortress_crawl [--seed N] [--pos x y z] [--look yaw pitch] [--fly] [--radius n] 
                [--shot file.bmp] [--shot-time seconds]
                [--demo combat|sword|death|skills|map|coop|menu|inventory|spells|loot|magic|bestiary|
                        motive|story|read|named|storytest|vault|levers|plates|statues|beam|
-                       darts|spikes|flames|mechtest|cast|realmtest|shop|sanctum] [--cast n]
+                       darts|spikes|flames|mechtest|cast|realmtest|shop|sanctum|
+                       food|foodtest|wildlife] [--cast n]
                [--bot STYLE] [--bot-minutes n] [--bot-log file]
                [--players n] [--test-pad] [--touch] [--fresh] [--persist] [--fullbright] [--chapter n]
 ```
@@ -341,7 +371,9 @@ that joins, walks, turns and attacks, to test the gamepad path without hardware.
 37 = Sanctum Door) in an open place and steps back to look at it; `--demo realmtest` walks
 through the Sanctum (door, bath, feast, bed, door home) and logs each step. `--demo shop --pos
 47.5 9608 80.5` opens the shop at home in the Sanctum; `--demo sanctum --cast N` shows the
-Sanctum from above with every plot at stage N (0 is the start). `--bot STYLE` plays by itself
+Sanctum from above with every plot at stage N (0 is the start). `--demo foodtest` checks that
+every recipe can be made, cooks, eats and (with `--persist`) saves; `--demo food` shows the FOOD
+tab; `--demo wildlife` puts the animals in a row (`--cast N` only kind N). `--bot STYLE` plays by itself
 (see [`docs/PLAYTEST.md`](docs/PLAYTEST.md)). `--touch`
 shows the touch controls from the start.
 
@@ -525,7 +557,8 @@ src/engine   GL loader, shaders, bitmap font, worker threads, audio mixer
 src/world    themes, texture generator, world layout, chunk generators, mesher + lighting,
              chunk streaming
 src/render   low-res renderer, sky, post-processing, entity/UI batches
-src/game     player controller, physics, monsters and AI, combat, skills, map, sound effects
+src/game     player controller, physics, monsters and AI, combat, skills, map, sound effects,
+             wildlife (wildlife.c), food and cooking (food.c), the Sanctum (realm.c, shop.c)
 tests, tools headless generator checks and map exporters, sound generator (tools/gen_sfx.mjs)
 assets/sfx   the sound effects (generated with ElevenLabs)
 ```

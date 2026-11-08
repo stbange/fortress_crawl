@@ -19,6 +19,7 @@ typedef struct Tele {
     int casts_attack, casts_utility;
     int blocked_knight;
     int lost_found, uniques_found, powers_fired, awakened, banes;
+    int food, cooked, eaten, hunted, harvested;
 } Tele;
 
 extern Tele g_tele;

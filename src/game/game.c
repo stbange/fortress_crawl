@@ -173,6 +173,7 @@ void game_hurt_player(Game *g, PlayerSlot *ps, float dmg, vec3 from) {
     if (s->dead || ps->pl.fly || s->invuln > 0) { g_tele.src = HS_OTHER; return; }
     if (s->ranks[SK_LAST_STAND] && s->hp < s->maxhp * 0.3f) dmg *= 0.5f;
     if (s->stoneskin_t > 0) dmg *= 0.5f;
+    dmg *= 1.0f + food_fx(s, ME_TAKEN); /* the chili's price */
     s->scry_t = 0; /* a blow breaks Clairvoyance */
     utility_ritual_break(g, ps); /* and the Sanctum ritual */
     if (s->ward > 0) {
@@ -191,7 +192,7 @@ void game_hurt_player(Game *g, PlayerSlot *ps, float dmg, vec3 from) {
     vec3 push = v3_sub(ps->pl.pos, from);
     push.y = 0;
     push = v3_norm(push);
-    ps->pl.vel = v3_add(ps->pl.vel, v3_scale(push, 4.0f));
+    ps->pl.vel = v3_add(ps->pl.vel, v3_scale(push, 4.0f * (1.0f - food_fx(s, ME_STUN_RES))));
     if (ps->pad) SDL_RumbleGamepad(ps->pad, 0x6000, 0x9000, 180);
     if (s->hp > 0) sfx_player(g, ps, SFX_PLAYER_HURT, clampf(0.6f + dmg / s->maxhp * 3.0f, 0.6f, 1.2f));
     if (s->hp <= 0) {
@@ -222,6 +223,9 @@ void game_dot_player(Game *g, PlayerSlot *ps, float dmg) {
 void player_element_hit(Game *g, PlayerSlot *ps, int el, float dmg) {
     Stats *s = &ps->st;
     if (s->dead || ps->pl.fly || s->invuln > 0 || el < 0 || el >= EL_COUNT) return;
+    if (el == EL_FIRE && food_fx(s, ME_FIRE_RES) > 0) return; /* a fire broth in you */
+    if (el == EL_FROST && food_fx(s, ME_FROST_RES) > 0) return;
+    if (el == EL_POISON && food_fx(s, ME_POISON_IMM) > 0) return;
     switch (el) {
     case EL_FIRE: /* set alight */
         s->burn_dps = s->burn_t > 0 ? fmaxf(s->burn_dps, dmg * 0.15f) : dmg * 0.15f;
@@ -346,6 +350,7 @@ static void menu_nav(Game *g, PlayerSlot *ps, int nav) {
     else if (ps->menu_tab == TAB_SPELLS) spellbook_nav(g, ps, nav);
     else if (ps->menu_tab == TAB_STORY) story_tab_nav(g, ps, nav);
     else if (ps->menu_tab == TAB_SHOP) { if (nav != NAV_DROP) shop_nav(g, ps, nav); }
+    else if (ps->menu_tab == TAB_FOOD) food_nav(g, ps, nav);
     else if (nav != NAV_DROP) game_skills_nav(ps, nav);
 }
 
@@ -513,6 +518,8 @@ void game_event(Game *g, const SDL_Event *e) {
         case SDLK_H: drink_potion(g, ps, false); break;
         case SDLK_G: game_thread_key(g, ps); break;
         case SDLK_J: drink_potion(g, ps, true); break;
+        case SDLK_K: food_eat_best(g, ps); break;
+        case SDLK_N: open_menu(ps, TAB_FOOD); break;
         case SDLK_M: ps->show_map = !ps->show_map; ps->show_skills = false; break;
         case SDLK_1: ps->st.weapon = WPN_SWORD; break;
         case SDLK_2: ps->st.weapon = WPN_BOW; break;
@@ -760,7 +767,8 @@ static void update_player(Game *g, PlayerSlot *ps, const PlayerInput *in, float 
             if (s->fall_speed > 21.0f && !ps->pl.fly && ps->pl.move_mode == MOVE_WALK && in_b != B_WATER) {
                 tele_src(HS_FALL, 0, 0, 0);
                 /* hurts, but never more than a third of your health: a misstep is not death */
-                game_hurt_player(g, ps, fminf(0.35f, 0.035f * (s->fall_speed - 21.0f)) * s->maxhp, v3_add(ps->pl.pos, ps->pl.vel));
+                game_hurt_player(g, ps, fminf(0.35f, 0.035f * (s->fall_speed - 21.0f)) * s->maxhp * (1.0f - food_fx(s, ME_FALL)),
+                                 v3_add(ps->pl.pos, ps->pl.vel));
             }
             s->fall_speed = 0;
         }
@@ -791,6 +799,8 @@ void game_update(Game *g, const PlayerInput *kb, float dt) {
         for (int i = 0; i < MAX_PLAYERS; i++)
             if (g->players[i].active) flow_update(g, &g->players[i], dt);
         monsters_update(g, dt * utility_time_scale(g));
+        wildlife_update(g, dt);
+        food_update(g, dt);
         combat_update(g, dt);
         mech_update(g, dt * utility_time_scale(g));
         utility_update(g, dt);
@@ -843,7 +853,7 @@ static SkillLayout skills_layout(int W, int H) {
 
 /* ---------- character menu: tabs ---------- */
 
-static const char *TAB_NAMES[TAB_COUNT] = { "ITEMS", "SPELLS", "SKILLS", "STORY", "SHOP" };
+static const char *TAB_NAMES[TAB_COUNT] = { "ITEMS", "SPELLS", "SKILLS", "STORY", "SHOP", "FOOD" };
 
 static void tab_rect(int W, int t, float *x, float *y, float *w, float *h) {
     *w = W < 440 ? 52.0f : 72.0f;
@@ -868,6 +878,8 @@ void game_menu_tap(Game *g, PlayerSlot *ps, int W, int H, float x, float y) {
         story_tab_nav(g, ps, y < H / 2 ? NAV_UP : NAV_DOWN); /* tap the upper or lower half to scroll */
     } else if (ps->menu_tab == TAB_SHOP) {
         shop_tap(g, ps, W, H, MENU_TOP, x, y);
+    } else if (ps->menu_tab == TAB_FOOD) {
+        food_tap(g, ps, W, H, MENU_TOP, x, y);
     } else {
         int hit = game_skills_hit(ps, W, H, x, y);
         if (hit == -2) game_skills_nav(ps, NAV_LEFT);
@@ -1082,7 +1094,7 @@ static void draw_hud(Game *g, PlayerSlot *ps, int W, int H) {
         static const char *STANCES[3] = { "standing", "crouching", "crawling" };
         snprintf(buf, sizeof buf, "%s  %s  open %.0fm  %dx%d", ps->pl.fly ? "FLY" : "WALK", STANCES[ps->pl.stance], ps->openness, W, H);
         font_text(4, y, buf, 0.6f, 0.6f, 0.6f); y += FONT_LINE;
-        if (!small && !touch) font_text(4, y, "LMB/RMB ATTACK  Q SPELL  R NEXT  H/J POTION  TAB/I/B MENU  M MAP  F FLY  T AHEAD", 0.5f, 0.45f, 0.4f);
+        if (!small && !touch) font_text(4, y, "LMB/RMB ATTACK  Q SPELL  R NEXT  H/J POTION  K EAT  N FOOD  TAB MENU  M MAP  F FLY  T AHEAD", 0.5f, 0.45f, 0.4f);
     }
     font_end();
 }
@@ -1116,6 +1128,7 @@ static void draw_menu(Game *g, PlayerSlot *ps, int W, int H) {
     else if (ps->menu_tab == TAB_SPELLS) spellbook_draw(g, ps, W, H, MENU_TOP);
     else if (ps->menu_tab == TAB_STORY) story_draw_tab(g, ps, W, H, MENU_TOP);
     else if (ps->menu_tab == TAB_SHOP) shop_draw(g, ps, W, H, MENU_TOP);
+    else if (ps->menu_tab == TAB_FOOD) food_draw(g, ps, W, H, MENU_TOP);
     else draw_skills(g, ps, W, H);
 }
 
@@ -1163,6 +1176,7 @@ static void render_view(Game *g, PlayerSlot *ps, int vx, int vy, int vw, int vh)
     BatchFog fog = { eye, ps->fog, ps->fog_density };
     batch3d_begin();
     monsters_draw(g, eye);
+    wildlife_draw(g, ps);
     players_draw(g, ps);
     combat_draw_world(g, eye);
     pickups_draw(g, eye);

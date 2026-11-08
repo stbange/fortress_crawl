@@ -142,7 +142,7 @@ static bool tome(const Stats *s) { return (WEAPON_BASES[s->equipped[WPN_STAFF].b
 static float spell_power(const PlayerSlot *ps, int id) {
     const Stats *s = &ps->st;
     return (tome(s) ? 1.3f : 1.0f) * (1.0f + 0.3f * s->ranks[SK_FOCUS]) * (1.0f + 0.07f * (s->level - 1)) * (1.0f + 0.25f * (s->spell_rank[id] - 1)) *
-           (1.0f + relic_bonus(s, RB_DAMAGE));
+           (1.0f + relic_bonus(s, RB_DAMAGE)) * (1.0f + food_fx(s, ME_SPELL_POWER));
 }
 
 static void heal_player(Game *g, int who, float hp) {
@@ -445,7 +445,7 @@ bool spell_cast_id(Game *g, PlayerSlot *ps, int id) {
     }
     SpellInfo si;
     spell_info(id, &si);
-    float cost = si.mana * (1.0f - 0.15f * s->ranks[SK_FOCUS]) * (tome(s) ? 0.85f : 1.0f);
+    float cost = si.mana * (1.0f - 0.15f * s->ranks[SK_FOCUS]) * (tome(s) ? 0.85f : 1.0f) * (1.0f - food_fx(s, ME_SPELL_COST));
     if (s->mana < cost) {
         if (ps->banner_time <= 0) game_banner(ps, "NOT ENOUGH MANA");
         sfx_player(g, ps, SFX_SPELL_FIZZLE, 1.0f);
@@ -453,7 +453,7 @@ bool spell_cast_id(Game *g, PlayerSlot *ps, int id) {
         return false;
     }
     int rank = s->spell_rank[id];
-    float haste = s->haste_t > 0 ? 0.7f : 1.0f;
+    float haste = (s->haste_t > 0 ? 0.7f : 1.0f) * (1.0f - food_fx(s, ME_COOLDOWN));
     if (!spell_is_attack(id)) {
         if (!cast_utility(g, ps, id - SPELL_ATTACK_COUNT, rank)) return false;
         s->mana -= cost;

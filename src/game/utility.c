@@ -53,9 +53,9 @@ void utility_player_physics(Game *g, PlayerSlot *ps) {
     Stats *s = &ps->st;
     Player *p = &ps->pl;
     p->move_mode = s->wings_t > 0 ? MOVE_FLY : s->levitate_t > 0 ? MOVE_LEVITATE : MOVE_WALK;
-    p->max_fall = s->feather_t > 0 || s->glide_t > 0 ? 3.0f : 40.0f;
+    p->max_fall = s->feather_t > 0 || s->glide_t > 0 ? 3.0f : food_fx(s, ME_GLIDE) > 0 && p->vel.y < 0 && p->vel.y > -9.0f ? 5.0f : 40.0f;
     p->climbing = s->climb_t > 0;
-    p->jump_mult = s->steed_t > 0 ? 1.5f : 1.0f;
+    p->jump_mult = (s->steed_t > 0 ? 1.5f : 1.0f) * (1.0f + food_fx(s, ME_JUMP));
     (void)g;
 }
 

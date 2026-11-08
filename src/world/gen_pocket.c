@@ -338,6 +338,12 @@ static void garden(GenCtx *g) {
                 float d = sqrtf((x - 73.0f) * (x - 73.0f) * 0.6f + (z - 9.0f) * (z - 9.0f));
                 if (d <= 4.5f) g_set_w(g, x, F, z, B_WATER);
             }
+        /* a henhouse: three hens live here (wildlife.c) */
+        box(g, 77, G, 27, 81, G + 1, 30, B_WOOD);
+        box(g, 78, G, 28, 80, G + 1, 29, B_AIR);
+        box(g, 78, G, 27, 78, G, 27, B_AIR); /* the little door */
+        box(g, 76, G + 2, 26, 82, G + 2, 31, B_ROOF);
+        box(g, 79, G, 28, 80, G, 29, B_GRASS); /* straw */
     }
     if (s >= 3) { /* walls of hedge, flower beds, benches, more light */
         for (int x = x0 + 2; x < x0 + 62; x++)

@@ -289,9 +289,117 @@ static bool pickup_alive_with_key(Game *g, u64 key) {
     return false;
 }
 
+Pickup *pickup_find_key(Game *g, u64 key) {
+    for (int i = 0; i < MAX_PICKUPS; i++)
+        if (g->pickups[i].alive && g->pickups[i].key == key) return &g->pickups[i];
+    return NULL;
+}
+
+/* ---------- food that grows and food in larders (docs/FOOD.md, section 4) ---------- */
+
+/* What grows here, by layer and style, and what the larders of built places hold. */
+static void plants_here(const ChunkInfo *ci, int tier, float *w) {
+    switch (ci->stratum) {
+    case ST_MINES: w[FD_MUSHROOM] += 1.0f; w[FD_SALT] += 0.5f; break;
+    case ST_ROOTS: w[FD_TUBER] += 2.0f; w[FD_MUSHROOM] += 1.0f; w[FD_BARROW_ROOT] += 0.5f; break;
+    case ST_FUNGAL: w[FD_MUSHROOM] += 2.0f; w[FD_GLOWCAP] += 2.0f; w[FD_MOSS] += 1.0f; break;
+    case ST_CRYSTAL: w[FD_GLOWCAP] += 1.0f; break;
+    case ST_OSSUARY: w[FD_BARROW_ROOT] += 1.0f; w[FD_MUSHROOM] += 0.5f; break;
+    case ST_LIMBO: w[FD_BARROW_ROOT] += 0.3f; break;
+    case ST_INFERNO: case ST_IRONHELL: case ST_MAW: case ST_CORE: w[FD_PEPPER] += 1.5f; w[FD_ONION] += 1.0f; break;
+    case ST_DUNGEON: w[FD_MUSHROOM] += 1.0f; w[FD_HERB] += 0.5f; break;
+    case ST_CASTLE: w[FD_HERB] += 1.0f; break;
+    case ST_SPIRES: case ST_AERIE: w[FD_HERB] += 1.0f; break;
+    case ST_CLOUDS: w[FD_HERB] += 0.5f; w[FD_FROSTBERRY] += 0.3f; break;
+    case ST_GARDENS: w[FD_HERB] += 2.0f; w[FD_MELON] += 1.0f; w[FD_MOSS] += 0.5f; break;
+    case ST_HEAVEN: case ST_SUNCOURT: w[FD_MELON] += 1.0f; w[FD_HERB] += 0.5f; break;
+    default: break;
+    }
+    int f = ci->flavor;
+    if (f >= FL_FROST && f <= FL_LASTCOLD) w[FD_FROSTBERRY] += 2.0f;
+    if (f == FL_BARROW) w[FD_BARROW_ROOT] += 2.0f;
+    if (f == FL_SANDSTONE || f == FL_SUNSCORCHED || f == FL_SUNBLAST) w[FD_MELON] += 2.0f;
+    if (f == FL_EMBER || f == FL_PHOENIX) w[FD_PEPPER] += 1.5f;
+    if (f == FL_SULPHUR || f == FL_OBSIDIAN) w[FD_ONION] += 2.0f;
+    if (f == FL_SALT) w[FD_SALT] += 2.0f;
+    if (f == FL_BAMBOO) w[FD_BAMBOO] += 2.0f;
+    if (f == FL_JADE || f == FL_SILK) w[FD_JADE_LEAF] += 2.0f;
+    if (f == FL_STEPPE || f == FL_DRUIDIC) w[FD_HERB] += 1.5f;
+    if (f == FL_DRUIDIC) w[FD_BARROW_ROOT] += 1.0f;
+    if (f == FL_DROWNED) w[FD_MOSS] += 2.0f;
+    if (f == FL_CORAL || f == FL_BRINE || f == FL_PEARL) w[FD_SEAGRAPE] += 2.0f;
+    if (tier >= 8) w[FD_STARFRUIT] += 0.15f; /* very far out only */
+}
+
+static void larder_here(const ChunkInfo *ci, float *w) {
+    w[FD_GRAIN] += 1.0f;
+    w[FD_SALT] += 0.5f;
+    w[FD_OIL] += 0.5f;
+    w[FD_WINE] += 0.3f;
+    int f = ci->flavor;
+    if (f == FL_GOTHIC || f == FL_BOYAR) w[FD_WINE] += 1.0f;
+    if (f == FL_IMPERIAL || f == FL_SILK || f == FL_BRASS || f == FL_TERRACOTTA) { w[FD_SPICES] += 0.6f; w[FD_OIL] += 0.5f; }
+    if (f == FL_BOYAR) w[FD_GRAIN] += 0.5f;
+}
+
+static int pick_food(const float *w, float r) {
+    float sum = 0;
+    for (int i = 0; i < FD_COUNT; i++) sum += w[i];
+    if (sum <= 0) return -1;
+    r *= sum;
+    for (int i = 0; i < FD_COUNT; i++) {
+        if (r < w[i]) return i;
+        r -= w[i];
+    }
+    return FD_COUNT - 1;
+}
+
+#define REGROW 1200.0f /* plants grow back, larders are refilled, after 20 minutes */
+
+static void food_place_in_chunk(Game *g, Chunk *c) {
+    const ChunkInfo *ci = &c->info;
+    u64 ck = chunk_spawn_key(c->cx, c->cy, c->cz);
+    u64 epoch = (u64)(g->play_time / REGROW);
+    Rng r = rng_make(ci->seed ^ 0xF00DULL ^ (epoch * 0x9E37ULL));
+    int tier;
+    world_region(&g->world, c->cx, c->cy, c->cz, &tier);
+    float w[FD_COUNT] = { 0 };
+    if (ci->arch == ARCH_EXTERIOR) w[FD_HERB] = 1.0f;
+    else plants_here(ci, tier, w);
+    w[FD_SALT] *= 0.5f;
+    int n = rng_chance(&r, 0.7f) ? rng_range(&r, 1, 3) : 0;
+    vec3 p;
+    for (int i = 0; i < n; i++) {
+        int f = pick_food(w, rng_float(&r));
+        if (f < 0) break;
+        u64 key = mix64(ck ^ 0xF00D0ULL ^ ((u64)i << 8) ^ (epoch << 24)) | 1;
+        if (looted_has(g, key) || pickup_alive_with_key(g, key) || !find_spot(g, c, &r, &p)) continue;
+        pickup_spawn(g, PK_FOOD, p, f, NULL, key, ck);
+    }
+    /* a larder: sacks and bottles in built places */
+    bool built = ci->arch == ARCH_ROOMS || ci->arch == ARCH_CELLS || ci->arch == ARCH_ARENA || ci->has_struct;
+    if (built && rng_chance(&r, 0.3f)) {
+        float lw[FD_COUNT] = { 0 };
+        larder_here(ci, lw);
+        int m = rng_range(&r, 1, 3);
+        vec3 base;
+        if (!find_spot(g, c, &r, &base)) return;
+        for (int i = 0; i < m; i++) {
+            int f = pick_food(lw, rng_float(&r));
+            u64 key = mix64(ck ^ 0x1A4DE4ULL ^ ((u64)i << 8) ^ (epoch << 24)) | 1;
+            if (f < 0 || looted_has(g, key) || pickup_alive_with_key(g, key)) continue;
+            p = v3_add(base, v3((float)(i % 2) * 0.5f - 0.25f, 0, (float)(i / 2) * 0.5f));
+            if (game_solid(g, (int)floorf(p.x), (int)floorf(p.y), (int)floorf(p.z))) p = base;
+            pickup_spawn(g, PK_FOOD, p, f, NULL, key, ck);
+        }
+    }
+}
+
 void loot_place_in_chunk(Game *g, Chunk *c) {
     const ChunkInfo *ci = &c->info;
-    if (ci->arch == ARCH_EXTERIOR || ci->arch == ARCH_POCKET) return;
+    if (ci->arch == ARCH_POCKET) return;
+    food_place_in_chunk(g, c);
+    if (ci->arch == ARCH_EXTERIOR) return;
     u64 ck = chunk_spawn_key(c->cx, c->cy, c->cz);
     Rng r = rng_make(ci->seed ^ 0xC4E57ULL);
     u64 chest_key = mix64(ck ^ 0xC1C1ULL) | 1, relic_key = mix64(ck ^ 0xE1E1ULL) | 1;
@@ -385,6 +493,13 @@ static bool collect(Game *g, PlayerSlot *ps, Pickup *p) {
         return false; /* read, not taken (quests.c) */
     case PK_QUEST:
         return story_collect_quest(g, ps, p);
+    case PK_FOOD: {
+        int before = s->food[p->amount];
+        food_give(g, ps, p->amount, 1);
+        if (s->food[p->amount] == before) return false; /* no room */
+        if (p->key) looted_add(g, p->key);
+        return true;
+    }
     case PK_KEYSTONE:
         g->sanctum.keystones++;
         sfx_player(g, ps, SFX_PICKUP_RELIC, 1.0f);
@@ -510,6 +625,10 @@ void pickups_draw(Game *g, vec3 eye) {
             if (p->item.rarity >= RAR_RARE) batch3d_octa(v3_add(c, v3(0, 0.75f, 0)), 0.04f, 0.06f, p->t * 2.0f, col, true);
             break;
         }
+        case PK_FOOD: /* on the ground where it grew or lies; a dropped one turns slowly */
+            food_draw_model(p->amount, p->key ? p->pos : v3_add(p->pos, v3(0, bob + 0.05f, 0)), p->key ? (float)(p->key % 16) * 0.4f : p->t * 1.2f,
+                            p->key ? 1.2f : 1.4f, l);
+            break;
         case PK_KEYSTONE: /* a wedge of pale stone with a blue rune */
             batch3d_box(c, v3(0.16f, 0.2f, 0.1f), p->t * 1.2f, v3(0.75f * l.x + 0.1f, 0.78f * l.y + 0.1f, 0.85f * l.z + 0.15f), false);
             batch3d_box(c, v3(0.04f, 0.12f, 0.105f), p->t * 1.2f, v3(0.5f, 0.8f, 1.3f), true);
@@ -573,7 +692,7 @@ void drink_potion(Game *g, PlayerSlot *ps, bool mana) {
     if (mana) g_tele.potions_mp++; else g_tele.potions_hp++;
     if (mana) s->mana = fminf(s->maxmana, s->mana + s->maxmana * 0.6f);
     else {
-        s->hp = fminf(s->maxhp, s->hp + s->maxhp * 0.5f);
+        s->hp = fminf(s->maxhp, s->hp + s->maxhp * 0.5f * (1.0f + food_fx(s, ME_POTION)));
         s->burn_t = s->poison_t = 0; /* and it washes off burns and poison */
     }
     ps->potion_cd = 0.6f;
