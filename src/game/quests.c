@@ -306,6 +306,7 @@ static void chapter_complete(Game *g, PlayerSlot *ps, bool other_killed) {
     }
     s->chapter++;
     ps->target_chapter = 0;
+    ps->story_quiet = 0;
     story_chapter_hook(&g->world, m, s->chapter, &p, hook, sizeof hook);
     show_msg(ps, text, hook);
     g->autosave_timer = 1e9f;
@@ -392,7 +393,7 @@ static void read_trace(Game *g, PlayerSlot *ps, Pickup *p) {
 static void mission_reward(Game *g, PlayerSlot *ps, const Mission *m, const char *what) {
     ps->st.gold += m->reward;
     game_add_xp(g, ps, 25.0f + m->reward * 0.6f);
-    if (m->type == MI_RETRIEVE) ps->st.potions_hp = MINI(POTION_HP_MAX, ps->st.potions_hp + 1);
+    if (m->type == MI_RETRIEVE) ps->st.potions_hp = MINI(POTION_HP_MAX - ps->st.elixirs[0], ps->st.potions_hp + 1);
     char buf[128];
     snprintf(buf, sizeof buf, "%s - %d GOLD", what, m->reward);
     upper(buf);
@@ -491,8 +492,50 @@ static void update_reading(Game *g, PlayerSlot *ps) {
 }
 
 /* Named targets and quest items appear when their chunk is loaded and someone is near. */
+/* The story comes to those who do not go to it (playtest 2): after ten minutes without a
+ * chapter, the current target sends hunters (an elite and two of its kind) from out of sight,
+ * and the Golden Thread shows the way back to it. */
+#define STORY_QUIET 600.0f
+static void send_hunters(Game *g, PlayerSlot *ps) {
+    const Named *t = &ps->target;
+    vec3 f = ps->pl.pos;
+    int fx = (int)floorf(f.x), fy = (int)floorf(f.y), fz = (int)floorf(f.z);
+    u64 h = mix64((u64)(g->time * 1000.0f) ^ t->key);
+    for (int attempt = 0; attempt < 60; attempt++) {
+        h = mix64(h + 0x9E37);
+        float a = (float)(h & 0xFFFF) / 65536.0f * 2.0f * PI_F, d = 16.0f + (float)((h >> 16) & 0xFF) / 25.0f;
+        int x = fx + (int)(cosf(a) * d), z = fz + (int)(sinf(a) * d);
+        for (int y = fy + 3; y >= fy - 3; y--) {
+            if (game_solid(g, x, y - 1, z) != 1 || game_solid(g, x, y, z) || game_solid(g, x, y + 1, z) || game_solid(g, x, y + 2, z)) continue;
+            vec3 p = v3(x + 0.5f, (float)y, z + 0.5f);
+            int tier, level = (int)world_difficulty(floordiv(x, CHUNK), floordiv(y, CHUNK), floordiv(z, CHUNK));
+            world_region(&g->world, floordiv(x, CHUNK), floordiv(y, CHUNK), floordiv(z, CHUNK), &tier);
+            int type = level >= MONSTERS[t->mon].min_level ? t->mon : MON_HOUND;
+            for (int k = 0; k < 3; k++) {
+                vec3 q = v3_add(p, v3((float)(k % 2), 0, (float)(k / 2)));
+                if (k && game_solid(g, (int)floorf(q.x), (int)floorf(q.y), (int)floorf(q.z))) q = p;
+                Monster *m = monster_spawn(g, type, q, level, k == 0, v3(0.6f, 0.4f, 0.3f), 0);
+                if (!m) continue;
+                m->awake = true;
+                m->target = ps->index;
+                m->state = MS_CHASE;
+            }
+            char buf[160];
+            snprintf(buf, sizeof buf, "%s SENDS HUNTERS AFTER YOU", t->name);
+            for (char *c = buf; *c; c++) if (*c >= 'a' && *c <= 'z') *c -= 32;
+            game_banner(ps, buf);
+            story_cast_thread(g, ps); /* and the way back to whoever sent them */
+            return;
+        }
+    }
+}
+
 static void update_targets(Game *g, PlayerSlot *ps, float dt) {
     ensure_target(g, ps);
+    if (!realm_has(ps->pl.pos) && (ps->story_quiet += dt) > STORY_QUIET) {
+        ps->story_quiet = 0;
+        if (ps->target.key) send_hunters(g, ps);
+    }
     ps->target_retry -= dt;
     Named *t = &ps->target;
     if (looted_has(g, t->key)) {

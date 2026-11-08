@@ -159,6 +159,12 @@ Monster *monster_spawn(Game *g, int type, vec3 pos, int level, bool elite, vec3 
         if (!g->mons[i].alive) m = &g->mons[i];
     if (!m) return NULL;
     const MonsterDef *d = &MONSTERS[type];
+    /* a floor under the danger: at least 60% of the strongest player's level, so lingering
+     * where it is easy does not stay easy (playtest 2) */
+    int top = 0;
+    for (int i = 0; i < MAX_PLAYERS; i++)
+        if (g->players[i].active) top = MAXI(top, g->players[i].st.level);
+    level = MAXI(level, (int)(0.6f * (float)top));
     memset(m, 0, sizeof *m);
     m->alive = true;
     m->type = (u8)type;
@@ -253,6 +259,13 @@ static void spawn_chunk(Game *g, Chunk *c) {
         sum += w[t];
     }
     if (sum <= 0) w[MON_CRAWLER] = 1;
+    /* from the first step out, more that close the distance on an archer (playtest 2) */
+    int tier0;
+    world_region(&g->world, c->cx, c->cy, c->cz, &tier0);
+    if (tier0 >= 1) {
+        if (level >= MONSTERS[MON_HOUND].min_level) w[MON_HOUND] += 1.0f;
+        if (level >= MONSTERS[MON_SPIDER].min_level) w[MON_SPIDER] += 1.0f;
+    }
     int main_type = level <= 1 ? MON_CRAWLER : pick_weighted(rng_float(&r), w, MON_TYPE_COUNT);
     int tier;
     world_region(&g->world, c->cx, c->cy, c->cz, &tier);
@@ -739,6 +752,13 @@ enum { BH_GENERIC, BH_MOVED, BH_DONE }; /* run the usual melee chase / moved its
 /* One shot, or three spread out for a boss. */
 static void monster_volley(Game *g, Monster *m, vec3 target) {
     int n = m->grade == GRADE_BOSS ? 3 : 1;
+    /* aim ahead of a player on the move (playtest 2: strafing dodged everything) */
+    PlayerSlot *ps = m->charm_t > 0 ? NULL : game_nearest_player(g, target, 2.5f);
+    if (ps) {
+        float speed = m->type == MON_SKELETON ? 20.0f : 11.0f;
+        float t = v3_len(v3_sub(target, monster_centre(m))) / speed;
+        target = v3_add(target, v3_scale(v3(ps->pl.vel.x, 0, ps->pl.vel.z), t * 0.7f));
+    }
     vec3 c = monster_centre(m), to = v3_sub(target, c);
     vec3 side = v3_norm(v3(-to.z, 0, to.x));
     for (int k = 0; k < n; k++) enemy_fire(g, m, v3_add(target, v3_scale(side, (k - (n - 1) * 0.5f) * 1.4f)));
@@ -969,9 +989,10 @@ static int behave(Game *g, Monster *m, const MCtx *x, vec3 *want) {
         if (m->hidden) {
             m->t2 -= x->dt;
             if (m->t2 > 0) return BH_MOVED;
-            /* back, behind its target */
+            /* back, behind its target; beside one that keeps its distance with a bow or staff */
             vec3 pf = v3(cosf(x->tp->pl.yaw), 0, sinf(x->tp->pl.yaw));
             vec3 at = v3_sub(x->feet, v3_scale(pf, 1.8f));
+            if (x->tp->st.weapon != WPN_SWORD) at = v3_add(x->feet, v3_add(v3_scale(v3(-pf.z, 0, pf.x), 1.6f), v3_scale(pf, 0.6f)));
             at.y = x->feet.y + 0.2f;
             if (phys_box_free(at, d->hw * m->scale, d->h * m->scale, game_solid, g)) m->pos = at;
             m->hidden = 0;

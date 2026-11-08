@@ -53,6 +53,7 @@ enum { EX_NONE, EX_INVISIBLE, EX_WINGS, EX_TIMESLIP, EX_WARD, EX_SIGHT };
 
 #define ELIXIR_COUNT 27
 extern const Elixir ELIXIRS[ELIXIR_COUNT];
+#define ELIXIR_BELT 4 /* elixirs carried at once, the Draught of Vigor aside (it counts as a potion) */
 #define ELIXIRS_START ((1u << 0) | (1u << 1)) /* the formulae every character knows */
 
 int alchemy_steps(const u8 *steps); /* how many steps a formula has */
@@ -62,5 +63,6 @@ int alchemy_match(const u8 *steps, int n);
 /* The formula these steps come closest to (most steps right, in their places); *right and
  * *len say how close. -1 if nothing is close. */
 int alchemy_closest(const u8 *steps, int n, int *right, int *len);
+int alchemy_misplaced(const u8 *steps, int n, int r); /* steps of formula r that are in there at all */
 
 #endif

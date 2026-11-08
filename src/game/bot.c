@@ -247,7 +247,7 @@ static bool want_pickup(const PlayerSlot *ps, const Pickup *p) {
     const Stats *s = &ps->st;
     switch (p->kind) {
     case PK_GOLD: case PK_SCROLL: case PK_RELIC: case PK_CHEST: case PK_QUEST: case PK_KEYSTONE: return true;
-    case PK_POTION_HP: return s->potions_hp < POTION_HP_MAX;
+    case PK_POTION_HP: return healing_held(s) < POTION_HP_MAX;
     case PK_POTION_MP: return s->potions_mp < POTION_MP_MAX;
     case PK_WEAPON: {
         for (int i = 0; i < BAG_SIZE; i++) if (!s->bag[i].used) return true;
@@ -692,7 +692,7 @@ static bool bot_food(Game *g, PlayerSlot *ps, PlayerInput *in, float dt) {
     }
     /* cook at a fire */
     int place = food_cook_place(g, ps);
-    if (place != CP_NONE && B.t >= B.next_cook && food_held(s) >= 2) {
+    if (place != CP_NONE && B.t >= B.next_cook && food_held(s) >= 2 && food_dishes_held(s) < FOOD_POUCH) {
         B.next_cook = B.t + 20.0f;
         for (int k = 0; k < 3; k++) {
             u8 pot[4];
@@ -761,7 +761,8 @@ static void bot_alchemy(Game *g, PlayerSlot *ps, bool in_fight, const Monster *m
     if (!in_fight && B.t >= B.next_brew && alchemy_station(g, ps)) {
         B.next_brew = B.t + 30.0f;
         for (int r = 0; r < ELIXIR_COUNT; r++) {
-            if (!(s->formulae & (1u << r)) || s->elixirs[r] >= 3 || !can_brew(s, r)) continue;
+            if (!(s->formulae & (1u << r)) || s->elixirs[r] >= 2 || !can_brew(s, r)) continue;
+            if (r == 0 ? healing_held(s) >= POTION_HP_MAX : alchemy_belt(s) >= ELIXIR_BELT) continue;
             ps->ncauldron = 0;
             for (int k = 0; k < alchemy_steps(ELIXIRS[r].steps); k++) alchemy_add(g, ps, ELIXIRS[r].steps[k]);
             if (alchemy_bottle(g, ps)) logf_("%7.1f BREW %s (%d)\n", B.t, ELIXIRS[r].name, s->elixirs[r]);
@@ -951,12 +952,14 @@ bool bot_step(Game *g, PlayerInput *in, float dt) {
                           g->sanctum.keystones);
                 }
             if (shop_buy_kind(g, ps, SH_SCROLL)) bought++;
+            if (s->gold > 2600 && shop_buy_kind(g, ps, SH_KEYSTONE)) { bought++; logf_("%7.1f BUY keystone\n", B.t); }
+            while (s->gold > 1500 && shop_buy_kind(g, ps, SH_MERCHANT)) bought++;
             int used = 0;
             for (int i = 0; i < BAG_SIZE; i++) used += s->bag[i].used;
             if (used > BAG_SIZE - 4 && shop_buy_kind(g, ps, SH_STORE)) bought++;
             B.shopped_realm = true;
         }
-        while (s->potions_hp < POTION_HP_MAX && shop_buy_kind(g, ps, SH_POTION_HP)) bought++;
+        while (healing_held(s) < POTION_HP_MAX && shop_buy_kind(g, ps, SH_POTION_HP)) bought++;
         int sp = best_attack_spell(s);
         if (sp >= 0) {
             s->spell = sp;

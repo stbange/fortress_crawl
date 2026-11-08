@@ -80,6 +80,33 @@ static void add(ShopItem *out, int *n, int kind, int arg, int price, bool ok, co
     snprintf(it->why, sizeof it->why, "%s", why ? why : "");
 }
 
+/* The merchants at home (playtest 2): with the library, an alchemist sells three reagents a
+ * day and the library a keystone; with the kitchen, a cook sells two rare goods. A "day" is
+ * half an hour of play; each offer can be bought once a day. */
+#define MERCHANT_DAY 1800.0f
+enum { MERCHANT_SLOTS = 5 };
+static u64 merchant_key(Game *g, int slot) {
+    return mix64(g->world.seed ^ 0xDA11ULL ^ ((u64)(g->play_time / MERCHANT_DAY) << 8) ^ (u64)slot) | 1;
+}
+/* slot 0-2: a reagent, 3-4: a larder good. Returns false if the slot is not open. */
+static bool merchant_offer(Game *g, int slot, bool *reagent, int *id, int *price) {
+    u64 h = mix64(merchant_key(g, slot) ^ 0x5E11ULL);
+    if (slot < 3) {
+        if (sanctum_stage(g, SP_LIBRARY) < 1 || sanctum_stage(g, SP_ISLAND) < 2) return false;
+        *reagent = true;
+        *id = (int)(h % RG_COUNT);
+        *price = *id == RG_PHOENIX ? 800 : *id >= RG_MONSTER_COUNT ? 400 : 200;
+        return true;
+    }
+    if (sanctum_stage(g, SP_DINING) < 3) return false;
+    static const int GOODS[][2] = { { FD_SPICES, 250 }, { FD_ROYAL_JELLY, 300 }, { FD_STARFRUIT, 800 }, { FD_WINE, 120 }, { FD_HONEY, 120 }, { FD_SALT, 60 } };
+    int k = (int)(h % 6);
+    *reagent = false;
+    *id = GOODS[k][0];
+    *price = GOODS[k][1];
+    return true;
+}
+
 static int shop_items(Game *g, PlayerSlot *ps, ShopItem *out) {
     Stats *s = &ps->st;
     int n = 0;
@@ -95,7 +122,7 @@ static int shop_items(Game *g, PlayerSlot *ps, ShopItem *out) {
     bool home = realm_has(ps->pl.pos);
     if (!home && shrine_here(g, ps) < 0) return n;
     char why[40];
-    add(out, &n, SH_POTION_HP, 0, 40, s->potions_hp < POTION_HP_MAX, s->potions_hp < POTION_HP_MAX ? NULL : "YOU CARRY ALL YOU CAN",
+    add(out, &n, SH_POTION_HP, 0, 40, healing_held(s) < POTION_HP_MAX, healing_held(s) < POTION_HP_MAX ? NULL : "YOU CARRY ALL YOU CAN",
         "HEALTH POTION (%d/%d)", s->potions_hp, POTION_HP_MAX);
     add(out, &n, SH_POTION_MP, 0, 30, s->potions_mp < POTION_MP_MAX, s->potions_mp < POTION_MP_MAX ? NULL : "YOU CARRY ALL YOU CAN",
         "MANA POTION (%d/%d)", s->potions_mp, POTION_MP_MAX);
@@ -131,6 +158,18 @@ static int shop_items(Game *g, PlayerSlot *ps, ShopItem *out) {
         add(out, &n, SH_BUILD, p, gold, ok, needs_island ? "NEEDS A WIDER ISLAND" : keys > g->sanctum.keystones ? "NOT ENOUGH KEYSTONES" : NULL,
             "BUILD %s %d: %s", PLOT_NAMES[p], cur + 1, WHAT[p][cur + 1]);
         out[n - 1].keys = keys;
+    }
+    /* the merchants */
+    for (int k = 0; k < MERCHANT_SLOTS; k++) {
+        bool rg;
+        int id, price;
+        if (!merchant_offer(g, k, &rg, &id, &price)) continue;
+        bool sold = looted_has(g, merchant_key(g, k));
+        add(out, &n, SH_MERCHANT, k, price, !sold, "SOLD: MORE TOMORROW", "%s: %s", rg ? "THE ALCHEMIST" : "THE COOK", rg ? REAGENTS[id].name : FOODS[id].name);
+    }
+    if (sanctum_stage(g, SP_LIBRARY) >= 1 && sanctum_stage(g, SP_ISLAND) >= 2) {
+        bool sold = looted_has(g, merchant_key(g, 99));
+        add(out, &n, SH_KEYSTONE, 99, 2000, !sold, "ONE A DAY: MORE TOMORROW", "A KEYSTONE FROM THE LIBRARY'S VAULT (ONE A DAY)");
     }
     /* the stash */
     int bag = 0, stash = 0;
@@ -252,6 +291,22 @@ static void buy(Game *g, PlayerSlot *ps, const ShopItem *it) {
         sfx_ui(SFX_PICKUP_SCROLL, 1.0f);
         break;
     }
+    case SH_MERCHANT: {
+        bool rg;
+        int id, price;
+        if (!merchant_offer(g, it->arg, &rg, &id, &price)) return;
+        if (rg) alchemy_give(g, ps, id, 1);
+        else food_give(g, ps, id, 1);
+        looted_mark(g, merchant_key(g, it->arg));
+        sfx_ui(SFX_PICKUP_GOLD, 0.8f);
+        return;
+    }
+    case SH_KEYSTONE:
+        g->sanctum.keystones++;
+        looted_mark(g, merchant_key(g, 99));
+        snprintf(buf, sizeof buf, "A KEYSTONE (%d) - FOR BUILDING THE SANCTUM", g->sanctum.keystones);
+        sfx_ui(SFX_PICKUP_RELIC, 1.0f);
+        break;
     default: return;
     }
     upper(buf);

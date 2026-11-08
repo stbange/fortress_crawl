@@ -203,8 +203,8 @@ void wildlife_spawn_chunk(Game *g, Chunk *c) {
     if (!water) w[CR_FISH] = 0;
     if (!lava) w[CR_SALAMANDER] = 0;
     Rng r = rng_make(ci->seed ^ 0xC0FFEEULL);
-    if (!rng_chance(&r, ci->arch == ARCH_EXTERIOR ? 0.5f : 0.6f)) return;
-    int groups = rng_chance(&r, 0.35f) ? 2 : 1, idx = 0;
+    if (!rng_chance(&r, ci->arch == ARCH_EXTERIOR ? 0.25f : 0.25f)) return; /* a third of what it was (playtest 2) */
+    int groups = rng_chance(&r, 0.2f) ? 2 : 1, idx = 0;
     for (int gi = 0; gi < groups; gi++) {
         float k = pick(w, CR_COUNT, rng_float(&r));
         if (k < 0) return;

@@ -848,6 +848,7 @@ void utility_draw_hud(Game *g, PlayerSlot *ps, int W, int H) {
         { s->elixir && s->elixir_onset <= 0 ? s->elixir_t : 0, "ELIXIR", { 0.6f, 1.0f, 0.6f } },
         { s->elixir ? s->elixir_onset : 0, "BREWING IN YOU", { 0.8f, 1.0f, 0.5f } },
         { s->meal ? s->meal_t : 0, "MEAL", { 1.0f, 0.8f, 0.5f } },
+        { s->elixir ? 0 : s->tox_t, "TOXIC", { 0.7f, 0.8f, 0.3f } },
     };
     font_begin(W, H);
     char buf[64];

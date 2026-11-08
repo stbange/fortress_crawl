@@ -103,6 +103,7 @@ extern const Recipe RECIPES[RC_ALL];
  * Sanctum kitchen (4). */
 enum { CP_NONE, CP_CAMPFIRE, CP_FIREPLACE, CP_KITCHEN, CP_COUNT };
 #define DISH_QUALITIES 4
+#define FOOD_POUCH 4 /* dishes carried at once, all kinds together */
 
 /* The recipe some ingredients make (RC_SIMPLE when none fits). */
 int food_match(const u8 *ings, int n);

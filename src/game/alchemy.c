@@ -54,8 +54,8 @@ const ReagentDef REAGENTS[RG_COUNT] = {
 #define E STEP_NONE
 
 const Elixir ELIXIRS[ELIXIR_COUNT] = {
-    { "draught of vigor", { R(ICHOR), F(HERB), HEAT, STIR, E, E, E }, 2, 20, { { ME_FIGHT_REGEN, 0.04f } }, EX_NONE,
-      { 0.5f, 1.0f, 0.4f }, "4% of your health back every second" },
+    { "draught of vigor", { R(ICHOR), F(HERB), HEAT, STIR, E, E, E }, 2, 20, { { ME_FIGHT_REGEN, 0.025f } }, EX_NONE,
+      { 0.5f, 1.0f, 0.4f }, "2.5% of your health back every second (counts as a health potion)" },
     { "swift tonic", { R(BATWING), GRIND, F(SALT), STIR, E, E, E }, 2, 25, { { ME_SPEED, 0.6f }, { ME_ATTACK_SPEED, 0.25f } }, EX_NONE,
       { 0.6f, 0.9f, 1.0f }, "60% faster, attacks 25% faster" },
     { "berserker's draught", { R(GALL), F(PEPPER), HEAT, HEAT, STIR, E, E }, 3, 25, { { ME_DAMAGE, 0.8f }, { ME_TAKEN, 0.25f } }, EX_NONE,
@@ -147,6 +147,16 @@ int alchemy_match(const u8 *steps, int n) {
     return -1;
 }
 
+/* Steps that are in formula r at all, wherever (each counted once): the mastermind's white pegs plus its black ones. */
+int alchemy_misplaced(const u8 *steps, int n, int r) {
+    bool used[FORMULA_STEPS] = { 0 };
+    int l = alchemy_steps(ELIXIRS[r].steps), k = 0;
+    for (int i = 0; i < n; i++)
+        for (int j = 0; j < l; j++)
+            if (!used[j] && ELIXIRS[r].steps[j] == steps[i]) { used[j] = true; k++; break; }
+    return k;
+}
+
 int alchemy_closest(const u8 *steps, int n, int *right, int *len) {
     int best = -1, br = 0, bl = 0;
     for (int r = 0; r < ELIXIR_COUNT; r++) {
@@ -162,6 +172,7 @@ int alchemy_closest(const u8 *steps, int n, int *right, int *len) {
 /* ---------- reagents ---------- */
 
 #define REAGENT_MAX 20
+#define TOXIC_AFTER 90.0f /* seconds after an elixir before the next works fully */
 #define ELIXIR_MAX 5
 
 void alchemy_give(Game *g, PlayerSlot *ps, int rg, int n) {
@@ -198,6 +209,7 @@ bool alchemy_learn(Game *g, PlayerSlot *ps, int r, bool found) {
         return false;
     }
     s->formulae |= 1u << r;
+    s->formulae_torn &= ~(1u << r);
     snprintf(buf, sizeof buf, "%s: %s", found ? "A FORMULA" : "DISCOVERED", name);
     game_banner(ps, buf);
     sfx_ui(SFX_FORMULA_FOUND, 1.0f);
@@ -205,11 +217,43 @@ bool alchemy_learn(Game *g, PlayerSlot *ps, int r, bool found) {
     return true;
 }
 
+/* A torn page: the ingredients of a formula, not its steps. Two of the same make it whole. */
+bool alchemy_learn_torn(Game *g, PlayerSlot *ps, int r) {
+    if (r < 0 || r >= ELIXIR_COUNT) return false;
+    Stats *s = &ps->st;
+    if ((s->formulae | s->formulae_torn) & (1u << r)) {
+        if (s->formulae_torn & (1u << r) && !(s->formulae & (1u << r))) { /* the other half */
+            s->formulae_torn &= ~(1u << r);
+            return alchemy_learn(g, ps, r, true);
+        }
+        return alchemy_learn(g, ps, r, true); /* known: a few coins */
+    }
+    s->formulae_torn |= 1u << r;
+    char buf[160], name[64];
+    snprintf(name, sizeof name, "%s", ELIXIRS[r].name);
+    upper(name);
+    snprintf(buf, sizeof buf, "A TORN PAGE: %s - WHAT GOES IN, NOT HOW", name);
+    game_banner(ps, buf);
+    sfx_ui(SFX_FORMULA_FOUND, 0.8f);
+    return true;
+}
+
+int healing_held(const Stats *s) { return s->potions_hp + s->elixirs[0]; }
+
+int alchemy_belt(const Stats *s) {
+    int n = 0;
+    for (int r = 1; r < ELIXIR_COUNT; r++) n += s->elixirs[r];
+    return n;
+}
+
 /* A formula page for whoever finds it: one this player does not know, if there is one. */
 int alchemy_random_formula(const Stats *s, u64 seed) {
     int unknown[ELIXIR_COUNT], n = 0;
     for (int r = 0; r < ELIXIR_COUNT; r++)
         if (!(s->formulae & (1u << r))) unknown[n++] = r;
+    /* a torn page half known is the likelier find (so halves meet) */
+    for (int r = 0; r < ELIXIR_COUNT; r++)
+        if ((s->formulae_torn & (1u << r)) && !(s->formulae & (1u << r)) && n < ELIXIR_COUNT) unknown[n++] = r;
     if (n) return unknown[mix64(seed) % (u64)n];
     return (int)(mix64(seed) % ELIXIR_COUNT);
 }
@@ -252,6 +296,11 @@ bool alchemy_bottle(Game *g, PlayerSlot *ps) {
     Stats *s = &ps->st;
     int st = alchemy_station(g, ps);
     if (!st || ps->ncauldron == 0) return false;
+    {   /* no room for what it would make: say so before anything is used up */
+        int r0 = alchemy_match(ps->cauldron, ps->ncauldron);
+        if (r0 == 0 && healing_held(s) >= POTION_HP_MAX) { game_banner(ps, "NO ROOM: HEALTH POTIONS AND VIGOR TOGETHER, FIVE AT MOST"); return false; }
+        if (r0 > 0 && alchemy_belt(s) >= ELIXIR_BELT) { game_banner(ps, "NO ROOM: THE BELT HOLDS FOUR ELIXIRS. DRINK ONE FIRST"); return false; }
+    }
     for (int i = 0; i < ps->ncauldron; i++) {
         u8 k = ps->cauldron[i];
         if (step_is_food(k) && s->food[k]) s->food[k]--;
@@ -266,7 +315,11 @@ bool alchemy_bottle(Game *g, PlayerSlot *ps) {
     char buf[160], name[64];
     if (r >= 0) {
         bool fresh = alchemy_learn(g, ps, r, false);
-        s->elixirs[r] = (u8)MINI(ELIXIR_MAX, s->elixirs[r] + st);
+        int add = st;
+        if (r == 0) add = MINI(add, POTION_HP_MAX - healing_held(s)); /* Vigor shares the health potions' cap */
+        else add = MINI(add, ELIXIR_BELT - alchemy_belt(s));          /* the rest: a belt of four */
+        if (add <= 0) game_banner(ps, r == 0 ? "NO ROOM: HEALTH POTIONS AND VIGOR TOGETHER, FIVE AT MOST" : "NO ROOM: THE BELT HOLDS FOUR ELIXIRS");
+        s->elixirs[r] = (u8)MINI(ELIXIR_MAX, s->elixirs[r] + MAXI(0, add));
         ps->elixir_quick = r;
         g_tele.brewed++;
         snprintf(name, sizeof name, "%s", ELIXIRS[r].name);
@@ -282,10 +335,21 @@ bool alchemy_bottle(Game *g, PlayerSlot *ps) {
     }
     /* a murky brew: how close was it? */
     g_tele.murky++;
-    int right, len;
+    int right, len, elsewhere;
     int c = alchemy_closest(steps, n, &right, &len);
+    if (c < 0) { /* nothing in place: the nearest by what went in at all */
+        int best = -1, bw = 0;
+        for (int k = 0; k < ELIXIR_COUNT; k++) {
+            int w = alchemy_misplaced(steps, n, k);
+            if (w > bw) { bw = w; best = k; }
+        }
+        if (bw >= 2) { c = best; right = 0; len = alchemy_steps(ELIXIRS[c].steps); }
+    }
+    elsewhere = c >= 0 ? alchemy_misplaced(steps, n, c) - right : 0;
+    const char *count = n > len ? ", AND TOO MANY STEPS" : n < len ? ", AND TOO FEW STEPS" : "";
     if (c >= 0 && right >= len - 1 && n == len) snprintf(buf, sizeof buf, "MURKY - BUT SO CLOSE: %d OF %d STEPS IN THEIR PLACE", right, len);
-    else if (c >= 0) snprintf(buf, sizeof buf, "MURKY. %d STEPS WERE RIGHT, IN THEIR PLACE (OF %d)%s", right, len, n > len ? ", AND TOO MANY" : n < len ? ", AND TOO FEW" : "");
+    else if (c >= 0)
+        snprintf(buf, sizeof buf, "MURKY. OF %d: %d RIGHT IN THEIR PLACE, %d RIGHT BUT ELSEWHERE%s", len, right, elsewhere, count);
     else snprintf(buf, sizeof buf, "THE BREW TURNS MURKY AND SINKS");
     game_banner(ps, buf);
     sfx_player(g, ps, SFX_BREW_FAIL, 1.0f);
@@ -311,12 +375,20 @@ bool alchemy_drink(Game *g, PlayerSlot *ps, int r) {
     s->elixir = (u8)(r + 1);
     s->elixir_onset = ELIXIRS[r].onset;
     s->elixir_t = ELIXIRS[r].last;
+    s->elixir_k = 1.0f;
+    bool toxic = s->tox_t > 0;
+    if (toxic) { /* too soon after the last: it burns, and works at half */
+        s->elixir_k = 0.5f;
+        tele_src(HS_OTHER, 0, 0, 0);
+        game_dot_player(g, ps, s->maxhp * 0.15f);
+    }
     ps->elixir_quick = r;
     g_tele.elixirs++;
     char buf[128], name[64];
     snprintf(name, sizeof name, "%s", ELIXIRS[r].name);
     upper(name);
-    snprintf(buf, sizeof buf, "%s - IT TAKES HOLD IN %d S", name, (int)ceilf(ELIXIRS[r].onset));
+    if (toxic) snprintf(buf, sizeof buf, "%s - TOO SOON AFTER THE LAST: IT BURNS, AND WILL WORK AT HALF", name);
+    else snprintf(buf, sizeof buf, "%s - IT TAKES HOLD IN %d S", name, (int)ceilf(ELIXIRS[r].onset));
     game_banner(ps, buf);
     sfx_player(g, ps, SFX_ELIXIR_DRINK, 1.0f);
     return true;
@@ -338,14 +410,18 @@ float alchemy_fx(const Stats *s, int effect) {
     if (!s->elixir || s->elixir_onset > 0 || s->elixir_t <= 0) return 0;
     const Elixir *x = &ELIXIRS[s->elixir - 1];
     float v = 0;
+    bool flag = effect == ME_FIRE_RES || effect == ME_FROST_RES || effect == ME_POISON_IMM || effect == ME_SHOCK_RES || effect == ME_REVIVE ||
+                effect == ME_FROST_AURA || effect == ME_FEAR_AURA || effect == ME_LAVA;
+    float k = flag || s->elixir_k <= 0 ? 1.0f : s->elixir_k;
     for (int i = 0; i < ELIXIR_EFFECTS; i++)
-        if (x->fx[i].e == effect && x->fx[i].v != 0) v += x->fx[i].v;
+        if (x->fx[i].e == effect && x->fx[i].v != 0) v += x->fx[i].v * k;
     return v;
 }
 
 static void take_hold(Game *g, PlayerSlot *ps) {
     Stats *s = &ps->st;
     const Elixir *x = &ELIXIRS[s->elixir - 1];
+    if (s->elixir_k > 0 && s->elixir_k < 1.0f) s->elixir_t *= s->elixir_k; /* too soon: half as long, too */
     switch (x->start) {
     case EX_INVISIBLE: s->invis_t = fmaxf(s->invis_t, x->last); break;
     case EX_WINGS: s->wings_t = fmaxf(s->wings_t, x->last); break;
@@ -371,6 +447,7 @@ static void take_hold(Game *g, PlayerSlot *ps) {
 void alchemy_update(Game *g, float dt) {
     for (int i = 0; i < MAX_PLAYERS; i++) {
         PlayerSlot *ps = &g->players[i];
+        if (ps->active && ps->st.tox_t > 0 && !ps->st.elixir) ps->st.tox_t = fmaxf(0.0f, ps->st.tox_t - dt);
         if (!ps->active || !ps->st.elixir) continue;
         Stats *s = &ps->st;
         const Elixir *x = &ELIXIRS[s->elixir - 1];
@@ -385,6 +462,7 @@ void alchemy_update(Game *g, float dt) {
         if ((s->elixir_t -= dt) <= 0) {
             s->elixir = 0;
             s->elixir_t = 0;
+            s->tox_t = TOXIC_AFTER;
             stats_refresh(ps);
             game_banner(ps, "THE ELIXIR WEARS OFF");
             continue;
@@ -412,6 +490,7 @@ bool alchemy_revive(Game *g, PlayerSlot *ps) {
     if (alchemy_fx(s, ME_REVIVE) <= 0) return false;
     s->elixir = 0;
     s->elixir_t = 0;
+    s->tox_t = TOXIC_AFTER;
     stats_refresh(ps);
     s->hp = s->maxhp * 0.5f;
     s->invuln = fmaxf(s->invuln, 1.5f);
@@ -436,7 +515,7 @@ void alchemy_monster_drop(Game *g, const Monster *m) {
     if (m->grade == GRADE_BOSS) pickup_spawn(g, PK_REAGENT, p, m->type, NULL, 0, 0);
     /* now and then a page of formulae on the stronger ones */
     float fr = (float)((h >> 20) & 0xFFFF) / 65536.0f;
-    if (fr < (m->grade == GRADE_BOSS ? 0.35f : m->elite ? 0.08f : 0.0f)) pickup_spawn(g, PK_FORMULA, p, -1, NULL, 0, 0);
+    if (fr < (m->grade == GRADE_BOSS ? 0.25f : m->elite ? 0.04f : 0.0f)) pickup_spawn(g, PK_FORMULA, p, ((h >> 40) & 1) ? -2 : -1, NULL, 0, 0); /* half torn */
 }
 
 /* Strange reagents that lie about in some places (items.c places them with the plants). */
@@ -496,7 +575,9 @@ static int alch_rows(Game *g, PlayerSlot *ps, AlchRow *rows, int *station) {
     for (int r = 0; r < ELIXIR_COUNT; r++)
         if (s->formulae & (1u << r)) rows[n++] = (AlchRow){ AR_FORMULA, r };
     for (int r = 0; r < ELIXIR_COUNT; r++)
-        if (!(s->formulae & (1u << r))) rows[n++] = (AlchRow){ AR_FORMULA, r };
+        if (!(s->formulae & (1u << r)) && (s->formulae_torn & (1u << r))) rows[n++] = (AlchRow){ AR_FORMULA, r };
+    for (int r = 0; r < ELIXIR_COUNT; r++)
+        if (!((s->formulae | s->formulae_torn) & (1u << r))) rows[n++] = (AlchRow){ AR_FORMULA, r };
     return n;
 }
 
@@ -622,6 +703,18 @@ void alchemy_draw(Game *g, PlayerSlot *ps, int W, int H, int top) {
                 formula_text(e, t, sizeof t);
                 snprintf(buf, sizeof buf, "%s: %s", e->name, t);
                 snprintf(rbuf, sizeof rbuf, "%.0f+%.0fS", e->onset, e->last);
+            } else if (s->formulae_torn & (1u << row->a)) { /* a torn page: what goes in, not how */
+                t[0] = 0;
+                int acts = 0;
+                for (int k = 0; k < FORMULA_STEPS && e->steps[k] != STEP_NONE; k++) {
+                    if (step_is_act(e->steps[k])) { acts++; continue; }
+                    char st[40];
+                    alchemy_step_name(e->steps[k], st, sizeof st);
+                    snprintf(t + strlen(t), sizeof t - strlen(t), "%s%s", t[0] ? ", " : "", st);
+                }
+                snprintf(buf, sizeof buf, "%s (TORN): %s, AND %d STEPS, IN SOME ORDER", e->name, t, acts);
+                snprintf(rbuf, sizeof rbuf, "%d STEPS", alchemy_steps(e->steps));
+                cr = 0.75f; cg = 0.8f; cb = 0.6f;
             } else {
                 snprintf(buf, sizeof buf, "???: A FORMULA OF %d STEPS", alchemy_steps(e->steps));
                 cr = cg = cb = 0.5f;

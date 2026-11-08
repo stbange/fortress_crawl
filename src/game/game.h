@@ -236,6 +236,7 @@ typedef struct Stats {
     u8 dishes[RC_ALL][DISH_QUALITIES][CP_COUNT];
     u32 recipes;
     u8 meal, meal_q, snack;
+    u8 last_meal, meal_repeat; /* the dish eaten last (recipe + 1) and how often in a row */
     float meal_t, meal_len, snack_t;
     /* alchemy (alchemy.c): reagents, bottled elixirs, formulae known, the elixir working
      * (elixir + 1; onset: until it takes hold; t: how long it still holds) */
@@ -244,6 +245,9 @@ typedef struct Stats {
     u32 formulae;
     u8 elixir;
     float elixir_onset, elixir_t;
+    float elixir_k;      /* how strongly it works (half when drunk too soon after another) */
+    float tox_t;         /* after an elixir: the body is still full of it */
+    u32 formulae_torn;   /* formulae known from a torn page: the ingredients, not the steps */
     /* story (per character) */
     u8 motive;       /* 0: not chosen yet, else MOTIVE_* + 1 */
     int chapter;
@@ -375,6 +379,7 @@ typedef struct PlayerSlot {
     vec3 scry_pos;          /* Clairvoyance: where your sight is */
     float gate_cd;          /* just went through a gate or door */
     float ritual_t;         /* opening the Sanctum Door: seconds left of the ritual */
+    float story_quiet;      /* seconds without a chapter finished (the story sends hunters) */
     char reading[STORY_TEXT]; /* the trace you stand at */
     u64 reading_key;
     float reading_t;
@@ -718,7 +723,7 @@ bool shop_open_here(Game *g, const PlayerSlot *ps);
 void shop_nav(Game *g, PlayerSlot *ps, int nav);
 void shop_tap(Game *g, PlayerSlot *ps, int W, int H, int top, float x, float y);
 void shop_draw(Game *g, PlayerSlot *ps, int W, int H, int top);
-enum { SH_SCRAP, SH_POTION_HP, SH_POTION_MP, SH_RANK, SH_REROLL, SH_RELIC, SH_BUILD, SH_SCROLL, SH_STORE, SH_TAKE };
+enum { SH_SCRAP, SH_POTION_HP, SH_POTION_MP, SH_RANK, SH_REROLL, SH_RELIC, SH_BUILD, SH_SCROLL, SH_STORE, SH_TAKE, SH_MERCHANT, SH_KEYSTONE };
 bool shop_buy_kind(Game *g, PlayerSlot *ps, int kind);
 bool shop_buy_arg(Game *g, PlayerSlot *ps, int kind, int arg);
 /* game.c: the Golden Thread key (right after a death: back where you fell) */
@@ -776,6 +781,9 @@ float alchemy_fx(const Stats *s, int effect);       /* ME_* from the elixir work
 int alchemy_station(Game *g, const PlayerSlot *ps); /* 0 none, 1 a shrine or home, 2 home with the library's alembic */
 void alchemy_give(Game *g, PlayerSlot *ps, int rg, int n);
 bool alchemy_learn(Game *g, PlayerSlot *ps, int r, bool found);
+bool alchemy_learn_torn(Game *g, PlayerSlot *ps, int r);
+int healing_held(const Stats *s); /* health potions and Draughts of Vigor together (one cap) */
+int alchemy_belt(const Stats *s);  /* elixirs carried, Vigor aside (ELIXIR_BELT at most) */
 int alchemy_random_formula(const Stats *s, u64 seed);
 bool alchemy_add(Game *g, PlayerSlot *ps, u8 step);
 bool alchemy_bottle(Game *g, PlayerSlot *ps);

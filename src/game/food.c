@@ -56,14 +56,14 @@ const FoodDef FOODS[FD_COUNT] = {
 #define A TG_ANY
 const Recipe RECIPES[RC_ALL] = {
     /* campfire: two ingredients */
-    { "roast", 2, { TG_MEAT, TG_SALTY, N, N }, { { ME_MAXHP, 0.15f } }, "+15% max health" },
+    { "roast", 3, { TG_MEAT, TG_SALTY, TG_FIRE, N }, { { ME_MAXHP, 0.08f } }, "+8% max health" },
     { "spicy skewer", 2, { TG_MEAT, TG_SHARP, N, N }, { { ME_DAMAGE, 0.10f } }, "+10% weapon damage" },
     { "grilled fish", 2, { TG_FISH, TG_FRESH, N, N }, { { ME_REGEN, 1.0f } }, "health comes back twice as fast out of a fight" },
-    { "fried eggs", 2, { TG_EGG, TG_FAT, N, N }, { { ME_MAXHP, 0.10f }, { ME_MAXMANA, 0.10f } }, "+10% max health and mana" },
-    { "fried caps", 2, { TG_EARTHY, TG_FAT, N, N }, { { ME_MAXMANA, 0.20f } }, "+20% max mana" },
+    { "fried eggs", 2, { TG_EGG, TG_FAT, N, N }, { { ME_MAXHP, 0.05f }, { ME_MAXMANA, 0.05f } }, "+5% max health and mana" },
+    { "fried caps", 2, { TG_EARTHY, TG_FAT, N, N }, { { ME_MAXMANA, 0.10f } }, "+10% max mana" },
     { "glow tea", 2, { TG_MANA, TG_FRESH, N, N }, { { ME_MANA_REGEN, 1.0f } }, "mana flows twice as fast" },
     { "honey bread", 2, { TG_SWEET, TG_STAPLE, N, N }, { { ME_SPEED, 0.15f } }, "+15% movement speed" },
-    { "flatbread", 2, { TG_STAPLE, TG_SALTY, N, N }, { { ME_MAXHP, 0.05f }, { ME_TRAVEL, 1.0f } }, "travel food: lasts three times as long, +5% health" },
+    { "flatbread", 2, { TG_STAPLE, TG_SALTY, N, N }, { { ME_MAXHP, 0.03f }, { ME_TRAVEL, 1.0f } }, "travel food: lasts three times as long, +3% health" },
     { "frost sorbet", 2, { TG_FROST, TG_SWEET, N, N }, { { ME_FROST_RES, 1.0f } }, "frost hurts less, never chilled" },
     { "pepper jerky", 2, { TG_MEAT, TG_FIRE, N, N }, { { ME_FIRE_RES, 1.0f } }, "fire hurts less, burns end at once" },
     { "bitter tonic", 2, { TG_BITTER, TG_FRESH, N, N }, { { ME_POISON_IMM, 1.0f } }, "never poisoned" },
@@ -71,18 +71,18 @@ const Recipe RECIPES[RC_ALL] = {
     { "crab on the coals", 2, { TG_FISH, TG_SALTY, N, N }, { { ME_PROJ_RES, 0.15f } }, "projectiles hurt 15% less" },
     { "glowing broth", 2, { TG_GLOW, TG_SALTY, N, N }, { { ME_LIGHT, 1.0f } }, "a light round you, and hidden things show" },
     /* fireplace: three */
-    { "hunter's stew", 3, { TG_MEAT, TG_EARTHY, TG_FRESH, N }, { { ME_MAXHP, 0.10f }, { ME_FIGHT_REGEN, 0.004f } },
-      "+10% max health, health comes back even in a fight" },
-    { "omelette", 3, { TG_EGG, TG_DAIRY, TG_FRESH, N }, { { ME_DAMAGE, 0.08f }, { ME_MAXHP, 0.08f } }, "+8% weapon damage, +8% max health" },
-    { "mushroom pie", 3, { TG_EARTHY, TG_STAPLE, TG_FAT, N }, { { ME_MAXMANA, 0.25f }, { ME_SPELL_POWER, 0.05f } },
-      "+25% max mana, spells 5% stronger" },
+    { "hunter's stew", 3, { TG_MEAT, TG_EARTHY, TG_FRESH, N }, { { ME_MAXHP, 0.05f }, { ME_FIGHT_REGEN, 0.004f } },
+      "+5% max health, health comes back even in a fight" },
+    { "omelette", 3, { TG_EGG, TG_DAIRY, TG_FRESH, N }, { { ME_DAMAGE, 0.08f }, { ME_MAXHP, 0.04f } }, "+8% weapon damage, +4% max health" },
+    { "mushroom pie", 3, { TG_EARTHY, TG_STAPLE, TG_FAT, N }, { { ME_MAXMANA, 0.12f }, { ME_SPELL_POWER, 0.05f } },
+      "+12% max mana, spells 5% stronger" },
     { "fire broth", 3, { TG_FIRE, TG_EARTHY, TG_SALTY, N }, { { ME_FIRE_RES, 1.0f }, { ME_LAVA, 0.5f } }, "fire hurts less, lava burns half as much" },
     { "honey cake", 3, { TG_SWEET, TG_STAPLE, TG_EGG, N }, { { ME_SPEED, 0.20f }, { ME_JUMP, 0.15f } }, "+20% movement speed, jump higher" },
     { "milk porridge", 3, { TG_DAIRY, TG_STAPLE, TG_SWEET, N }, { { ME_STUN_RES, 0.5f } }, "blows push you half as far" },
-    { "root mash", 3, { TG_STAPLE, TG_DAIRY, TG_SALTY, N }, { { ME_MAXHP, 0.20f } }, "+20% max health" },
+    { "root mash", 3, { TG_STAPLE, TG_DAIRY, TG_SALTY, N }, { { ME_MAXHP, 0.10f } }, "+10% max health" },
     { "sea-grape salad", 3, { TG_FRESH, TG_SALTY, TG_FISH, N }, { { ME_POISON_IMM, 1.0f }, { ME_FIGHT_REGEN, 0.002f } },
       "never poisoned, health comes back slowly" },
-    { "grouse pot", 3, { TG_FROST, TG_MEAT, TG_EARTHY, N }, { { ME_FROST_RES, 1.0f }, { ME_MAXHP, 0.10f } }, "frost hurts less, +10% max health" },
+    { "grouse pot", 3, { TG_FROST, TG_MEAT, TG_EARTHY, N }, { { ME_FROST_RES, 1.0f }, { ME_MAXHP, 0.05f } }, "frost hurts less, +5% max health" },
     { "quail on a stick", 3, { TG_SWIFT, TG_MEAT, TG_FIRE, N }, { { ME_ATTACK_SPEED, 0.10f } }, "attacks 10% faster" },
     /* kitchen: four */
     { "salamander curry", 4, { TG_FIRE, TG_SHARP, TG_MEAT, TG_STAPLE }, { { ME_DAMAGE, 0.15f }, { ME_IGNITE, 0.2f } },
@@ -94,12 +94,12 @@ const Recipe RECIPES[RC_ALL] = {
     { "jade tea ceremony", 4, { TG_MANA, TG_FRESH, TG_SWEET, TG_GLOW }, { { ME_MANA_REGEN, 1.0f }, { ME_SPELL_POWER, 0.10f } },
       "mana flows twice as fast, spells 10% stronger" },
     { "royal tart", 4, { TG_RARE, TG_SWEET, TG_DAIRY, TG_STAPLE }, { { ME_COOLDOWN, 0.20f } }, "spell cooldowns 20% shorter" },
-    { "fisherman's chowder", 4, { TG_FISH, TG_DAIRY, TG_SALTY, TG_EARTHY }, { { ME_MAXHP, 0.15f }, { ME_MAXMANA, 0.15f } },
-      "+15% max health and mana" },
+    { "fisherman's chowder", 4, { TG_FISH, TG_DAIRY, TG_SALTY, TG_EARTHY }, { { ME_MAXHP, 0.08f }, { ME_MAXMANA, 0.08f } },
+      "+8% max health and mana" },
     { "feast of the far reaches", 4, { TG_STAR, A, A, A },
       { { ME_MAXHP, 0.10f }, { ME_MAXMANA, 0.10f }, { ME_DAMAGE, 0.10f }, { ME_SPEED, 0.10f } }, "a little of everything" },
     /* anything else */
-    { "a simple meal", 0, { N, N, N, N }, { { ME_MAXHP, 0.05f } }, "+5% max health" },
+    { "a simple meal", 0, { N, N, N, N }, { { ME_MAXHP, 0.03f } }, "+3% max health" },
 };
 #undef N
 #undef A
@@ -193,7 +193,7 @@ float food_fx(const Stats *s, int effect) {
     float v = 0;
     if (s->meal && s->meal_t > 0) {
         const Recipe *r = &RECIPES[s->meal - 1];
-        float k = 1.0f + 0.25f * s->meal_q;
+        float k = (1.0f + 0.25f * s->meal_q) * (s->meal_repeat == 0 ? 1.0f : s->meal_repeat == 1 ? 0.5f : 0.25f); /* tired of it */
         for (int i = 0; i < RECIPE_EFFECTS; i++)
             if (r->fx[i].e == effect && r->fx[i].v > 0) {
                 float x = r->fx[i].v;
@@ -210,7 +210,7 @@ float food_fx(const Stats *s, int effect) {
     }
     v += alchemy_fx(s, effect); /* an elixir working */
     if (s->well_fed_t > 0) { /* the Sanctum's feast */
-        if (effect == ME_MAXHP) v += 0.2f;
+        if (effect == ME_MAXHP) v += 0.1f;
         if (effect == ME_FIGHT_REGEN) v += 0.004f;
     }
     return v;
@@ -264,12 +264,19 @@ static int free_count(const PlayerSlot *ps, int food) {
 
 /* ---------- where to cook ---------- */
 
+static bool hearth_near(Game *g, vec3 p) {
+    for (int i = 0; i < MAX_EFFECTS; i++)
+        if (g->effects[i].alive && g->effects[i].type == EF_HEARTH && v3_len(v3_sub(g->effects[i].pos, p)) < 4.5f) return true;
+    return false;
+}
+
 int food_cook_place(Game *g, const PlayerSlot *ps) {
     vec3 p = ps->pl.pos;
     if (realm_has(p)) {
         int ds = sanctum_stage(g, SP_DINING), x0 = plot_x(SP_DINING), z0 = plot_z(SP_DINING);
         if (ds >= 2 && p.x >= x0 && p.x < x0 + 32 && p.z >= z0 && p.z < z0 + 32) return ds >= 3 ? CP_KITCHEN : CP_FIREPLACE;
     }
+    if (hearth_near(g, p)) return CP_FIREPLACE; /* the hearth of a Warden's Keep or a Hut of Rest */
     int px = (int)floorf(p.x), py = (int)floorf(p.y), pz = (int)floorf(p.z);
     for (int dy = -1; dy <= 2; dy++)
         for (int dz = -2; dz <= 2; dz++)
@@ -278,10 +285,6 @@ int food_cook_place(Game *g, const PlayerSlot *ps) {
                 Block b = chunkmap_block(&g->map, px + dx, py + dy, pz + dz, &known);
                 if (known && (b == B_FIRE || b == B_BRAZIER)) return CP_CAMPFIRE;
             }
-    for (int i = 0; i < MAX_EFFECTS; i++) {
-        const Effect *e = &g->effects[i];
-        if (e->alive && e->type == EF_HEARTH && v3_len(v3_sub(e->pos, p)) < 4.5f) return CP_CAMPFIRE;
-    }
     return CP_NONE;
 }
 
@@ -307,6 +310,7 @@ bool food_cook(Game *g, PlayerSlot *ps) {
     int place = food_cook_place(g, ps);
     if (place == CP_NONE) { game_banner(ps, "COOK AT A FIRE, A HEARTH OR AT HOME"); return false; }
     if (ps->npot < 2) { game_banner(ps, "PUT TWO OR MORE INGREDIENTS IN THE POT"); return false; }
+    if (food_dishes_held(s) >= FOOD_POUCH) { game_banner(ps, "THE FOOD POUCH IS FULL: FOUR DISHES. EAT ONE FIRST"); return false; }
     for (int i = 0; i < ps->npot; i++)
         if (s->food[ps->pot[i]] == 0) { ps->npot = 0; return false; }
     int r = food_match(ps->pot, ps->npot), q = r == RC_SIMPLE ? 0 : food_quality(ps->pot, ps->npot, place);
@@ -325,6 +329,21 @@ bool food_cook(Game *g, PlayerSlot *ps) {
     game_banner(ps, buf);
     vec3 at = v3_add(ps->pl.pos, v3(cosf(ps->pl.yaw) * 0.8f, 0.9f, sinf(ps->pl.yaw) * 0.8f));
     sfx_player(g, ps, SFX_COOK, 0.9f);
+    /* the smell of cooking carries: at an open fire in the dungeon, what lives near comes */
+    if (place == CP_CAMPFIRE && !realm_has(ps->pl.pos) && !hearth_near(g, ps->pl.pos)) {
+        int woke = 0;
+        for (int i = 0; i < MAX_MONSTERS; i++) {
+            Monster *m = &g->mons[i];
+            if (!m->alive || m->awake || m->charm_t > 0 || v3_len(v3_sub(m->pos, ps->pl.pos)) > 25.0f) continue;
+            m->awake = true;
+            m->target = ps->index;
+            woke++;
+        }
+        if (woke) {
+            snprintf(buf, sizeof buf, "THE SMELL OF COOKING CARRIES: %d STIR NEARBY", woke);
+            game_banner(ps, buf);
+        }
+    }
     particles_burst(g, at, v3(0.85f, 0.85f, 0.8f), 14, 1.2f, 0.06f, false); /* steam */
     particles_burst(g, at, v3(1.0f, 0.6f, 0.2f), 6, 2.0f, 0.03f, true);
     return true;
@@ -335,6 +354,9 @@ bool food_eat_dish(Game *g, PlayerSlot *ps, int r, int q, int place) {
     if (s->dead || ps->potion_cd > 0 || r < 0 || r >= RC_ALL || !s->dishes[r][q][place]) return false;
     s->dishes[r][q][place]--;
     s->well_fed_t = 0; /* a meal replaces the feast, and the feast a meal */
+    /* the same dish again and again: it does you less good each time */
+    s->meal_repeat = (u8)(s->last_meal == r + 1 ? MINI(2, s->meal_repeat + 1) : 0);
+    s->last_meal = (u8)(r + 1);
     s->meal = (u8)(r + 1);
     s->meal_q = (u8)q;
     s->meal_t = s->meal_len = food_meal_seconds(r, place);
@@ -348,7 +370,8 @@ bool food_eat_dish(Game *g, PlayerSlot *ps, int r, int q, int place) {
     snprintf(what, sizeof what, "%s", RECIPES[r].text);
     upper(name);
     upper(what);
-    snprintf(buf, sizeof buf, "%s: %s, %d MIN", name, what, (int)(s->meal_t / 60.0f + 0.5f));
+    if (s->meal_repeat) snprintf(buf, sizeof buf, "%s AGAIN: %s, BUT YOU ARE TIRED OF IT (%s)", name, what, s->meal_repeat == 1 ? "HALF" : "A QUARTER");
+    else snprintf(buf, sizeof buf, "%s: %s, %d MIN", name, what, (int)(s->meal_t / 60.0f + 0.5f));
     game_banner(ps, buf);
     sfx_player(g, ps, SFX_EAT, 1.0f);
     particles_burst(g, player_eye(&ps->pl), v3(1.0f, 0.8f, 0.45f), 10, 1.5f, 0.04f, true);
@@ -363,7 +386,7 @@ bool food_eat_best(Game *g, PlayerSlot *ps) {
         for (int q = 0; q < DISH_QUALITIES; q++)
             for (int p = 1; p < CP_COUNT; p++) {
                 if (!s->dishes[r][q][p]) continue;
-                float v = (r == RC_SIMPLE ? 0.0f : 10.0f) + q * 3.0f + p;
+                float v = (r == RC_SIMPLE ? 0.0f : 10.0f) + q * 3.0f + p - (s->last_meal == r + 1 ? 12.0f : 0.0f); /* something else if there is */
                 if (v > best) { best = v; br = r; bq = q; bp = p; }
             }
     if (br < 0) {

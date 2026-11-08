@@ -301,7 +301,7 @@ Pickup *pickup_find_key(Game *g, u64 key) {
 /* What grows here, by layer and style, and what the larders of built places hold. */
 static void plants_here(const ChunkInfo *ci, int tier, float *w) {
     switch (ci->stratum) {
-    case ST_MINES: w[FD_MUSHROOM] += 1.0f; w[FD_SALT] += 0.5f; break;
+    case ST_MINES: w[FD_MUSHROOM] += 1.0f; w[FD_SALT] += 0.2f; break;
     case ST_ROOTS: w[FD_TUBER] += 2.0f; w[FD_MUSHROOM] += 1.0f; w[FD_BARROW_ROOT] += 0.5f; break;
     case ST_FUNGAL: w[FD_MUSHROOM] += 2.0f; w[FD_GLOWCAP] += 2.0f; w[FD_MOSS] += 1.0f; break;
     case ST_CRYSTAL: w[FD_GLOWCAP] += 1.0f; break;
@@ -322,7 +322,7 @@ static void plants_here(const ChunkInfo *ci, int tier, float *w) {
     if (f == FL_SANDSTONE || f == FL_SUNSCORCHED || f == FL_SUNBLAST) w[FD_MELON] += 2.0f;
     if (f == FL_EMBER || f == FL_PHOENIX) w[FD_PEPPER] += 1.5f;
     if (f == FL_SULPHUR || f == FL_OBSIDIAN) w[FD_ONION] += 2.0f;
-    if (f == FL_SALT) w[FD_SALT] += 2.0f;
+    if (f == FL_SALT) w[FD_SALT] += 1.0f;
     if (f == FL_BAMBOO) w[FD_BAMBOO] += 2.0f;
     if (f == FL_JADE || f == FL_SILK) w[FD_JADE_LEAF] += 2.0f;
     if (f == FL_STEPPE || f == FL_DRUIDIC) w[FD_HERB] += 1.5f;
@@ -334,7 +334,7 @@ static void plants_here(const ChunkInfo *ci, int tier, float *w) {
 
 static void larder_here(const ChunkInfo *ci, float *w) {
     w[FD_GRAIN] += 1.0f;
-    w[FD_SALT] += 0.5f;
+    w[FD_SALT] += 0.2f; /* rarer: roast should not be the only dish (playtest 2) */
     w[FD_OIL] += 0.5f;
     w[FD_WINE] += 0.3f;
     int f = ci->flavor;
@@ -368,7 +368,7 @@ static void food_place_in_chunk(Game *g, Chunk *c) {
     if (ci->arch == ARCH_EXTERIOR) w[FD_HERB] = 1.0f;
     else plants_here(ci, tier, w);
     w[FD_SALT] *= 0.5f;
-    int n = rng_chance(&r, 0.7f) ? rng_range(&r, 1, 3) : 0;
+    int n = rng_chance(&r, 0.35f) ? rng_range(&r, 1, 2) : 0; /* a third of what it was (playtest 2) */
     vec3 p;
     for (int i = 0; i < n; i++) {
         int f = pick_food(w, rng_float(&r));
@@ -391,7 +391,7 @@ static void food_place_in_chunk(Game *g, Chunk *c) {
     }
     /* a larder: sacks and bottles in built places */
     bool built = ci->arch == ARCH_ROOMS || ci->arch == ARCH_CELLS || ci->arch == ARCH_ARENA || ci->has_struct;
-    if (built && rng_chance(&r, 0.3f)) {
+    if (built && rng_chance(&r, 0.15f)) {
         float lw[FD_COUNT] = { 0 };
         larder_here(ci, lw);
         int m = rng_range(&r, 1, 3);
@@ -449,7 +449,7 @@ static bool collect(Game *g, PlayerSlot *ps, Pickup *p) {
     case PK_POTION_HP:
     case PK_POTION_MP: {
         int *n = p->kind == PK_POTION_HP ? &s->potions_hp : &s->potions_mp;
-        if (*n >= (p->kind == PK_POTION_HP ? POTION_HP_MAX : POTION_MP_MAX)) return false;
+        if (p->kind == PK_POTION_HP ? healing_held(s) >= POTION_HP_MAX : *n >= POTION_MP_MAX) return false;
         (*n)++;
         sfx_player(g, ps, SFX_PICKUP_POTION, 1.0f);
         return true;
@@ -515,7 +515,8 @@ static bool collect(Game *g, PlayerSlot *ps, Pickup *p) {
     }
     case PK_FORMULA: {
         int r = p->amount >= 0 ? p->amount : alchemy_random_formula(s, p->key ^ (u64)(g->time * 1000.0f));
-        alchemy_learn(g, ps, r, true);
+        if (p->amount == -2) alchemy_learn_torn(g, ps, r);
+        else alchemy_learn(g, ps, r, true);
         g_tele.formulae++;
         if (p->key) looted_add(g, p->key);
         particles_burst(g, at, v3(0.5f, 1.0f, 0.55f), 12, 2.0f, 0.04f, true);
@@ -563,7 +564,7 @@ static bool collect(Game *g, PlayerSlot *ps, Pickup *p) {
         sfx_at(g, SFX_CHEST_OPEN, at, 1.0f);
         particles_burst(g, at, v3(1.0f, 0.8f, 0.3f), 18, 4.0f, 0.05f, true);
         for (int i = 0; i < 3; i++) loot_drop(g, p->pos, (float)p->amount, false, 0.25f);
-        if (lrand() < 0.25f) pickup_spawn(g, PK_FORMULA, v3_add(p->pos, v3(0, 0.6f, 0)), -1, NULL, 0, 0);
+        if (lrand() < 0.06f) pickup_spawn(g, PK_FORMULA, v3_add(p->pos, v3(0, 0.6f, 0)), lrand() < 0.5f ? -2 : -1, NULL, 0, 0); /* half torn */
         {
             int tier, region = region_at(g, p->pos, &tier);
             Item it = item_roll_region(mix64(p->key ^ 0x77), (float)p->amount + 1, lrand() < 0.5f ? RAR_MAGIC : RAR_COMMON, tier, region);

@@ -11,7 +11,7 @@
  * user's preference folder. The world itself never needs saving: the seed rebuilds it. */
 
 #define SAVE_MAGIC 0x56534346u /* "FCSV" */
-#define SAVE_VERSION 9 /* 9: alchemy (reagents, elixirs, formulae, the elixir working); 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms;
+#define SAVE_VERSION 10 /* 10: meal variety, toxicity, torn formulae; 9: alchemy (reagents, elixirs, formulae, the elixir working); 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms;
                           6: weapons with materials, powers, legendaries and memory; 7: the Sanctum per world (written by one
                           build still marked 6); 8: food (the larder, dishes, recipes, the meal) */
 #define EXPLORED_BUDGET (1200 * 1024)
@@ -173,6 +173,10 @@ static void write_player(Buf *b, const Stats *s, const Player *pl) {
     wbytes(b, s->elixirs, ELIXIR_COUNT);
     w32(b, s->formulae);
     w8(b, s->elixir); wf(b, s->elixir_onset); wf(b, s->elixir_t);
+    /* v10 */
+    w8(b, s->last_meal); w8(b, s->meal_repeat);
+    wf(b, s->elixir_k); wf(b, s->tox_t);
+    w32(b, s->formulae_torn);
 }
 
 /* Explored cells: per chunk a 512-byte mask of the non-zero bytes, then those bytes. */
@@ -379,6 +383,15 @@ static void read_player(Rd *r, SavedPlayer *sp) {
             s->elixir_onset = s->elixir_t = 0;
         }
     } else s->formulae = ELIXIRS_START; /* older characters know what every alchemist knows */
+    if (r->ver >= 10) {
+        s->last_meal = r8(r); s->meal_repeat = r8(r);
+        s->elixir_k = rf(r); s->tox_t = rf(r);
+        s->formulae_torn = r32(r);
+        if (s->last_meal > RC_ALL) s->last_meal = 0;
+        if (s->meal_repeat > 2) s->meal_repeat = 2;
+        if (!(s->elixir_k >= 0 && s->elixir_k <= 1.0f)) s->elixir_k = 1.0f;
+        if (!(s->tox_t >= 0 && s->tox_t <= 120.0f)) s->tox_t = 0;
+    } else s->elixir_k = 1.0f;
     /* sanity: a save from a broken build must not crash the game */
     if (s->level < 1 || s->level > 999) s->level = 1;
     if (s->weapon < 0 || s->weapon >= WPN_COUNT) s->weapon = 0;

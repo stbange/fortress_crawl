@@ -395,10 +395,12 @@ static void demo_setup(Game *g) {
             int n = alchemy_steps(ELIXIRS[r].steps);
             for (int k = 0; k < n; k++) alchemy_add(g, p1, ELIXIRS[r].steps[k]);
             if (alchemy_bottle(g, p1) && s->elixirs[r] == 2) brewed++;
+            memset(s->elixirs, 0, sizeof s->elixirs); /* the belt holds four */
             for (int k = 0; k < RG_COUNT; k++) s->reag[k] = 20;
             for (int k = 0; k < FD_COUNT; k++) s->food[k] = 20;
         }
         SDL_Log("alchtest: brewed %d of %d at home (two bottles each), formulae known %08x", brewed, ELIXIR_COUNT, s->formulae);
+        s->elixirs[0] = s->elixirs[2] = s->elixirs[7] = 1; /* for the drinking below */
         /* the berserker's steps out of order */
         p1->ncauldron = 0;
         static const u8 WRONG[] = { STEP_RG(RG_GALL), STEP_ACT(AS_HEAT), STEP_FOOD(FD_PEPPER), STEP_ACT(AS_HEAT), STEP_ACT(AS_STIR) };
