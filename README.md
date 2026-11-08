@@ -61,8 +61,8 @@ for the full plan and [`docs/STORY.md`](docs/STORY.md) for how the stories work.
 | The hall at stage 2: a roof, coloured glass, a chandelier | The SHOP tab at home: building, the stash, everything for sale |
 | ![Wildlife](docs/screenshots/wildlife.png) | ![The FOOD tab](docs/screenshots/food.png) |
 | Wildlife: hares, hens, goats, rams, crabs, salamanders, grouse, beetles, snails, a hive, quail | The FOOD tab in the Sanctum kitchen: the pot, dishes, the larder, the cookbook |
-| ![Warden's Keep](docs/screenshots/spell_keep.png) | |
-| Warden's Keep, a conjured keep of real stone | |
+| ![Warden's Keep](docs/screenshots/spell_keep.png) | ![Alchemy](docs/screenshots/alchemy.png) |
+| Warden's Keep, a conjured keep of real stone | The ALCHEMY tab: a brew begun, elixirs, reagents |
 
 ## Build
 
@@ -249,6 +249,20 @@ ingredients give a small taste of their strongest tag for a minute and a half. T
 garden grows herbs, fruit under its trees, keeps hens (stage 2), beehives and fish in its pond
 (stage 3).
 
+**Alchemy** ([`docs/ALCHEMY.md`](docs/ALCHEMY.md)): every kind of monster leaves a
+**reagent** now and then (crawler ichor, brute's gall, wisp ember, bone dust, gazing lens,
+troll blood...), and strange things lie in some places (quicksilver, brimstone, ghost orchid,
+starlight dew, void salt, mandrake, amber, phoenix feather). At any shrine or at home, the
+ALCHEMY tab (O) is a cauldron: put in ingredients and steps one by one (grind, heat, stir,
+chill, distill) and bottle. Only an **exact formula** (the same things, the same steps, the
+same order) makes an elixir; anything else is a murky brew that may boil over and says how many
+steps were right, so unknown formulae can be found out by trying. Pages of formulae lie in
+vault hoards and chests and are carried by elites and bosses. 27 **elixirs**: each takes hold
+1 to 5 seconds after you drink it (V) and is strong for 20 to 30: 80% more damage, 60% less
+damage taken, wings, invisibility, a second life, spells that cost nothing, lightning that arcs
+from your blows, a frost or fear aura, the world slowed round you, a quarter of your damage as
+health... One works at a time; at home the library's alembic (stage 2) fills two bottles.
+
 **Stories:** every character picks a motive (revenge, glory, riches or truth). It turns the
 world's endless metaplot into chapters: a named captain, then the general above it, then the
 Power they serve, each farther from the gate; every kill reveals more of what the fortress
@@ -293,8 +307,9 @@ last and shows what is saved; *New characters* (press twice) deletes the save of
 | R / Shift+R | next / previous known spell |
 | H / J | drink a health / mana potion |
 | K / N | eat the best dish you carry / the FOOD tab (cooking at a fire, the larder, the cookbook) |
+| V / O | drink an elixir (the last one brewed or drunk) / the ALCHEMY tab (brewing at a shrine or at home) |
 | G | Golden Thread: a fading line to your story target (again: next mission) |
-| TAB, I, B, L | character menu: last tab, inventory, spellbook, story; SHOP and FOOD are the fifth and sixth tabs (Q/E or [ ] switch tabs) |
+| TAB, I, B, L | character menu: last tab, inventory, spellbook, story; SHOP, FOOD and ALCHEMY are the fifth to seventh tabs (Q/E or [ ] switch tabs) |
 | in the menu | arrows or WASD select, Enter equips / uses / learns / makes a spell active, Del or X scraps a weapon |
 | M | map of the cells you have seen |
 | Space, Shift, Ctrl | jump, sprint, crouch (you duck and crawl automatically in low tunnels) |
@@ -347,7 +362,7 @@ fortress_crawl [--seed N] [--pos x y z] [--look yaw pitch] [--fly] [--radius n] 
                [--demo combat|sword|death|skills|map|coop|menu|inventory|spells|loot|magic|bestiary|
                        motive|story|read|named|storytest|vault|levers|plates|statues|beam|
                        darts|spikes|flames|mechtest|cast|realmtest|shop|sanctum|
-                       food|foodtest|wildlife] [--cast n]
+                       food|foodtest|wildlife|alchemy|alchtest] [--cast n]
                [--bot STYLE] [--bot-minutes n] [--bot-log file]
                [--players n] [--test-pad] [--touch] [--fresh] [--persist] [--fullbright] [--chapter n]
 ```
@@ -373,7 +388,9 @@ through the Sanctum (door, bath, feast, bed, door home) and logs each step. `--d
 47.5 9608 80.5` opens the shop at home in the Sanctum; `--demo sanctum --cast N` shows the
 Sanctum from above with every plot at stage N (0 is the start). `--demo foodtest` checks that
 every recipe can be made, cooks, eats and (with `--persist`) saves; `--demo food` shows the FOOD
-tab; `--demo wildlife` puts the animals in a row (`--cast N` only kind N). `--bot STYLE` plays by itself
+tab; `--demo wildlife` puts the animals in a row (`--cast N` only kind N). `--demo alchtest` brews every
+formula and checks the onset, a murky brew and the Phoenix Elixir; `--demo alchemy` shows the
+ALCHEMY tab. `--bot STYLE` plays by itself
 (see [`docs/PLAYTEST.md`](docs/PLAYTEST.md)). `--touch`
 shows the touch controls from the start.
 
@@ -558,7 +575,7 @@ src/world    themes, texture generator, world layout, chunk generators, mesher +
              chunk streaming
 src/render   low-res renderer, sky, post-processing, entity/UI batches
 src/game     player controller, physics, monsters and AI, combat, skills, map, sound effects,
-             wildlife (wildlife.c), food and cooking (food.c), the Sanctum (realm.c, shop.c)
+             wildlife (wildlife.c), food and cooking (food.c), alchemy (alchemy.c), the Sanctum (realm.c, shop.c)
 tests, tools headless generator checks and map exporters, sound generator (tools/gen_sfx.mjs)
 assets/sfx   the sound effects (generated with ElevenLabs)
 ```

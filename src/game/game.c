@@ -195,6 +195,7 @@ void game_hurt_player(Game *g, PlayerSlot *ps, float dmg, vec3 from) {
     ps->pl.vel = v3_add(ps->pl.vel, v3_scale(push, 4.0f * (1.0f - food_fx(s, ME_STUN_RES))));
     if (ps->pad) SDL_RumbleGamepad(ps->pad, 0x6000, 0x9000, 180);
     if (s->hp > 0) sfx_player(g, ps, SFX_PLAYER_HURT, clampf(0.6f + dmg / s->maxhp * 3.0f, 0.6f, 1.2f));
+    if (s->hp <= 0 && alchemy_revive(g, ps)) return; /* the Phoenix Elixir */
     if (s->hp <= 0) {
         s->hp = 0;
         sfx_player(g, ps, SFX_PLAYER_DEATH, 1.0f);
@@ -226,6 +227,7 @@ void player_element_hit(Game *g, PlayerSlot *ps, int el, float dmg) {
     if (el == EL_FIRE && food_fx(s, ME_FIRE_RES) > 0) return; /* a fire broth in you */
     if (el == EL_FROST && food_fx(s, ME_FROST_RES) > 0) return;
     if (el == EL_POISON && food_fx(s, ME_POISON_IMM) > 0) return;
+    if (el == EL_LIGHTNING && food_fx(s, ME_SHOCK_RES) > 0) return;
     switch (el) {
     case EL_FIRE: /* set alight */
         s->burn_dps = s->burn_t > 0 ? fmaxf(s->burn_dps, dmg * 0.15f) : dmg * 0.15f;
@@ -351,6 +353,7 @@ static void menu_nav(Game *g, PlayerSlot *ps, int nav) {
     else if (ps->menu_tab == TAB_STORY) story_tab_nav(g, ps, nav);
     else if (ps->menu_tab == TAB_SHOP) { if (nav != NAV_DROP) shop_nav(g, ps, nav); }
     else if (ps->menu_tab == TAB_FOOD) food_nav(g, ps, nav);
+    else if (ps->menu_tab == TAB_ALCHEMY) alchemy_nav(g, ps, nav);
     else if (nav != NAV_DROP) game_skills_nav(ps, nav);
 }
 
@@ -520,6 +523,8 @@ void game_event(Game *g, const SDL_Event *e) {
         case SDLK_J: drink_potion(g, ps, true); break;
         case SDLK_K: food_eat_best(g, ps); break;
         case SDLK_N: open_menu(ps, TAB_FOOD); break;
+        case SDLK_V: alchemy_drink_quick(g, ps); break;
+        case SDLK_O: open_menu(ps, TAB_ALCHEMY); break;
         case SDLK_M: ps->show_map = !ps->show_map; ps->show_skills = false; break;
         case SDLK_1: ps->st.weapon = WPN_SWORD; break;
         case SDLK_2: ps->st.weapon = WPN_BOW; break;
@@ -801,6 +806,7 @@ void game_update(Game *g, const PlayerInput *kb, float dt) {
         monsters_update(g, dt * utility_time_scale(g));
         wildlife_update(g, dt);
         food_update(g, dt);
+        alchemy_update(g, dt);
         combat_update(g, dt);
         mech_update(g, dt * utility_time_scale(g));
         utility_update(g, dt);
@@ -853,10 +859,10 @@ static SkillLayout skills_layout(int W, int H) {
 
 /* ---------- character menu: tabs ---------- */
 
-static const char *TAB_NAMES[TAB_COUNT] = { "ITEMS", "SPELLS", "SKILLS", "STORY", "SHOP", "FOOD" };
+static const char *TAB_NAMES[TAB_COUNT] = { "ITEMS", "SPELLS", "SKILLS", "STORY", "SHOP", "FOOD", "ALCHEMY" };
 
 static void tab_rect(int W, int t, float *x, float *y, float *w, float *h) {
-    *w = W < 440 ? 52.0f : 72.0f;
+    *w = fminf(72.0f, (float)(W - 8) / TAB_COUNT - 3.0f);
     *h = 13;
     *x = (W - TAB_COUNT * (*w + 3)) * 0.5f + t * (*w + 3);
     *y = 2;
@@ -880,6 +886,8 @@ void game_menu_tap(Game *g, PlayerSlot *ps, int W, int H, float x, float y) {
         shop_tap(g, ps, W, H, MENU_TOP, x, y);
     } else if (ps->menu_tab == TAB_FOOD) {
         food_tap(g, ps, W, H, MENU_TOP, x, y);
+    } else if (ps->menu_tab == TAB_ALCHEMY) {
+        alchemy_tap(g, ps, W, H, MENU_TOP, x, y);
     } else {
         int hit = game_skills_hit(ps, W, H, x, y);
         if (hit == -2) game_skills_nav(ps, NAV_LEFT);
@@ -1129,6 +1137,7 @@ static void draw_menu(Game *g, PlayerSlot *ps, int W, int H) {
     else if (ps->menu_tab == TAB_STORY) story_draw_tab(g, ps, W, H, MENU_TOP);
     else if (ps->menu_tab == TAB_SHOP) shop_draw(g, ps, W, H, MENU_TOP);
     else if (ps->menu_tab == TAB_FOOD) food_draw(g, ps, W, H, MENU_TOP);
+    else if (ps->menu_tab == TAB_ALCHEMY) alchemy_draw(g, ps, W, H, MENU_TOP);
     else draw_skills(g, ps, W, H);
 }
 

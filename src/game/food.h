@@ -69,6 +69,18 @@ enum {
     ME_COOLDOWN,      /* spell cooldowns this fraction shorter */
     ME_LAVA,          /* lava burns this fraction less */
     ME_TRAVEL,        /* 1: the meal lasts three times as long */
+    /* elixirs (alchemy.c) */
+    ME_LIFESTEAL,     /* this fraction of weapon damage heals you */
+    ME_CRIT,          /* this much more chance of a critical hit */
+    ME_REVIVE,        /* 1: a killing blow lifts you again at half health */
+    ME_LUCK,          /* more loot from what you kill */
+    ME_CHAIN,         /* weapon hits arc to the nearest foe for this fraction */
+    ME_FROST_AURA,    /* 1: foes close by are slowed */
+    ME_FEAR_AURA,     /* 1: foes close by run */
+    ME_KNOCK,         /* blows throw this much farther */
+    ME_BLAST,         /* blows burst for this fraction round the foe */
+    ME_POISON_HITS,   /* hits poison for this fraction a second */
+    ME_SHOCK_RES,     /* 1: lightning does not jolt you */
     ME_COUNT
 };
 

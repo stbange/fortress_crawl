@@ -49,7 +49,8 @@ static void weapon_hit_ex(Game *g, PlayerSlot *ps, Monster *m, int wclass, float
     vec3 c = v3_add(m->pos, v3(0, MONSTERS[m->type].h * m->scale * 0.55f, 0));
     bool full = m->hp >= m->maxhp * 0.999f;
     /* critical hits: 5%, more with a rapier or crystal */
-    float crit_chance = 0.05f + mat->crit + ((wb->flags & WBF_CRIT) ? 0.3f : 0.0f);
+    float crit_chance = 0.05f + mat->crit + ((wb->flags & WBF_CRIT) ? 0.3f : 0.0f) + food_fx(&ps->st, ME_CRIT);
+    knock *= 1.0f + food_fx(&ps->st, ME_KNOCK); /* titan's brew */
     u64 h = mix64((u64)(g->time * 7919.0f) ^ ((u64)(m - g->mons) << 24) ^ (u64)ps->hits[wclass]);
     bool crit = (float)(h & 0xFFFF) / 65536.0f < crit_chance;
     if (crit) {
@@ -84,6 +85,19 @@ static void weapon_hit_ex(Game *g, PlayerSlot *ps, Monster *m, int wclass, float
     if (ig > 0 && m->alive && (float)((h >> 20) & 0xFFFF) / 65536.0f < ig) {
         m->burn_t = 3.0f;
         m->burn_dps = fmaxf(m->burn_dps, dmg * 0.15f);
+    }
+    /* elixirs: blood back, lightning onward, a burst, venom */
+    Stats *es = &ps->st;
+    float ls = food_fx(es, ME_LIFESTEAL);
+    if (ls > 0) es->hp = fminf(es->maxhp, es->hp + dmg * ls);
+    float ch = food_fx(es, ME_CHAIN);
+    if (ch > 0) chain_lightning(g, ps->index, m, dmg * ch);
+    float bl = food_fx(es, ME_BLAST);
+    if (bl > 0) explode(g, ps->index, c, dmg * bl, 2.5f, m);
+    float ph = food_fx(es, ME_POISON_HITS);
+    if (ph > 0 && m->alive) {
+        m->poison_t = 4.0f;
+        m->poison_dps = fmaxf(m->poison_dps, dmg * ph);
     }
     weapon_powers(g, ps, wclass, m, dmg, crit, full);
 }

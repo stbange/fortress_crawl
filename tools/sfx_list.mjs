@@ -264,6 +264,15 @@ export const SOUNDS = [
   { id: "fish_splash", dur: 0.8, v: 2, text: "a fish splashes in shallow water" },
   { id: "salamander_hiss", dur: 0.8, text: "a fire salamander hisses and dives into bubbling lava" },
 
+  // ---------------- alchemy ----------------
+  { id: "reagent_pickup", dur: 0.7, text: "picking up a strange alchemical reagent, wet squelch and a faint glassy clink" },
+  { id: "formula_found", dur: 1.5, text: "an old alchemist's formula found, crackling parchment unrolled and an eerie bubbling chime" },
+  { id: "brew_step", dur: 0.9, v: 2, text: "an ingredient dropped into a bubbling cauldron, a plop and a short hiss" },
+  { id: "brew_success", dur: 2.0, text: "an alchemical elixir completed, rising bubbling and a bright glassy shimmer as it is corked" },
+  { id: "brew_fail", dur: 1.8, text: "a failed alchemy brew, murky gurgling, a sour hiss and a small boil over" },
+  { id: "elixir_drink", dur: 1.2, text: "drinking a fizzing magical potion in big gulps, glass clink" },
+  { id: "elixir_onset", dur: 1.8, text: "a magical elixir takes effect, a deep pulsing surge of power and a rising shimmer" },
+
   // ---------------- story and menus ----------------
   { id: "read_note", dur: 1.0, text: "unfolding old parchment, paper rustle" },
   { id: "chapter_done", dur: 3.0, text: "dark epic fantasy victory sting, low brass and timpani swell" },

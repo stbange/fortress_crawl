@@ -375,6 +375,79 @@ static void demo_setup(Game *g) {
         if (g->opt.persist) SDL_Log("foodtest: saved %d", game_save(g));
         return;
     }
+    if (!strcmp(g_demo_kind, "alchtest")) {
+        /* alchemy step by step (log only) */
+        int bad = 0;
+        for (int r = 0; r < ELIXIR_COUNT; r++) {
+            int n = alchemy_steps(ELIXIRS[r].steps);
+            if (alchemy_match(ELIXIRS[r].steps, n) != r) { SDL_Log("alchtest: formula %s is not its own", ELIXIRS[r].name); bad++; }
+            if (ELIXIRS[r].onset < 1 || ELIXIRS[r].onset > 5 || ELIXIRS[r].last < 20 || ELIXIRS[r].last > 30) bad++;
+        }
+        SDL_Log("alchtest: %d formulae, %d bad", ELIXIR_COUNT, bad);
+        sanctum_set_stage(g, SP_ISLAND, 2);
+        sanctum_set_stage(g, SP_LIBRARY, 2);
+        realm_enter(g, p1, p1->pl.pos, 1.0f);
+        for (int k = 0; k < RG_COUNT; k++) s->reag[k] = 20;
+        for (int k = 0; k < FD_COUNT; k++) s->food[k] = 20;
+        int brewed = 0;
+        for (int r = 0; r < ELIXIR_COUNT; r++) {
+            p1->ncauldron = 0;
+            int n = alchemy_steps(ELIXIRS[r].steps);
+            for (int k = 0; k < n; k++) alchemy_add(g, p1, ELIXIRS[r].steps[k]);
+            if (alchemy_bottle(g, p1) && s->elixirs[r] == 2) brewed++;
+            for (int k = 0; k < RG_COUNT; k++) s->reag[k] = 20;
+            for (int k = 0; k < FD_COUNT; k++) s->food[k] = 20;
+        }
+        SDL_Log("alchtest: brewed %d of %d at home (two bottles each), formulae known %08x", brewed, ELIXIR_COUNT, s->formulae);
+        /* the berserker's steps out of order */
+        p1->ncauldron = 0;
+        static const u8 WRONG[] = { STEP_RG(RG_GALL), STEP_ACT(AS_HEAT), STEP_FOOD(FD_PEPPER), STEP_ACT(AS_HEAT), STEP_ACT(AS_STIR) };
+        for (int k = 0; k < 5; k++) alchemy_add(g, p1, WRONG[k]);
+        int right, len, c = alchemy_closest(p1->cauldron, p1->ncauldron, &right, &len);
+        bool ok = alchemy_bottle(g, p1);
+        SDL_Log("alchtest: out of order -> bottled %d, closest %s %d of %d: %s", ok, c >= 0 ? ELIXIRS[c].name : "-", right, len, p1->banner);
+        /* drink: nothing before the onset, the full effect after */
+        float base = food_fx(s, ME_DAMAGE);
+        alchemy_drink(g, p1, 2);
+        for (int k = 0; k < 20; k++) alchemy_update(g, 0.1f);
+        float during = food_fx(s, ME_DAMAGE);
+        for (int k = 0; k < 12; k++) alchemy_update(g, 0.1f);
+        float after = food_fx(s, ME_DAMAGE);
+        SDL_Log("alchtest: berserker damage %.2f before, %.2f at 2 s, %.2f at 3.2 s, %.0f s left", base, during, after, s->elixir_t);
+        bool second = alchemy_drink(g, p1, 0);
+        for (int k = 0; k < 300; k++) alchemy_update(g, 0.1f);
+        SDL_Log("alchtest: a second while one works: %d; after 30 s elixir %d", second, s->elixir);
+        /* the phoenix */
+        alchemy_drink(g, p1, 7);
+        for (int k = 0; k < 60; k++) alchemy_update(g, 0.1f);
+        s->invuln = 0;
+        p1->pl.fly = false;
+        game_hurt_player(g, p1, s->maxhp * 3.0f, p1->pl.pos);
+        SDL_Log("alchtest: phoenix: dead %d, hp %.0f/%.0f, elixir %d", s->dead, s->hp, s->maxhp, s->elixir);
+        if (g->opt.persist) SDL_Log("alchtest: saved %d", game_save(g));
+        return;
+    }
+    if (!strcmp(g_demo_kind, "alchcheck")) {
+        SDL_Log("alchtest: loaded reagents %d, elixirs %d, formulae %08x, elixir %d", s->reag[RG_GALL], s->elixirs[2], s->formulae, s->elixir);
+        return;
+    }
+    if (!strcmp(g_demo_kind, "alchemy")) {
+        /* the ALCHEMY tab at home: reagents, two elixirs, a brew begun */
+        realm_enter(g, p1, p1->pl.pos, 1.0f);
+        static const int HAVE[] = { RG_ICHOR, RG_GALL, RG_BONEDUST, RG_BATWING, RG_SLIME, RG_WISP, RG_LENS, RG_QUICKSILVER, RG_BRIMSTONE };
+        for (int i = 0; i < (int)ARRAY_LEN(HAVE); i++) s->reag[HAVE[i]] = (u8)(1 + i % 3);
+        s->food[FD_PEPPER] = 2; s->food[FD_SALT] = 3; s->food[FD_HERB] = 2;
+        s->elixirs[2] = 1; s->elixirs[1] = 2;
+        s->formulae |= (1u << 2) | (1u << 9) | (1u << 4);
+        s->elixir = 10; s->elixir_onset = 0; s->elixir_t = 17;
+        alchemy_add(g, p1, STEP_RG(RG_GALL));
+        alchemy_add(g, p1, STEP_FOOD(FD_PEPPER));
+        alchemy_add(g, p1, STEP_ACT(AS_HEAT));
+        p1->show_skills = true;
+        p1->menu_tab = TAB_ALCHEMY;
+        p1->alch_sel = 3;
+        return;
+    }
     if (!strcmp(g_demo_kind, "food")) {
         /* the FOOD tab at the kitchen, with a full larder, some dishes and a pot started */
         sanctum_set_stage(g, SP_DINING, 3);

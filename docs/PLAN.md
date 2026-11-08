@@ -432,6 +432,8 @@ Done:
   remember their kills (titles at 30 of a kind, a hidden affix at 75).
 - A Sanctum that starts as a ruin and grows, built with gold and keystones: [`SANCTUM_PLAN.md`](SANCTUM_PLAN.md).
 - Wildlife, 36 ingredients, cooking and 32 recipes: [`FOOD.md`](FOOD.md).
+- Alchemy: 28 reagents (20 from monsters), 27 exact formulae, elixirs with an onset:
+  [`ALCHEMY.md`](ALCHEMY.md).
 - The balance pass from those notes ([`BALANCE_PLAN.md`](BALANCE_PLAN.md)): danger that keeps up,
   a costlier death, a shop for gold, melee across ledges, safer stairs, a nearer first chapter.
 - Screenshot and demo modes (`--shot`, `--demo combat|sword|death|skills|map|coop|menu|

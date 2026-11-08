@@ -845,6 +845,9 @@ void utility_draw_hud(Game *g, PlayerSlot *ps, int W, int H) {
         { s->invis_t, "INVISIBLE", { 0.7f, 0.7f, 0.9f } },    { s->steed_t, "STEED", { 0.6f, 0.8f, 1.0f } },
         { s->scry_t, "SIGHT", { 0.8f, 0.6f, 1.0f } },         { s->well_fed_t, "WELL FED", { 1.0f, 0.75f, 0.4f } },
         { s->refreshed_t, "REFRESHED", { 0.6f, 0.9f, 1.0f } }, { g->timeslip_t, "TIME SLIP", { 0.5f, 0.7f, 1.0f } },
+        { s->elixir && s->elixir_onset <= 0 ? s->elixir_t : 0, "ELIXIR", { 0.6f, 1.0f, 0.6f } },
+        { s->elixir ? s->elixir_onset : 0, "BREWING IN YOU", { 0.8f, 1.0f, 0.5f } },
+        { s->meal ? s->meal_t : 0, "MEAL", { 1.0f, 0.8f, 0.5f } },
     };
     font_begin(W, H);
     char buf[64];

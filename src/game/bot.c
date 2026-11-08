@@ -77,7 +77,7 @@ typedef struct Bot {
     int builds;
     float next_home; /* a trip home to spend gold, not before this */
     Critter *prey;   /* an animal it hunts, until hunt_until */
-    float hunt_until, next_hunt, next_cook;
+    float hunt_until, next_hunt, next_cook, next_brew;
     u64 prey_key, skip_prey[8];  /* animals it gave up on */
     float skip_until[8];
     int nskip;
@@ -255,6 +255,8 @@ static bool want_pickup(const PlayerSlot *ps, const Pickup *p) {
     }
     case PK_TRACE: return B.style == BS_QUESTER && ps->reading_key != p->key;
     case PK_FOOD: return s->food[p->amount] < 20;
+    case PK_REAGENT: return s->reag[p->amount] < 20;
+    case PK_FORMULA: return true;
     default: return false;
     }
 }
@@ -740,6 +742,45 @@ static bool bot_food(Game *g, PlayerSlot *ps, PlayerInput *in, float dt) {
     return true;
 }
 
+/* ---------- alchemy: brew what it knows, drink before a hard fight ---------- */
+
+static bool can_brew(const Stats *s, int r) {
+    int need_f[FD_COUNT] = { 0 }, need_r[RG_COUNT] = { 0 };
+    for (int k = 0; k < FORMULA_STEPS; k++) {
+        u8 st = ELIXIRS[r].steps[k];
+        if (step_is_food(st)) need_f[st]++;
+        else if (step_is_rg(st)) need_r[st - 64]++;
+    }
+    for (int f = 0; f < FD_COUNT; f++) if (s->food[f] < need_f[f]) return false;
+    for (int k = 0; k < RG_COUNT; k++) if (s->reag[k] < need_r[k]) return false;
+    return true;
+}
+
+static void bot_alchemy(Game *g, PlayerSlot *ps, bool in_fight, const Monster *m) {
+    Stats *s = &ps->st;
+    if (!in_fight && B.t >= B.next_brew && alchemy_station(g, ps)) {
+        B.next_brew = B.t + 30.0f;
+        for (int r = 0; r < ELIXIR_COUNT; r++) {
+            if (!(s->formulae & (1u << r)) || s->elixirs[r] >= 3 || !can_brew(s, r)) continue;
+            ps->ncauldron = 0;
+            for (int k = 0; k < alchemy_steps(ELIXIRS[r].steps); k++) alchemy_add(g, ps, ELIXIRS[r].steps[k]);
+            if (alchemy_bottle(g, ps)) logf_("%7.1f BREW %s (%d)\n", B.t, ELIXIRS[r].name, s->elixirs[r]);
+        }
+    }
+    if (!in_fight || !m || s->elixir) return;
+    int awake = 0;
+    for (int i = 0; i < MAX_MONSTERS; i++)
+        if (g->mons[i].alive && g->mons[i].awake && v3_len(v3_sub(g->mons[i].pos, ps->pl.pos)) < 12.0f) awake++;
+    if (m->grade < GRADE_ELITE && awake < 4) return;
+    /* the strongest it has for this: damage or staying alive */
+    static const int PREF[] = { 7, 3, 2, 16, 25, 4, 12, 0, 10, 24, 9, 1 };
+    for (int k = 0; k < (int)(sizeof PREF / sizeof PREF[0]); k++)
+        if (s->elixirs[PREF[k]] && alchemy_drink(g, ps, PREF[k])) {
+            logf_("%7.1f DRINK %s (vs %s grade %d, %d awake)\n", B.t, ELIXIRS[PREF[k]].name, MONSTERS[m->type].name, m->grade, awake);
+            return;
+        }
+}
+
 /* ---------- the loop ---------- */
 
 void bot_init(Game *g, const char *style, const char *log_path, float minutes) {
@@ -779,11 +820,12 @@ static void summary(PlayerSlot *ps) {
     Stats *s = &ps->st;
     logf_("SUMMARY style=%s minutes=%.1f level=%d kills=%d deaths=%d gold=%d max_gate_dist=%.0f max_tier=%d max_depth=%.0f max_height=%.0f "
           "cells=%d stuck=%d hard_stuck=%d realm_trips=%d realm_failed=%d keystones=%d builds=%d chapter=%d missions=%d lore=%d fights=%d avg_fight=%.1f fight_share=%.0f%% "
-          "replans=%d no_goal=%d stalemates=%d close_calls=%d food=%d hunted=%d harvested=%d cooked=%d eaten=%d recipes=%d\n",
+          "replans=%d no_goal=%d stalemates=%d close_calls=%d food=%d hunted=%d harvested=%d cooked=%d eaten=%d recipes=%d reagents=%d brewed=%d elixirs=%d formulae=%d\n",
           STYLE_NAMES[B.style], B.t / 60.0f, s->level, s->kills, B.deaths, s->gold, B.max_dist, B.max_tier, B.max_depth, B.max_height,
           nvisited, B.stuck_total, B.hard_stuck, B.realm_trips, B.realm_failed, G->sanctum.keystones, B.builds, s->chapter + 1, s->nmissions, G->nlore, B.fights,
           B.fights ? B.fight_time_total / B.fights : 0.0f, 100.0f * B.time_in_fight / fmaxf(1.0f, B.t), B.replans, B.no_goal, B.stalemates, B.close_calls,
-          g_tele.food, g_tele.hunted, g_tele.harvested, g_tele.cooked, g_tele.eaten, __builtin_popcount(s->recipes));
+          g_tele.food, g_tele.hunted, g_tele.harvested, g_tele.cooked, g_tele.eaten, __builtin_popcount(s->recipes),
+          g_tele.reagents, g_tele.brewed, g_tele.elixirs, __builtin_popcount(s->formulae));
     float total = 0;
     for (int i = 0; i < HS_COUNT; i++) total += g_tele.taken[i];
     logf_("DAMAGE_TAKEN total=%.0f", total);
@@ -981,6 +1023,7 @@ bool bot_step(Game *g, PlayerInput *in, float dt) {
         m = NULL;
     }
     survive(g, ps, m != NULL);
+    bot_alchemy(g, ps, m != NULL, m);
     if (m) {
         B.time_in_fight += dt;
         vec3 c = mon_centre(m);

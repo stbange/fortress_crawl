@@ -11,7 +11,7 @@
  * user's preference folder. The world itself never needs saving: the seed rebuilds it. */
 
 #define SAVE_MAGIC 0x56534346u /* "FCSV" */
-#define SAVE_VERSION 8 /* 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms;
+#define SAVE_VERSION 9 /* 9: alchemy (reagents, elixirs, formulae, the elixir working); 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms;
                           6: weapons with materials, powers, legendaries and memory; 7: the Sanctum per world (written by one
                           build still marked 6); 8: food (the larder, dishes, recipes, the meal) */
 #define EXPLORED_BUDGET (1200 * 1024)
@@ -168,6 +168,11 @@ static void write_player(Buf *b, const Stats *s, const Player *pl) {
     w32(b, s->recipes);
     w8(b, s->meal); w8(b, s->meal_q); wf(b, s->meal_t); wf(b, s->meal_len);
     w8(b, s->snack); wf(b, s->snack_t);
+    /* v9: alchemy */
+    wbytes(b, s->reag, RG_COUNT);
+    wbytes(b, s->elixirs, ELIXIR_COUNT);
+    w32(b, s->formulae);
+    w8(b, s->elixir); wf(b, s->elixir_onset); wf(b, s->elixir_t);
 }
 
 /* Explored cells: per chunk a 512-byte mask of the non-zero bytes, then those bytes. */
@@ -364,6 +369,16 @@ static void read_player(Rd *r, SavedPlayer *sp) {
         if (s->meal > RC_ALL || s->meal_q >= DISH_QUALITIES || !(s->meal_t >= 0 && s->meal_t < 1e5f)) { s->meal = 0; s->meal_t = 0; }
         if (s->snack > FD_COUNT || !(s->snack_t >= 0 && s->snack_t < 1e4f)) { s->snack = 0; s->snack_t = 0; }
     }
+    if (r->ver >= 9) {
+        rbytes(r, s->reag, RG_COUNT);
+        rbytes(r, s->elixirs, ELIXIR_COUNT);
+        s->formulae = r32(r);
+        s->elixir = r8(r); s->elixir_onset = rf(r); s->elixir_t = rf(r);
+        if (s->elixir > ELIXIR_COUNT || !(s->elixir_t >= 0 && s->elixir_t < 100.0f) || !(s->elixir_onset >= 0 && s->elixir_onset < 10.0f)) {
+            s->elixir = 0;
+            s->elixir_onset = s->elixir_t = 0;
+        }
+    } else s->formulae = ELIXIRS_START; /* older characters know what every alchemist knows */
     /* sanity: a save from a broken build must not crash the game */
     if (s->level < 1 || s->level > 999) s->level = 1;
     if (s->weapon < 0 || s->weapon >= WPN_COUNT) s->weapon = 0;

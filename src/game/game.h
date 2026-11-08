@@ -4,6 +4,7 @@
 #include <SDL3/SDL.h>
 
 #include "core/fmath.h"
+#include "game/alchemy.h"
 #include "game/food.h"
 #include "game/items.h"
 #include "game/physics.h"
@@ -236,6 +237,13 @@ typedef struct Stats {
     u32 recipes;
     u8 meal, meal_q, snack;
     float meal_t, meal_len, snack_t;
+    /* alchemy (alchemy.c): reagents, bottled elixirs, formulae known, the elixir working
+     * (elixir + 1; onset: until it takes hold; t: how long it still holds) */
+    u8 reag[RG_COUNT];
+    u8 elixirs[ELIXIR_COUNT];
+    u32 formulae;
+    u8 elixir;
+    float elixir_onset, elixir_t;
     /* story (per character) */
     u8 motive;       /* 0: not chosen yet, else MOTIVE_* + 1 */
     int chapter;
@@ -380,6 +388,8 @@ typedef struct PlayerSlot {
     int food_sel;           /* the FOOD tab's row */
     u8 pot[4];              /* ingredients in the pot (food ids) */
     int npot;
+    u8 cauldron[FORMULA_STEPS]; /* alchemy: the steps so far, in order */
+    int ncauldron, alch_sel, elixir_quick;
     /* weapon powers (combat.c): hits per weapon class, and each effect's cooldown */
     u16 hits[WPN_COUNT];
     float pow_cd[PE_COUNT];
@@ -603,7 +613,7 @@ void touch_draw(Game *g);
 int touch_low_width(Game *g, int win_w, int win_h);
 
 /* Character menu tabs. */
-enum { TAB_INVENTORY, TAB_SPELLS, TAB_SKILLS, TAB_STORY, TAB_SHOP, TAB_FOOD, TAB_COUNT };
+enum { TAB_INVENTORY, TAB_SPELLS, TAB_SKILLS, TAB_STORY, TAB_SHOP, TAB_FOOD, TAB_ALCHEMY, TAB_COUNT };
 enum { SANCTUM_BATH = 1, SANCTUM_FEAST = 2, SANCTUM_LIBRARY = 4 };
 
 /* quests.c: motives, chapters, missions, lore, named enemies */
@@ -760,6 +770,26 @@ void food_draw(Game *g, PlayerSlot *ps, int W, int H, int top);
 void food_draw_model(int food, vec3 c, float yaw, float s, vec3 light);
 int food_held(const Stats *s);                      /* ingredients in the larder */
 int food_dishes_held(const Stats *s);
+
+/* alchemy.c: reagents, formulae, elixirs */
+float alchemy_fx(const Stats *s, int effect);       /* ME_* from the elixir working (food_fx adds it) */
+int alchemy_station(Game *g, const PlayerSlot *ps); /* 0 none, 1 a shrine or home, 2 home with the library's alembic */
+void alchemy_give(Game *g, PlayerSlot *ps, int rg, int n);
+bool alchemy_learn(Game *g, PlayerSlot *ps, int r, bool found);
+int alchemy_random_formula(const Stats *s, u64 seed);
+bool alchemy_add(Game *g, PlayerSlot *ps, u8 step);
+bool alchemy_bottle(Game *g, PlayerSlot *ps);
+bool alchemy_drink(Game *g, PlayerSlot *ps, int r);
+bool alchemy_drink_quick(Game *g, PlayerSlot *ps);
+bool alchemy_revive(Game *g, PlayerSlot *ps);
+void alchemy_update(Game *g, float dt);
+void alchemy_monster_drop(Game *g, const Monster *m);
+void alchemy_world_weights(const ChunkInfo *ci, float *w);
+void alchemy_nav(Game *g, PlayerSlot *ps, int nav);
+void alchemy_tap(Game *g, PlayerSlot *ps, int W, int H, int top, float x, float y);
+void alchemy_draw(Game *g, PlayerSlot *ps, int W, int H, int top);
+void alchemy_draw_reagent(int rg, vec3 c, float yaw, float s, vec3 light);
+void alchemy_draw_formula(vec3 c, float yaw, vec3 light);
 
 /* wildlife.c: animals that do not fight */
 void wildlife_spawn_chunk(Game *g, Chunk *c);

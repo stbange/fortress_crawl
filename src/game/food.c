@@ -208,6 +208,7 @@ float food_fx(const Stats *s, int effect) {
         float x;
         if (raw_effect(s->snack - 1, &e, &x) && e == effect) v += x;
     }
+    v += alchemy_fx(s, effect); /* an elixir working */
     if (s->well_fed_t > 0) { /* the Sanctum's feast */
         if (effect == ME_MAXHP) v += 0.2f;
         if (effect == ME_FIGHT_REGEN) v += 0.004f;

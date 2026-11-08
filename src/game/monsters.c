@@ -527,6 +527,12 @@ void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int 
         particles_burst(g, c, v3_scale(m->color, 0.4f), 10, 4.0f, 0.08f, false);
         if (m->elite) flash_add(g, c, v3(1.0f, 0.6f, 0.3f), 8.0f, 0.4f);
         loot_drop(g, m->pos, m->level, m->elite, m->named_kind ? 0.5f : 0.0f);
+        alchemy_monster_drop(g, m);
+        int who = attacker >= 0 ? attacker : m->last_hitter;
+        if (who >= 0 && who < MAX_PLAYERS && g->players[who].active) { /* the Midas Brew */
+            float luck = food_fx(&g->players[who].st, ME_LUCK);
+            if (luck > 0) for (int k = 0; k < 2; k++) loot_drop(g, m->pos, m->level, m->elite, luck);
+        }
         if (m->story_key) story_on_kill(g, m);
         if (m->named_kind && m->story_key) sanctum_trophy_named(g, m->story_key);
         if (m->named_kind && m->story_key && m->level >= 6.0f) {

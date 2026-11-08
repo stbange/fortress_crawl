@@ -171,6 +171,7 @@ void items_give_start(Stats *s) {
     s->equipped[WPN_STAFF] = start_weapon(WB_STAFF);
     s->potions_hp = 2;
     s->potions_mp = 1;
+    s->formulae = ELIXIRS_START; /* two formulae every alchemist knows */
 }
 
 const WeaponBase *equipped_base(const Stats *s, int wclass) { return &WEAPON_BASES[s->equipped[wclass].base]; }
@@ -376,6 +377,18 @@ static void food_place_in_chunk(Game *g, Chunk *c) {
         if (looted_has(g, key) || pickup_alive_with_key(g, key) || !find_spot(g, c, &r, &p)) continue;
         pickup_spawn(g, PK_FOOD, p, f, NULL, key, ck);
     }
+    /* strange things alchemists want, here and there */
+    float rw[RG_COUNT] = { 0 };
+    alchemy_world_weights(ci, rw);
+    float rsum = 0;
+    for (int i = 0; i < RG_COUNT; i++) rsum += rw[i];
+    if (rsum > 0 && rng_chance(&r, 0.35f)) {
+        float x = rng_float(&r) * rsum;
+        int rg = 0;
+        while (rg < RG_COUNT - 1 && x >= rw[rg]) x -= rw[rg++];
+        u64 key = mix64(ck ^ 0xA1C4E1ULL ^ (epoch << 24)) | 1;
+        if (!looted_has(g, key) && !pickup_alive_with_key(g, key) && find_spot(g, c, &r, &p)) pickup_spawn(g, PK_REAGENT, p, rg, NULL, key, ck);
+    }
     /* a larder: sacks and bottles in built places */
     bool built = ci->arch == ARCH_ROOMS || ci->arch == ARCH_CELLS || ci->arch == ARCH_ARENA || ci->has_struct;
     if (built && rng_chance(&r, 0.3f)) {
@@ -493,6 +506,21 @@ static bool collect(Game *g, PlayerSlot *ps, Pickup *p) {
         return false; /* read, not taken (quests.c) */
     case PK_QUEST:
         return story_collect_quest(g, ps, p);
+    case PK_REAGENT: {
+        int before = s->reag[p->amount];
+        alchemy_give(g, ps, p->amount, 1);
+        if (s->reag[p->amount] == before) return false;
+        if (p->key) looted_add(g, p->key);
+        return true;
+    }
+    case PK_FORMULA: {
+        int r = p->amount >= 0 ? p->amount : alchemy_random_formula(s, p->key ^ (u64)(g->time * 1000.0f));
+        alchemy_learn(g, ps, r, true);
+        g_tele.formulae++;
+        if (p->key) looted_add(g, p->key);
+        particles_burst(g, at, v3(0.5f, 1.0f, 0.55f), 12, 2.0f, 0.04f, true);
+        return true;
+    }
     case PK_FOOD: {
         int before = s->food[p->amount];
         food_give(g, ps, p->amount, 1);
@@ -524,6 +552,7 @@ static bool collect(Game *g, PlayerSlot *ps, Pickup *p) {
             Item it = item_roll_region(mix64(p->key ^ 0x7A), (float)level + 3, lrand() < 0.25f ? RAR_LEGENDARY : RAR_EPIC, tier, region);
             pickup_spawn(g, PK_WEAPON, v3_add(p->pos, v3(0, 0.7f, 0)), 0, &it, 0, 0);
             pickup_spawn(g, PK_KEYSTONE, v3_add(p->pos, v3(-0.4f, 0.8f, 0)), 0, NULL, 0, 0); /* and a keystone */
+            pickup_spawn(g, PK_FORMULA, v3_add(p->pos, v3(0, 0.9f, 0.4f)), -1, NULL, 0, 0);  /* and a page of formulae */
             /* and always a relic: a solved puzzle is worth more than ten chests */
             pickup_spawn(g, PK_RELIC, v3_add(p->pos, v3(0.4f, 0.8f, 0)), (int)(mix64(p->key ^ 0x5E1) % RELIC_COUNT), NULL, mix64(p->key ^ 0x5E2), 0);
             game_banner(ps, "THE VAULT'S HOARD");
@@ -534,6 +563,7 @@ static bool collect(Game *g, PlayerSlot *ps, Pickup *p) {
         sfx_at(g, SFX_CHEST_OPEN, at, 1.0f);
         particles_burst(g, at, v3(1.0f, 0.8f, 0.3f), 18, 4.0f, 0.05f, true);
         for (int i = 0; i < 3; i++) loot_drop(g, p->pos, (float)p->amount, false, 0.25f);
+        if (lrand() < 0.25f) pickup_spawn(g, PK_FORMULA, v3_add(p->pos, v3(0, 0.6f, 0)), -1, NULL, 0, 0);
         {
             int tier, region = region_at(g, p->pos, &tier);
             Item it = item_roll_region(mix64(p->key ^ 0x77), (float)p->amount + 1, lrand() < 0.5f ? RAR_MAGIC : RAR_COMMON, tier, region);
@@ -625,6 +655,11 @@ void pickups_draw(Game *g, vec3 eye) {
             if (p->item.rarity >= RAR_RARE) batch3d_octa(v3_add(c, v3(0, 0.75f, 0)), 0.04f, 0.06f, p->t * 2.0f, col, true);
             break;
         }
+        case PK_REAGENT:
+            alchemy_draw_reagent(p->amount, p->key ? p->pos : v3_add(p->pos, v3(0, bob + 0.05f, 0)), p->key ? (float)(p->key % 16) * 0.4f : p->t * 1.2f,
+                                 1.3f, l);
+            break;
+        case PK_FORMULA: alchemy_draw_formula(v3_add(p->pos, v3(0, bob, 0)), p->t * 1.2f, l); break;
         case PK_FOOD: /* on the ground where it grew or lies; a dropped one turns slowly */
             food_draw_model(p->amount, p->key ? p->pos : v3_add(p->pos, v3(0, bob + 0.05f, 0)), p->key ? (float)(p->key % 16) * 0.4f : p->t * 1.2f,
                             p->key ? 1.2f : 1.4f, l);
