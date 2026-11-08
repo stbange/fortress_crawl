@@ -716,7 +716,7 @@ static bool bot_food(Game *g, PlayerSlot *ps, PlayerInput *in, float dt) {
         logf_("%7.1f HUNT gave up\n", B.t);
         B.prey = NULL;
     }
-    if (!B.prey && B.t >= B.next_hunt) {
+    if (!B.prey && B.t >= B.next_hunt && (s->weapon != WPN_STAFF || s->mana > s->maxmana * 0.6f)) {
         B.next_hunt = B.t + 1.0f;
         Critter *c = wildlife_nearest(g, ps->pl.pos, 9.0f, true);
         bool skip = false;
