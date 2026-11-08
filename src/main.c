@@ -495,6 +495,8 @@ static void demo_setup(Game *g) {
         int st = g_demo_cast < 0 ? 0 : g_demo_cast > SANCTUM_STAGES ? SANCTUM_STAGES : g_demo_cast;
         if (st > 0)
             for (int k = 0; k < SP_COUNT; k++) sanctum_set_stage(g, k, st);
+        if (st >= 3)
+            for (int d = 0; d < SD_COUNT; d++) sanctum_add_decor(g, d); /* and everything bought for beauty */
         if (!realm_has(p1->pl.pos)) {
             realm_enter(g, p1, p1->pl.pos, 1.0f);
             p1->pl.pos = v3(64.0f, POCKET_G + 40.0f, 140.0f);

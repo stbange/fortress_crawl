@@ -19,6 +19,12 @@ bool realm_has(const vec3 pos) { return world_is_pocket(fl(pos.x / 32.0f), fl(po
 
 int sanctum_stage(const Game *g, int plot) { return plot >= 0 && plot < SP_COUNT ? g->world.sanctum[plot] : 0; }
 
+void sanctum_add_decor(Game *g, int d) {
+    if (d < 0 || d >= SD_COUNT) return;
+    g->world.sanctum_decor |= 1u << d;
+    g->world.sanctum_gen++; /* built at once, like a stage */
+}
+
 void sanctum_set_stage(Game *g, int plot, int stage) {
     if (plot < 0 || plot >= SP_COUNT) return;
     g->world.sanctum[plot] = (u8)clampf((float)stage, 0, SANCTUM_STAGES);
@@ -319,6 +325,31 @@ void realm_draw(Game *g) {
     utility_draw_door(g, v3(POCKET_EXIT_X, (float)POCKET_G, POCKET_EXIT_Z), ARRIVE_YAW, 1.0f, true);
     if (sanctum_stage(g, SP_DINING) >= 1) feast(g);
     trophies(g);
+    u32 dec = g->world.sanctum_decor;
+    float t = g->time;
+    if ((dec >> SD_KOI) & 1 && sanctum_stage(g, SP_GARDEN) >= 2 && sanctum_stage(g, SP_ISLAND) >= 2)
+        for (int k = 0; k < 5; k++) { /* koi circling in the pond */
+            float a = t * (0.25f + 0.05f * k) + k * 1.3f, r = 1.2f + 0.5f * (k % 3);
+            vec3 p = v3(73.5f + cosf(a) * r * 1.3f, (float)POCKET_G - 0.12f, 9.5f + sinf(a) * r);
+            float yaw = a + PI_F * 0.5f;
+            vec3 col = k % 2 ? v3(1.0f, 0.45f, 0.1f) : v3(0.95f, 0.92f, 0.85f);
+            batch3d_box(p, v3(0.22f, 0.04f, 0.07f), yaw, col, false);
+            batch3d_box(v3_add(p, v3(-cosf(yaw) * 0.25f, 0, -sinf(yaw) * 0.25f)), v3(0.06f, 0.03f, 0.09f), yaw + sinf(t * 6.0f + k) * 0.4f, col, false);
+        }
+    if ((dec >> SD_ORRERY) & 1 && sanctum_stage(g, SP_LIBRARY) >= 1 && sanctum_stage(g, SP_ISLAND) >= 2) {
+        vec3 c = v3(8.5f, (float)POCKET_G + 3.0f, 40.5f);
+        batch3d_octa(c, 0.25f, 0.25f, t, v3(1.2f, 0.9f, 0.4f), true); /* the sun */
+        for (int k = 0; k < 4; k++) {
+            float a = t * (0.6f / (k + 1)) + k * 2.0f, r = 0.7f + 0.45f * k;
+            vec3 pp = v3_add(c, v3(cosf(a) * r, 0.1f * sinf(a * 2.0f), sinf(a) * r));
+            static const vec3 COL[4] = { { 0.7f, 0.6f, 0.5f }, { 0.9f, 0.7f, 0.4f }, { 0.4f, 0.6f, 1.0f }, { 1.0f, 0.4f, 0.3f } };
+            batch3d_octa(pp, 0.08f + 0.02f * k, 0.08f + 0.02f * k, a, COL[k], true);
+            for (int j = 0; j < 12; j++) { /* the brass ring */
+                float b = j * PI_F / 6.0f;
+                batch3d_box(v3_add(c, v3(cosf(b) * r, 0, sinf(b) * r)), v3(0.02f, 0.01f, 0.02f), b, lit(g, c, v3(0.8f, 0.6f, 0.3f)), false);
+            }
+        }
+    }
     /* the drafting table: plans and an inkwell */
     vec3 d = v3(POCKET_DESK_X + 1.0f, (float)POCKET_G + 1.02f, POCKET_DESK_Z + 1.0f);
     batch3d_box(d, v3(0.6f, 0.01f, 0.45f), 0.2f, lit(g, d, v3(0.85f, 0.8f, 0.65f)), false);

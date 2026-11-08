@@ -428,6 +428,7 @@ typedef struct Sanctum {
     u64 named[MAX_TROPHY_NAMED];        /* named enemies killed (their story keys) */
     int nnamed;
     float library_t;                    /* until the library's next scroll */
+    int keys_bought;                    /* keystones bought (each costs more) */
 } Sanctum;
 
 /* Neutral wildlife (wildlife.c): never attacks, monsters ignore it, gives food. */
@@ -716,6 +717,7 @@ Effect *effect_new(Game *g, int type, int element, int owner, vec3 pos, float li
 bool realm_has(const vec3 pos);
 int sanctum_stage(const Game *g, int plot);          /* SP_* stage of the world's Sanctum */
 void sanctum_set_stage(Game *g, int plot, int stage);
+void sanctum_add_decor(Game *g, int d);
 void sanctum_trophy_unique(Game *g, int id);
 void sanctum_trophy_named(Game *g, u64 key);
 /* shop.c: the SHOP tab */
@@ -723,7 +725,7 @@ bool shop_open_here(Game *g, const PlayerSlot *ps);
 void shop_nav(Game *g, PlayerSlot *ps, int nav);
 void shop_tap(Game *g, PlayerSlot *ps, int W, int H, int top, float x, float y);
 void shop_draw(Game *g, PlayerSlot *ps, int W, int H, int top);
-enum { SH_SCRAP, SH_POTION_HP, SH_POTION_MP, SH_RANK, SH_REROLL, SH_RELIC, SH_BUILD, SH_SCROLL, SH_STORE, SH_TAKE, SH_MERCHANT, SH_KEYSTONE };
+enum { SH_SCRAP, SH_POTION_HP, SH_POTION_MP, SH_RANK, SH_REROLL, SH_RELIC, SH_BUILD, SH_SCROLL, SH_STORE, SH_TAKE, SH_MERCHANT, SH_KEYSTONE, SH_PAGE, SH_COMPLETE, SH_RECIPE, SH_SEALED, SH_REFORGE, SH_TEMPER, SH_DECOR };
 bool shop_buy_kind(Game *g, PlayerSlot *ps, int kind);
 bool shop_buy_arg(Game *g, PlayerSlot *ps, int kind, int arg);
 /* game.c: the Golden Thread key (right after a death: back where you fell) */

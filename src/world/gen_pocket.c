@@ -19,6 +19,8 @@
 #define F (POCKET_G - 1) /* the floor cells */
 
 static const u8 *ST; /* the stages being built */
+static u32 DECOR;      /* SD_* bits */
+static bool has(int d) { return (DECOR >> d) & 1; }
 static int st(int plot) { return ST[plot]; }
 
 static void box(GenCtx *g, int x0, int y0, int z0, int x1, int y1, int z1, Block b) { g_fill_w(g, x0, y0, z0, x1, y1, z1, b); }
@@ -399,11 +401,59 @@ static void lawns(GenCtx *g) {
     box(g, 45, F, 94, 50, F, 110, B_FLOOR); /* a path south from the court */
 }
 
+/* What was bought for beauty (realm.c draws the moving parts: the koi, the orrery). */
+static void decorations(GenCtx *g) {
+    if (has(SD_STATUE)) { /* the founder, on a plinth in the court */
+        box(g, 56, G, 75, 58, G, 77, B_PILLAR);
+        box(g, 57, G + 1, 76, 57, G + 3, 76, B_ROOF);
+        g_set_w(g, 56, G + 3, 76, B_ROOF);
+        g_set_w(g, 58, G + 3, 76, B_ROOF);
+        g_set_w(g, 57, G + 4, 76, B_ACCENT);
+    }
+    if (has(SD_SUNDIAL)) {
+        box(g, 57, G, 69, 57, G, 69, B_PILLAR);
+        g_set_w(g, 57, G + 1, 69, B_ACCENT);
+        box(g, 55, G, 67, 55, G, 71, B_WOOD);
+        box(g, 59, G, 67, 59, G, 71, B_WOOD);
+    }
+    if (has(SD_BRAZIERS)) { brazier(g, 42, 66); brazier(g, 53, 66); brazier(g, 42, 80); brazier(g, 53, 80); }
+    if (has(SD_BANNERS)) /* long banners on the hall's north wall */
+        for (int k = 0; k < 4; k++) {
+            int x = k < 2 ? 37 + k * 4 : 52 + (k - 2) * 4;
+            box(g, x, G + 1, 33, x + 1, G + 4, 33, B_ACCENT);
+        }
+    if (has(SD_CARPET)) box(g, 46, F, 37, 49, F, 49, B_ACCENT);
+    if (has(SD_THRONE)) { /* a golden throne on a dais at the north end */
+        box(g, 45, G, 34, 50, G, 36, B_PILLAR);
+        box(g, 47, G + 1, 35, 48, G + 1, 35, B_ACCENT);
+        box(g, 46, G + 1, 34, 49, G + 4, 34, B_ACCENT);
+        g_set_w(g, 46, G + 5, 34, B_ACCENT);
+        g_set_w(g, 49, G + 5, 34, B_ACCENT);
+    }
+    if (has(SD_CHANDELIER)) { /* crystal over the fire */
+        box(g, 47, G + 6, 46, 48, G + 6, 47, B_CRYSTAL);
+        g_set_w(g, 47, G + 5, 46, B_CRYSTAL);
+        g_set_w(g, 48, G + 5, 47, B_CRYSTAL);
+    }
+    if (st(SP_ISLAND) >= 2 && st(SP_GARDEN) >= 1 && has(SD_FLOWERS))
+        for (int k = 0; k < 6; k++) {
+            int x = 36 + k * 5;
+            if (x >= 44 && x <= 51) continue;
+            box(g, x, F, 13, x + 2, F, 13, B_ACCENT);
+        }
+    if (st(SP_ISLAND) >= 2 && st(SP_GARDEN) >= 2 && has(SD_LANTERNS)) {
+        static const int T[][2] = { { 38, 8 }, { 58, 10 }, { 70, 24 }, { 86, 8 }, { 40, 26 }, { 88, 26 } };
+        for (int i = 0; i < 6; i++) { g_set_w(g, T[i][0] + 2, G + 3, T[i][1], B_LANTERN); g_set_w(g, T[i][0] - 2, G + 3, T[i][1], B_LANTERN); }
+    }
+    if (st(SP_ISLAND) >= 2 && st(SP_LIBRARY) >= 1 && has(SD_ORRERY)) box(g, 8, G, 40, 8, G + 1, 40, B_PILLAR);
+}
+
 void gen_pocket(GenCtx *g) {
     memset(g->b, B_AIR, CHUNK_VOL);
     static const u8 START[16] = { 1, 1, 0, 1, 0, 0, 0, 0 };
     ST = g->w ? g->w->sanctum : START;
     if (!ST[SP_ISLAND]) ST = START; /* (a world before its Sanctum state is set) */
+    DECOR = g->w ? g->w->sanctum_decor : 0;
     island(g);
     lawns(g);
     garden(g);
@@ -413,4 +463,5 @@ void gen_pocket(GenCtx *g) {
     dining(g);
     library(g);
     armory(g);
+    decorations(g);
 }

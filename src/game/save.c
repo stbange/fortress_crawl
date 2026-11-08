@@ -11,7 +11,7 @@
  * user's preference folder. The world itself never needs saving: the seed rebuilds it. */
 
 #define SAVE_MAGIC 0x56534346u /* "FCSV" */
-#define SAVE_VERSION 10 /* 10: meal variety, toxicity, torn formulae; 9: alchemy (reagents, elixirs, formulae, the elixir working); 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms;
+#define SAVE_VERSION 11 /* 11: the Sanctum's decorations, keystones bought; 10: meal variety, toxicity, torn formulae; 9: alchemy (reagents, elixirs, formulae, the elixir working); 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms;
                           6: weapons with materials, powers, legendaries and memory; 7: the Sanctum per world (written by one
                           build still marked 6); 8: food (the larder, dishes, recipes, the meal) */
 #define EXPLORED_BUDGET (1200 * 1024)
@@ -255,6 +255,8 @@ bool game_save(Game *g) {
     w16(&b, (u16)g->sanctum.nnamed);
     for (int i = 0; i < g->sanctum.nnamed; i++) w64(&b, g->sanctum.named[i]);
     wf(&b, g->sanctum.library_t);
+    w32(&b, g->world.sanctum_decor); /* v11 */
+    w32(&b, (u32)g->sanctum.keys_bought);
     char key[64];
     save_key(g->opt.seed, key, sizeof key);
     bool ok = store_write(key, b.d, b.n);
@@ -488,6 +490,10 @@ bool game_load(Game *g) {
             if (i < MAX_TROPHY_NAMED) g->sanctum.named[g->sanctum.nnamed++] = k;
         }
         g->sanctum.library_t = rf(&r);
+        if (r.ver >= 11) {
+            g->world.sanctum_decor = r32(&r) & ((1u << SD_COUNT) - 1);
+            g->sanctum.keys_bought = (int)MINI(r32(&r), 1000u);
+        }
         if (r.bad) { /* a broken tail: the Sanctum as a new world has it */
             memset(&g->sanctum, 0, sizeof g->sanctum);
             world_init(&g->world, g->world.seed);

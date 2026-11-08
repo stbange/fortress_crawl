@@ -29,6 +29,11 @@ static inline bool world_is_pocket(int cx, int cy, int cz) {
 enum { SP_ISLAND, SP_HALL, SP_BATH, SP_COURT, SP_DINING, SP_LIBRARY, SP_GARDEN, SP_ARMORY, SP_COUNT };
 #define SANCTUM_STAGES 3
 
+/* Decorations for gold (shop.c sells them, gen_pocket.c and realm.c build and draw them):
+ * nothing but beauty. Each needs its plot built. */
+enum { SD_STATUE, SD_BANNERS, SD_CARPET, SD_BRAZIERS, SD_FLOWERS, SD_KOI, SD_LANTERNS, SD_THRONE, SD_CHANDELIER, SD_SUNDIAL,
+       SD_ORRERY, SD_COUNT };
+
 /* Each plot's corner (world x, z) on the island grid. */
 static inline int plot_x(int plot) {
     static const int X[SP_COUNT] = { 0, 32, 64, 32, 64, 0, 32, 96 };

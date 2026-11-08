@@ -63,6 +63,8 @@ for the full plan and [`docs/STORY.md`](docs/STORY.md) for how the stories work.
 | Wildlife: hares, hens, goats, rams, crabs, salamanders, grouse, beetles, snails, a hive, quail | The FOOD tab in the Sanctum kitchen: the pot, dishes, the larder, the cookbook |
 | ![Warden's Keep](docs/screenshots/spell_keep.png) | ![Alchemy](docs/screenshots/alchemy.png) |
 | Warden's Keep, a conjured keep of real stone | The ALCHEMY tab: a brew begun, elixirs, reagents |
+| ![Decorations](docs/screenshots/sanctum_decor.png) | |
+| The court with what gold bought for beauty: the founder's statue, golden braziers, a sundial | |
 
 ## Build
 
@@ -270,8 +272,19 @@ from your blows, a frost or fear aura, the world slowed round you, a quarter of 
 health... One works at a time, and one drunk within 90 seconds of the last works at half and
 burns. The belt holds four elixirs; the Draught of Vigor counts as a health potion (five of
 those together). At home the library's alembic (stage 2) fills two bottles, an alchemist sells
-three reagents a day (with the library) and a cook two rare goods (with the kitchen), and the
-library sells one keystone a day for 2000 gold.
+three reagents a day, a torn page of a formula a day and the other half of any torn page you hold
+(from the hall's second stage), a cook two rare goods and a recipe a day (from the dining hall's
+second stage), and you can buy one keystone a day (1500 gold, 500 more each time).
+
+**Gold** has more to buy now. At any shrine and at home, three **sealed weapons** a day: you see
+the kind and grade, not what is inside (300 gold for anything, 800 for magic or better, 1500 for
+rare or better, which now and then holds one of this world's legendaries). At home, the
+**forge** brings the weapon in your hand up to your level, keeping its affixes, powers and
+memory (150 gold a level), and **tempers** it a step rarer with a new affix (600, then 1500 or
+4000 and a keystone, up to epic). And eleven things can be bought **for beauty**, built at once
+(500-5000 gold): a statue of the founder, banners, a carpet, golden braziers, flower beds, koi in
+the pond, lanterns in the trees, a golden throne, a crystal chandelier, a sundial with benches,
+an orrery in the library.
 
 Monsters are never weaker than about 60% of your level, wherever you are. Ten minutes without
 a chapter finished, your story target sends hunters after you (an elite and two of its kind),

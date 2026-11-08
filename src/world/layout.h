@@ -32,6 +32,7 @@ typedef struct World {
     /* the Sanctum's build stages (SP_*, pocket.h), read by the generator; sanctum_gen counts
      * every change, so chunks generated from an older state are made again */
     u8 sanctum[16];
+    u32 sanctum_decor; /* SD_* bits: the decorations bought for it (pocket.h) */
     u32 sanctum_gen;
 } World;
 

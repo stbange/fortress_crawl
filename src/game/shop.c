@@ -24,7 +24,7 @@ typedef struct ShopItem {
     char label[72], why[40];
 } ShopItem;
 
-#define SHOP_MAX 80
+#define SHOP_MAX 160
 
 /* building the Sanctum: per plot and stage, gold and keystones, and what it brings */
 static const char *PLOT_NAMES[SP_COUNT] = { "THE ISLAND", "THE HALL", "THE BATH", "THE COURT", "THE DINING HALL", "THE LIBRARY", "THE GARDEN",
@@ -88,17 +88,21 @@ enum { MERCHANT_SLOTS = 5 };
 static u64 merchant_key(Game *g, int slot) {
     return mix64(g->world.seed ^ 0xDA11ULL ^ ((u64)(g->play_time / MERCHANT_DAY) << 8) ^ (u64)slot) | 1;
 }
+/* The alchemist moves in with the hall's second stage, the cook with the dining hall's. */
+static bool alchemist_here(Game *g) { return sanctum_stage(g, SP_HALL) >= 2; }
+static bool cook_here(Game *g) { return sanctum_stage(g, SP_DINING) >= 2; }
+
 /* slot 0-2: a reagent, 3-4: a larder good. Returns false if the slot is not open. */
 static bool merchant_offer(Game *g, int slot, bool *reagent, int *id, int *price) {
     u64 h = mix64(merchant_key(g, slot) ^ 0x5E11ULL);
     if (slot < 3) {
-        if (sanctum_stage(g, SP_LIBRARY) < 1 || sanctum_stage(g, SP_ISLAND) < 2) return false;
+        if (!alchemist_here(g)) return false;
         *reagent = true;
         *id = (int)(h % RG_COUNT);
         *price = *id == RG_PHOENIX ? 800 : *id >= RG_MONSTER_COUNT ? 400 : 200;
         return true;
     }
-    if (sanctum_stage(g, SP_DINING) < 3) return false;
+    if (!cook_here(g)) return false;
     static const int GOODS[][2] = { { FD_SPICES, 250 }, { FD_ROYAL_JELLY, 300 }, { FD_STARFRUIT, 800 }, { FD_WINE, 120 }, { FD_HONEY, 120 }, { FD_SALT, 60 } };
     int k = (int)(h % 6);
     *reagent = false;
@@ -106,6 +110,43 @@ static bool merchant_offer(Game *g, int slot, bool *reagent, int *id, int *price
     *price = GOODS[k][1];
     return true;
 }
+
+/* Sealed weapons (gambling): three a day, at shrines and at home. You see the kind and the
+ * grade, not what is inside; the dearest may hold one of this world's legendaries. */
+#define SEALED_SLOTS 3
+static const int SEALED_PRICE[SEALED_SLOTS] = { 300, 800, 1500 };
+static Item sealed_item(Game *g, PlayerSlot *ps, int slot, bool *legend) {
+    u64 h = mix64(merchant_key(g, 200 + slot) ^ (u64)ps->index);
+    float level = (float)ps->st.level + (float)slot;
+    *legend = false;
+    if (slot == 2 && (h & 0xFF) < 10) { /* about 4% */
+        int id = (int)((h >> 8) % UNIQUE_COUNT);
+        if (!g->sanctum.trophy[id]) { *legend = true; return arms_unique(id, level + 2.0f); }
+    }
+    return item_roll(h, level, slot == 0 ? RAR_COMMON : slot == 1 ? RAR_MAGIC : RAR_RARE);
+}
+
+/* The forge: a weapon brought up to your level keeps everything it is; tempering raises its
+ * rarity a step (an affix more, up to epic). */
+static int reforge_price(const Stats *s) { return 150 * s->level; }
+static int temper_price(int rarity, int *keys) {
+    *keys = rarity >= RAR_MAGIC ? 1 : 0;
+    return rarity == RAR_COMMON ? 600 : rarity == RAR_MAGIC ? 1500 : 4000;
+}
+
+static const struct { const char *name; int price, plot, stage; } DECOR[SD_COUNT] = {
+    [SD_STATUE] = { "a statue of the founder in the court", 1500, SP_COURT, 1 },
+    [SD_BANNERS] = { "banners of your house in the hall", 800, SP_HALL, 1 },
+    [SD_CARPET] = { "a long carpet to the hall's north wall", 500, SP_HALL, 1 },
+    [SD_BRAZIERS] = { "golden braziers round the court", 1200, SP_COURT, 1 },
+    [SD_FLOWERS] = { "flower beds in the garden", 700, SP_GARDEN, 1 },
+    [SD_KOI] = { "koi in the garden pond", 1000, SP_GARDEN, 2 },
+    [SD_LANTERNS] = { "lanterns in the garden's trees", 900, SP_GARDEN, 2 },
+    [SD_THRONE] = { "a golden throne", 5000, SP_HALL, 1 },
+    [SD_CHANDELIER] = { "a crystal chandelier over the fire", 2500, SP_HALL, 1 },
+    [SD_SUNDIAL] = { "a sundial and benches in the court", 600, SP_COURT, 1 },
+    [SD_ORRERY] = { "an orrery in the library", 4000, SP_LIBRARY, 1 },
+};
 
 static int shop_items(Game *g, PlayerSlot *ps, ShopItem *out) {
     Stats *s = &ps->st;
@@ -126,7 +167,31 @@ static int shop_items(Game *g, PlayerSlot *ps, ShopItem *out) {
         "HEALTH POTION (%d/%d)", s->potions_hp, POTION_HP_MAX);
     add(out, &n, SH_POTION_MP, 0, 30, s->potions_mp < POTION_MP_MAX, s->potions_mp < POTION_MP_MAX ? NULL : "YOU CARRY ALL YOU CAN",
         "MANA POTION (%d/%d)", s->potions_mp, POTION_MP_MAX);
-    if (!home) return n; /* a shrine out there sells potions; the rest is traded at home */
+    {   /* sealed weapons */
+        int bag = 0;
+        for (int i = 0; i < BAG_SIZE; i++) bag += s->bag[i].used;
+        for (int k = 0; k < SEALED_SLOTS; k++) {
+            bool legend;
+            Item it = sealed_item(g, ps, k, &legend);
+            bool sold = looted_has(g, merchant_key(g, 200 + k) ^ (u64)ps->index);
+            const char *grade = item_grade(it.level);
+            add(out, &n, SH_SEALED, k, SEALED_PRICE[k], !sold && bag < BAG_SIZE, sold ? "OPENED: MORE TOMORROW" : "THE BAG IS FULL",
+                "A SEALED %s%s%s (%s)", grade, grade[0] ? " " : "", WEAPON_BASES[it.base].name, k == 0 ? "ANYTHING" : k == 1 ? "MAGIC OR BETTER" : "RARE OR BETTER");
+        }
+    }
+    if (!home) return n; /* a shrine out there sells potions and sealed weapons; the rest is traded at home */
+    {   /* the forge, by the hall's fire */
+        const Item *it = &s->equipped[s->weapon];
+        char name[64];
+        item_name(it, name, sizeof name);
+        bool low = it->level < s->level;
+        add(out, &n, SH_REFORGE, s->weapon, reforge_price(s), it->used && low, "ALREADY AT YOUR LEVEL", "FORGE %s TO LEVEL %d", name, s->level);
+        int keys, price = temper_price(it->rarity, &keys);
+        bool ok = it->used && it->rarity < RAR_EPIC && !it->unique;
+        add(out, &n, SH_TEMPER, s->weapon, price, ok, it->unique ? "A LEGENDARY IS WHAT IT IS" : "AS FINE AS THE FORGE CAN MAKE IT",
+            "TEMPER %s: A STEP RARER", name);
+        out[n - 1].keys = keys;
+    }
     {
         int id = s->spell, r = s->spell_rank[id];
         SpellInfo si;
@@ -167,9 +232,32 @@ static int shop_items(Game *g, PlayerSlot *ps, ShopItem *out) {
         bool sold = looted_has(g, merchant_key(g, k));
         add(out, &n, SH_MERCHANT, k, price, !sold, "SOLD: MORE TOMORROW", "%s: %s", rg ? "THE ALCHEMIST" : "THE COOK", rg ? REAGENTS[id].name : FOODS[id].name);
     }
-    if (sanctum_stage(g, SP_LIBRARY) >= 1 && sanctum_stage(g, SP_ISLAND) >= 2) {
+    if (alchemist_here(g)) {
         bool sold = looted_has(g, merchant_key(g, 99));
-        add(out, &n, SH_KEYSTONE, 99, 2000, !sold, "ONE A DAY: MORE TOMORROW", "A KEYSTONE FROM THE LIBRARY'S VAULT (ONE A DAY)");
+        add(out, &n, SH_KEYSTONE, 99, 1500 + 500 * g->sanctum.keys_bought, !sold, "ONE A DAY: MORE TOMORROW", "A KEYSTONE (ONE A DAY, DEARER EACH TIME)");
+        /* knowledge: a torn page a day, and the other half of any torn page you hold */
+        int unknown = 0;
+        for (int r = 0; r < ELIXIR_COUNT; r++) unknown += !((s->formulae | s->formulae_torn) & (1u << r));
+        bool sold_page = looted_has(g, merchant_key(g, 98) ^ (u64)ps->index);
+        add(out, &n, SH_PAGE, 0, 400, unknown && !sold_page, unknown ? "ONE A DAY: MORE TOMORROW" : "YOU HAVE SEEN THEM ALL",
+            "THE ALCHEMIST: A TORN PAGE OF A FORMULA YOU DO NOT KNOW");
+        for (int r = 0; r < ELIXIR_COUNT; r++)
+            if ((s->formulae_torn & (1u << r)) && !(s->formulae & (1u << r)))
+                add(out, &n, SH_COMPLETE, r, 900, true, NULL, "THE ALCHEMIST: THE OTHER HALF OF %s", ELIXIRS[r].name);
+    }
+    if (cook_here(g)) {
+        int unknown = 0;
+        for (int r = 0; r < RECIPE_COUNT; r++) unknown += !((s->recipes >> r) & 1);
+        bool sold = looted_has(g, merchant_key(g, 97) ^ (u64)ps->index);
+        add(out, &n, SH_RECIPE, 0, 300, unknown && !sold, unknown ? "ONE A DAY: MORE TOMORROW" : "YOU KNOW THEM ALL", "THE COOK: A RECIPE YOU DO NOT KNOW");
+    }
+    /* beauty */
+    for (int d = 0; d < SD_COUNT; d++) {
+        if ((g->world.sanctum_decor >> d) & 1) continue;
+        bool island = DECOR[d].plot == SP_GARDEN || DECOR[d].plot == SP_LIBRARY;
+        bool ok = sanctum_stage(g, DECOR[d].plot) >= DECOR[d].stage && (!island || sanctum_stage(g, SP_ISLAND) >= 2);
+        snprintf(why, sizeof why, "NEEDS %s %d", PLOT_NAMES[DECOR[d].plot], DECOR[d].stage);
+        add(out, &n, SH_DECOR, d, DECOR[d].price, ok, why, "FOR BEAUTY: %s", DECOR[d].name);
     }
     /* the stash */
     int bag = 0, stash = 0;
@@ -301,8 +389,83 @@ static void buy(Game *g, PlayerSlot *ps, const ShopItem *it) {
         sfx_ui(SFX_PICKUP_GOLD, 0.8f);
         return;
     }
+    case SH_SEALED: {
+        bool legend;
+        Item w = sealed_item(g, ps, it->arg, &legend);
+        int slot = -1;
+        for (int i = 0; i < BAG_SIZE && slot < 0; i++) if (!s->bag[i].used) slot = i;
+        if (slot < 0) { s->gold += it->price; return; }
+        s->bag[slot] = w;
+        looted_mark(g, merchant_key(g, 200 + it->arg) ^ (u64)ps->index);
+        if (legend) {
+            looted_mark(g, mix64(g->world.seed ^ 0x11E6ULL ^ (u64)(w.unique - 1) * 0x9E3779B9ULL) | 1); /* no second one from its bearer */
+            sanctum_trophy_unique(g, w.unique - 1);
+            flash_add(g, player_eye(&ps->pl), v3(0.6f, 1.0f, 0.8f), 10.0f, 0.6f);
+        }
+        char name[96];
+        item_name(&w, name, sizeof name);
+        snprintf(buf, sizeof buf, "%s: %s", legend ? "A LEGENDARY" : "INSIDE", name);
+        sfx_ui(legend ? SFX_PICKUP_RELIC : SFX_PICKUP_WEAPON, 1.0f);
+        break;
+    }
+    case SH_REFORGE: {
+        Item *w = &s->equipped[it->arg];
+        w->level = (u8)MINI(250, s->level);
+        char name[96];
+        item_name(w, name, sizeof name);
+        snprintf(buf, sizeof buf, "REFORGED: %s, LEVEL %d", name, w->level);
+        sfx_ui(SFX_EQUIP, 1.0f);
+        stats_refresh(ps);
+        break;
+    }
+    case SH_TEMPER: {
+        Item *w = &s->equipped[it->arg];
+        u64 h = mix64((u64)(g->time * 1000.0f) ^ (u64)w->kills ^ 0x7E5ULL);
+        w->rarity++;
+        /* a new affix where there is room for one */
+        int slots = w->rarity >= RAR_RARE ? 2 : w->rarity >= RAR_MAGIC ? 1 : 0;
+        for (int k = 0; k < slots; k++)
+            if (w->affix[k] == AF_NONE) {
+                int a;
+                do { h = mix64(h + 1); a = 1 + (int)(h % (AF_COUNT - 1)); } while (k == 1 && a == w->affix[0]);
+                w->affix[k] = (u8)a;
+            }
+        char name[96];
+        item_name(w, name, sizeof name);
+        snprintf(buf, sizeof buf, "TEMPERED: %s", name);
+        sfx_ui(SFX_PICKUP_RELIC, 1.0f);
+        break;
+    }
+    case SH_PAGE: {
+        int unknown[ELIXIR_COUNT], k = 0;
+        for (int r = 0; r < ELIXIR_COUNT; r++) if (!((s->formulae | s->formulae_torn) & (1u << r))) unknown[k++] = r;
+        if (!k) { s->gold += it->price; return; }
+        looted_mark(g, merchant_key(g, 98) ^ (u64)ps->index);
+        alchemy_learn_torn(g, ps, unknown[mix64((u64)(g->time * 1000.0f)) % (u64)k]);
+        return;
+    }
+    case SH_COMPLETE: alchemy_learn_torn(g, ps, it->arg); return;
+    case SH_RECIPE: {
+        int unknown[RECIPE_COUNT], k = 0;
+        for (int r = 0; r < RECIPE_COUNT; r++) if (!((s->recipes >> r) & 1)) unknown[k++] = r;
+        if (!k) { s->gold += it->price; return; }
+        int r = unknown[mix64((u64)(g->time * 1000.0f) ^ 0xC00C) % (u64)k];
+        s->recipes |= 1u << r;
+        looted_mark(g, merchant_key(g, 97) ^ (u64)ps->index);
+        char need[64];
+        food_need_text(&RECIPES[r], need, sizeof need, false);
+        snprintf(buf, sizeof buf, "THE COOK TEACHES YOU %s: %s", RECIPES[r].name, need);
+        sfx_ui(SFX_RECIPE_LEARNED, 1.0f);
+        break;
+    }
+    case SH_DECOR:
+        sanctum_add_decor(g, it->arg);
+        snprintf(buf, sizeof buf, "FOR BEAUTY: %s", DECOR[it->arg].name);
+        sfx_ui(SFX_PICKUP_RELIC, 0.8f);
+        break;
     case SH_KEYSTONE:
         g->sanctum.keystones++;
+        g->sanctum.keys_bought++;
         looted_mark(g, merchant_key(g, 99));
         snprintf(buf, sizeof buf, "A KEYSTONE (%d) - FOR BUILDING THE SANCTUM", g->sanctum.keystones);
         sfx_ui(SFX_PICKUP_RELIC, 1.0f);

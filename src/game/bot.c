@@ -954,12 +954,24 @@ bool bot_step(Game *g, PlayerInput *in, float dt) {
             if (shop_buy_kind(g, ps, SH_SCROLL)) bought++;
             if (s->gold > 2600 && shop_buy_kind(g, ps, SH_KEYSTONE)) { bought++; logf_("%7.1f BUY keystone\n", B.t); }
             while (s->gold > 1500 && shop_buy_kind(g, ps, SH_MERCHANT)) bought++;
+            /* the forge for every weapon it uses, then beauty with what is left */
+            for (int w = 0; w < WPN_COUNT; w++) {
+                int keep = s->weapon;
+                s->weapon = w;
+                if (s->gold > 150 * s->level + 600 && shop_buy_kind(g, ps, SH_REFORGE)) { bought++; logf_("%7.1f FORGE weapon %d to %d\n", B.t, w, s->level); }
+                if (s->gold > 3000 && shop_buy_kind(g, ps, SH_TEMPER)) { bought++; logf_("%7.1f TEMPER weapon %d\n", B.t, w); }
+                s->weapon = keep;
+            }
+            if (s->gold > 1200 && shop_buy_kind(g, ps, SH_PAGE)) bought++;
+            if (s->gold > 1000 && shop_buy_kind(g, ps, SH_RECIPE)) bought++;
+            while (s->gold > 5000 && shop_buy_kind(g, ps, SH_DECOR)) { bought++; logf_("%7.1f DECOR\n", B.t); }
             int used = 0;
             for (int i = 0; i < BAG_SIZE; i++) used += s->bag[i].used;
             if (used > BAG_SIZE - 4 && shop_buy_kind(g, ps, SH_STORE)) bought++;
             B.shopped_realm = true;
         }
         while (healing_held(s) < POTION_HP_MAX && shop_buy_kind(g, ps, SH_POTION_HP)) bought++;
+        if (s->gold > 2500 && shop_buy_kind(g, ps, SH_SEALED)) { bought++; logf_("%7.1f SEALED weapon bought\n", B.t); }
         int sp = best_attack_spell(s);
         if (sp >= 0) {
             s->spell = sp;
