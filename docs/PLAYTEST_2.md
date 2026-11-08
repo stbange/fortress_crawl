@@ -179,3 +179,43 @@ but a new player may never notice the story. Proposal:
 Target after all of it: 0.6-1.0 deaths an hour for the melee styles, a meal working about half
 the time and chosen for the place, 3-6 formulae found per hour, an elixir in every hard fight
 rather than every fight, and gold under 1000 at the end of an hour.
+
+## 4. After the changes (A-R)
+
+All eighteen proposals are in (commit 8e25e80). The same 20 runs of 60 minutes again, on the
+new build:
+
+| Per hour | Before | After | Target |
+|---|---|---|---|
+| Deaths | 0.20 | **0.65** (delver 1.75, quester 1.25, explorer 0.25, archer and caster 0) | 0.6-1.0 for melee |
+| Close calls | 1.4 | 1.9 | |
+| Health potions drunk | 8.9 | 12.9 | |
+| Ingredients picked up | 231 | 120 | |
+| Animals hunted | 96 | 39 | |
+| Dishes cooked / eaten | 54 / 5.7 | 7.8 / 4.2 | |
+| Time with a meal working | 93% | 72% | about half |
+| Formulae known after an hour | 12.5 | **3.95** | 3-6 |
+| Elixirs drunk | 14 (Vigor 221 of 287) | 1.75 (Swift Tonic most) | one per hard fight |
+| Gold left after an hour | 2298 | 2686 | under 1000 |
+| Chapters (non-questers) | 0-1 | 0-1, four runs with one | |
+
+What worked: deaths are in the target range for the melee styles; dishes are cooked to be eaten
+and the bots now vary them (fried eggs 30, glow tea 28, honey bread 12, roast only at a hearth);
+formulae come at the intended pace; the Draught of Vigor is no longer a sixth potion.
+
+What did not, and what to do next:
+- **Gold still piles up.** The merchants and the daily keystone need the library, which needs
+  the island's second stage and a keystone: the bots built the library once in 20 hours, so
+  none of the new sinks was ever offered. Next: open the alchemist and the keystone with the
+  hall's second stage instead.
+- **Elixirs are now rare in the bots' hands** (under two an hour): rarer pages, the belt and
+  toxicity together. The bots only brew what they know and drink only against elites and packs;
+  a player who experiments at the cauldron will brew more. Worth watching in real play before
+  changing it; if it stays low, double the reagent drops of normal monsters.
+- **Ranged play still never dies.** Hounds, spiders, wraiths at your side and leading shots
+  raised the archers' damage taken only a little. Next: fewer arrows' worth of distance, by
+  letting more monsters rush (crawlers and horned beasts sprint when shot at).
+- **The meal is still working 72% of the time** for the bots, which eat whenever none is; real
+  players will eat less often. Leave it.
+- **Bot**: one caster fell into a deep shaft at minute 10 and never climbed out (stuck 52 times,
+  one recall); the bot should recall sooner when it has not moved for a minute.
