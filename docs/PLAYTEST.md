@@ -1,5 +1,7 @@
 # Playtest notes (automated, November 2026)
 
+The second round, after food and alchemy (20 hours): [`PLAYTEST_2.md`](PLAYTEST_2.md).
+
 32 playtests of 30 game-minutes each (16 hours of play) by the playtest bot
 (`--bot STYLE`, `src/game/bot.c`): six play styles on three seeds (1337, 42, 777), in
 two rounds. The first round found a bug that kept monsters from spawning below the

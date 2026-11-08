@@ -426,7 +426,8 @@ Done:
 - Stories S1 + S2: motives, metaplot chapters, named enemies, domains, traces, missions (6.8).
 - Traps, puzzles (levers, plates, statues, light beams) and vaults; lava burns (6.9).
 - 38 utility spells and the Sanctum, a castle in a pocket realm (6.10).
-- A playtest bot (`--bot`) and the notes from 16 hours of automated play: [`PLAYTEST.md`](PLAYTEST.md).
+- A playtest bot (`--bot`) and the notes from 16 hours of automated play: [`PLAYTEST.md`](PLAYTEST.md);
+  20 more hours after food and alchemy, with proposals: [`PLAYTEST_2.md`](PLAYTEST_2.md).
 - Weapons that differ from world to world (arms.c): nine lost arts of which a world knows four,
   materials by region, powers (trigger + effect), twenty legendaries per world, and weapons that
   remember their kills (titles at 30 of a kind, a hidden affix at 75).
