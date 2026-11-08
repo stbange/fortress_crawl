@@ -219,3 +219,30 @@ What did not, and what to do next:
   players will eat less often. Leave it.
 - **Bot**: one caster fell into a deep shaft at minute 10 and never climbed out (stuck 52 times,
   one recall); the bot should recall sooner when it has not moved for a minute.
+
+## 5. Gold sinks (commit 45ff6b1)
+
+The forge, sealed weapons, pages and recipes for gold, the merchants from the hall's second stage
+and eleven decorations; the same 20 hour-long runs:
+
+| Per run, one hour | Before | After |
+|---|---|---|
+| Gold picked up | 3708 | 4168 |
+| Gold left at the end (mean / median) | 2686 / 1348 | 2141 / 1302 |
+| Runs ending with more than 1000 / 3000 | 15 / 5 | 13 / 4 |
+| Sealed weapons bought | - | 1.9 |
+| Keystones bought | 0 | 0.4 |
+| Weapons forged / tempered | - | 0.1 / 0.1 |
+| Decorations | - | 0 |
+
+The sinks are there (decorations alone take 18 700 gold, tempering a weapon to epic 6100 and two
+keystones), but the bots barely use them: they spend only on their 4 trips home an hour, keep
+large reserves before buying, and the forge rarely applies because the weapons they find are
+already at their level (it is for keeping a favourite, which a bot does not have). The mean
+gold left fell by a fifth. Real players will spend differently; if gold still piles up in real
+play, the next step is the one left out: less gold from drops far out, and reagents instead of
+gold for scrapping.
+
+One delver died 8 times in 2.5 minutes at tier 3 by paying to return where it fell, into the
+same pack each time. Returning where you fell should perhaps not be offered twice within a few
+minutes.
