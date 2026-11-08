@@ -59,21 +59,28 @@ the ingredients are lost, it may boil over and scald you, and it tells you how c
 ("3 steps were right, in their place, of 5", "and too many"). So formulae can be found out by
 trying, mastermind fashion. A brew that matches a formula you did not know teaches it.
 
-Formulae are also found as **pages**: one in every vault hoard, a quarter of chests, 8% of
-elites, a third of bosses (a page you know is worth 25 gold). Every character knows the first
+Formulae are also found as **pages**: one in every vault hoard, 6% of chests, 4% of elites, a
+quarter of bosses (a page you know is worth 25 gold). Half of the pages (all but the vaults')
+are **torn**: they tell what goes in (the ingredients and how many steps), not how; a second
+torn page of the same formula makes it whole. The murky brew tells both numbers of a
+mastermind: steps right in their place, and steps right but elsewhere. Every character knows the first
 two (Draught of Vigor and Swift Tonic).
 
 ## Drinking
 
 From the tab, or V (the last brewed or drunk). The elixir bubbles in you for its onset, then
 takes hold with a flash for its full time; the HUD shows BREWING IN YOU, then ELIXIR. Only one
-works at a time; a second waits until the first is over. Dying ends it.
+works at a time; a second waits until the first is over. Dying ends it. For 90 seconds after
+one ends you are TOXIC: an elixir drunk then costs 15% of your health and works at half, for
+half as long. The belt holds four elixirs; the Draught of Vigor counts as a health potion
+instead (potions and Vigor together, five at most). At home, with the library, an alchemist
+sells three reagents a day (200 gold, 400 for strange finds, 800 for a phoenix feather).
 
 ## The formulae
 
 | # | Elixir | Formula | Onset | Lasts | Effect |
 |---|---|---|---|---|---|
-| 1 | draught of vigor | crawler ichor > wild herb > heat > stir | 2 s | 20 s | 4% of your health back every second |
+| 1 | draught of vigor | crawler ichor > wild herb > heat > stir | 2 s | 20 s | 2.5% of your health back every second (counts as a health potion) |
 | 2 | swift tonic | bat membrane > grind > salt > stir | 2 s | 25 s | 60% faster, attacks 25% faster |
 | 3 | berserker's draught | brute's gall > ember pepper > heat > heat > stir | 3 s | 25 s | 80% more weapon damage, 25% more taken |
 | 4 | stoneskin philtre | golem heartstone > grind > bone dust > chill > stir | 4 s | 25 s | 60% less damage taken, blows do not push you |

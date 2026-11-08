@@ -215,7 +215,7 @@ danger level 6, and now and then from a boss). The second island stage makes roo
 library, garden and armory; the third adds towers, an outer wall and waterfalls. What you
 build appears at once. **Bathe** in the pool (wounds close, burns and poison wash off,
 *Refreshed*: mana flows twice as fast, 10 to 25 minutes by stage), sit down at the **table**
-(everything restored and *Well Fed*: 20% more health that comes back by itself, 10 to 30
+(everything restored and *Well Fed*: 10% more health that comes back by itself, 10 to 30
 minutes), **rest** in the bed (you will wake there when you fall, and the game is saved). The
 library gives a free scroll every 20 minutes (12 with the dome); the armory shows the
 legendaries you found on racks, the banners of the named enemies you killed and statues for
@@ -238,13 +238,17 @@ ember peppers in the hells, frost berries in the north, sun melons in the south,
 and bamboo in the east, sea grapes in the west, star fruit only very far out) and grow back
 every 20 minutes, and the **larders** of built places hold grain, salt, oil, wine and trade
 spices: 36 ingredients in all, each with tags (meat, fish, sweet, sharp, salty, fire...).
-**Cook** at any fire, brazier or hearth (two ingredients), at the Sanctum dining hall's
+**Cook** at any fire or brazier (two ingredients; in the dungeon the smell wakes what lives
+within 25 m), at the hearth of a Warden's Keep or Hut of Rest or the Sanctum dining hall's
 fireplace (three) or in its kitchen (four, and better dishes): 32 **recipes** made of tags, so
 any meat with something sharp is a spicy skewer. Recipes are learned by cooking them; the
 FOOD tab (N) shows the larder, your dishes and the cookbook with hints for the ones you do not
 know. **Eat** a dish (K, or from the tab) for a meal of 10 to 20 minutes: more health, mana or
 damage, speed, resistances, mana that flows faster, spells that cost less, a light that shows
-hidden things... One meal at a time; the feast on the Sanctum's table is one too. Raw
+hidden things... The health and mana dishes are modest; the point is to eat what suits where
+you are going. One meal at a time, the feast on the Sanctum's table is one too, and the same
+dish twice in a row does half as much (a third time, a quarter). The food pouch holds four
+dishes. Raw
 ingredients give a small taste of their strongest tag for a minute and a half. The Sanctum
 garden grows herbs, fruit under its trees, keeps hens (stage 2), beehives and fish in its pond
 (stage 3).
@@ -256,12 +260,22 @@ starlight dew, void salt, mandrake, amber, phoenix feather). At any shrine or at
 ALCHEMY tab (O) is a cauldron: put in ingredients and steps one by one (grind, heat, stir,
 chill, distill) and bottle. Only an **exact formula** (the same things, the same steps, the
 same order) makes an elixir; anything else is a murky brew that may boil over and says how many
-steps were right, so unknown formulae can be found out by trying. Pages of formulae lie in
-vault hoards and chests and are carried by elites and bosses. 27 **elixirs**: each takes hold
+steps were right in their place and how many were right but elsewhere, so unknown formulae can
+be found out by trying. Pages of formulae are rare (every vault hoard, now and then a chest, an
+elite or a boss), and half of them are torn: they say what goes in, not how; a second half
+makes the formula whole. 27 **elixirs**: each takes hold
 1 to 5 seconds after you drink it (V) and is strong for 20 to 30: 80% more damage, 60% less
 damage taken, wings, invisibility, a second life, spells that cost nothing, lightning that arcs
 from your blows, a frost or fear aura, the world slowed round you, a quarter of your damage as
-health... One works at a time; at home the library's alembic (stage 2) fills two bottles.
+health... One works at a time, and one drunk within 90 seconds of the last works at half and
+burns. The belt holds four elixirs; the Draught of Vigor counts as a health potion (five of
+those together). At home the library's alembic (stage 2) fills two bottles, an alchemist sells
+three reagents a day (with the library) and a cook two rare goods (with the kitchen), and the
+library sells one keystone a day for 2000 gold.
+
+Monsters are never weaker than about 60% of your level, wherever you are. Ten minutes without
+a chapter finished, your story target sends hunters after you (an elite and two of its kind),
+and the Golden Thread shows the way back to whoever sent them.
 
 **Stories:** every character picks a motive (revenge, glory, riches or truth). It turns the
 world's endless metaplot into chapters: a named captain, then the general above it, then the

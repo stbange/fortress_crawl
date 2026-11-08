@@ -8,6 +8,12 @@ drift down slowly instead of a short glide; the cookbook is part of the FOOD tab
 Story tab; a cooked meal keeps its place when you walk past the Sanctum's table (the feast
 heals you but does not replace it).
 
+After the second playtest ([`PLAYTEST_2.md`](PLAYTEST_2.md)): health and mana dishes about
+halved; the same dish twice in a row works at half (a third time, a quarter); a third of the
+animals and plants; a food pouch of four dishes; roast needs fire (three ingredients); salt
+rarer; the hearths of Warden's Keep and Hut of Rest count as a fireplace; cooking at an open
+fire in the dungeon wakes monsters within 25 m; a cook at home sells two rare goods a day.
+
 ## 1. Goals
 
 - Food is a **reason to explore and to go home**: ingredients come from the world, and the
