@@ -275,8 +275,8 @@ static void plan(PlayerSlot *ps) {
         int ds = sanctum_stage(G, SP_DINING), bs = sanctum_stage(G, SP_BATH);
         if (s->well_fed_t <= 0 && !(s->meal && s->meal_t > 0) && ds >= 1) to = v3(POCKET_TABLE_X0 - 1.5f, POCKET_G, (ds == 1 ? POCKET_TABLE_Z0_SHORT + POCKET_TABLE_Z1_SHORT : POCKET_TABLE_Z0 + POCKET_TABLE_Z1) * 0.5f);
         else if (s->refreshed_t <= 0 && bs >= 1) to = v3((POCKET_BATH_X0 + POCKET_BATH_X1) * 0.5f, POCKET_G - 1, (POCKET_BATH_Z0 + POCKET_BATH_Z1) * 0.5f);
-        else if (B.realm_rested < 1) to = v3(POCKET_BED_X0 - 1.5f, POCKET_G, (POCKET_BED_Z0 + POCKET_BED_Z1) * 0.5f);
         else if (!B.forged && sanctum_stage(G, SP_FORGE) >= 1 && sanctum_stage(G, SP_ISLAND) >= 2) to = v3(POCKET_ANVIL_X + 0.5f, POCKET_G, POCKET_ANVIL_Z + 2.5f);
+        else if (B.realm_rested < 1) to = v3(POCKET_BED_X0 - 1.5f, POCKET_G, (POCKET_BED_Z0 + POCKET_BED_Z1) * 0.5f);
         else to = v3(POCKET_EXIT_X, POCKET_G, POCKET_EXIT_Z);
         /* the realm is bigger than the search: walk toward the far goal through the nearest cell */
         int best = -1;
@@ -814,8 +814,9 @@ static void bot_forge(Game *g, PlayerSlot *ps) {
         bool open = smith_level(s->smith_xp) >= METALS[m].smith && sanctum_stage(g, SP_FORGE) >= METALS[m].stage;
         if (open && s->forge[METALS[m].ingot] >= forge_ingots(base)) best = m;
     }
+    while (s->forge[FG_CHARCOAL] < 1 + forge_ingots(base) && s->gold > 100 && shop_buy_kind(g, ps, SH_SUPPLY)) {} /* charcoal first */
     if (best < 0) { /* iron from the smith, when there is gold to spare */
-        while (s->forge[FG_IRON] < forge_ingots(base) && s->gold > 600 && shop_buy_arg(g, ps, SH_SUPPLY, 5)) {}
+        while (s->forge[FG_IRON] < forge_ingots(base) && s->gold > 300 && shop_buy_arg(g, ps, SH_SUPPLY, 5)) {}
         if (s->forge[FG_IRON] >= forge_ingots(base)) { best = MT_IRON; ps->plan.metal = MT_IRON; ps->plan.base = (u8)base; }
     }
     if (best < 0) { logf_("%7.1f FORGE none: %d iron ingots, gold %d\n", B.t, s->forge[FG_IRON], s->gold); return; }
@@ -1138,6 +1139,7 @@ bool bot_step(Game *g, PlayerInput *in, float dt) {
                             if (bv) *bv += 200;
                         }
                 logf_("%7.1f HARDSTUCK at %.1f %.1f %.1f (goal %.1f %.1f %.1f) - recall\n", B.t, p.x, p.y, p.z, B.goal.x, B.goal.y, B.goal.z);
+                if (realm_has(p)) { B.realm_rested = 1; B.forged = true; } /* at home: let that goal go */
                 if (!cast_util(g, ps, SU_RECALL)) { ps->pl.pos = s->respawn; ps->pl.vel = v3(0, 0, 0); }
                 B.stuck_windows = 0;
             }
