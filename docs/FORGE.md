@@ -105,3 +105,14 @@ it is; a perfect reforge also makes it a step rarer, up to epic.
   weapon in its hand on each trip home.
 - `--demo forgetest` (salvage, smelting, a novice's cold strikes, a master's session, a reforge,
   and with `--persist` the save), `--demo forge` (the tab), `--demo forgesession` (the anvil).
+
+## Playtest (bots, 20 runs of an hour)
+
+The bots build the forge late (it needs the island's second stage first: 5 of 20 runs, from
+minute 35 on), so an hour shows only the start: four weapons forged, smithing 3 reached, a
+forged epic greatsword taken into use at once. The forge is a late-game road: expect a player
+to start smithing in the second hour and master it over many. What the runs found and fixed:
+the bots could not get started without iron (the smith now sells iron ingots, 50 gold), they
+waited at the dining table for a feast that a cooked meal had replaced, and stuck in the hall's
+doorways they never reached the anvil (they now go to the anvil first and let a goal at home go
+when stuck).
