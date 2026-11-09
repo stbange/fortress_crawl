@@ -273,7 +273,7 @@ static void plan(PlayerSlot *ps) {
         vec3 to;
         const Stats *s = &ps->st;
         int ds = sanctum_stage(G, SP_DINING), bs = sanctum_stage(G, SP_BATH);
-        if (s->well_fed_t <= 0 && ds >= 1) to = v3(POCKET_TABLE_X0 - 1.5f, POCKET_G, (ds == 1 ? POCKET_TABLE_Z0_SHORT + POCKET_TABLE_Z1_SHORT : POCKET_TABLE_Z0 + POCKET_TABLE_Z1) * 0.5f);
+        if (s->well_fed_t <= 0 && !(s->meal && s->meal_t > 0) && ds >= 1) to = v3(POCKET_TABLE_X0 - 1.5f, POCKET_G, (ds == 1 ? POCKET_TABLE_Z0_SHORT + POCKET_TABLE_Z1_SHORT : POCKET_TABLE_Z0 + POCKET_TABLE_Z1) * 0.5f);
         else if (s->refreshed_t <= 0 && bs >= 1) to = v3((POCKET_BATH_X0 + POCKET_BATH_X1) * 0.5f, POCKET_G - 1, (POCKET_BATH_Z0 + POCKET_BATH_Z1) * 0.5f);
         else if (B.realm_rested < 1) to = v3(POCKET_BED_X0 - 1.5f, POCKET_G, (POCKET_BED_Z0 + POCKET_BED_Z1) * 0.5f);
         else if (!B.forged && sanctum_stage(G, SP_FORGE) >= 1 && sanctum_stage(G, SP_ISLAND) >= 2) to = v3(POCKET_ANVIL_X + 0.5f, POCKET_G, POCKET_ANVIL_Z + 2.5f);
