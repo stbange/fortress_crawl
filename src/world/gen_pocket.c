@@ -388,6 +388,7 @@ static void lawns(GenCtx *g) {
     if (st(SP_ISLAND) < 2) return;
     static const int P[4][2] = { { 0, 64 }, { 96, 64 }, { 32, 96 }, { 64, 96 } };
     for (int i = 0; i < 4; i++) {
+        if (i == 1 && st(SP_FORGE) >= 1) continue; /* the forge stands there */
         int x0 = P[i][0], z0 = P[i][1];
         for (int z = z0 + 2; z < z0 + 30; z++)
             for (int x = x0 + 2; x < x0 + 30; x++)
@@ -399,6 +400,44 @@ static void lawns(GenCtx *g) {
         }
     }
     box(g, 45, F, 94, 50, F, 110, B_FLOOR); /* a path south from the court */
+}
+
+/* The forge (forge.c): an anvil and a hearth; then a blast furnace; then a runic forge. */
+static void forge(GenCtx *g) {
+    if (st(SP_ISLAND) < 2 || st(SP_FORGE) < 1) return;
+    int s = st(SP_FORGE);
+    int x0 = plot_x(SP_FORGE), z0 = plot_z(SP_FORGE);
+    int h = shell(g, x0, z0, 32, 32, s, DOOR_S);
+    /* the anvil */
+    box(g, POCKET_ANVIL_X, G, POCKET_ANVIL_Z, POCKET_ANVIL_X + 1, G, POCKET_ANVIL_Z, B_METAL);
+    box(g, POCKET_ANVIL_X - 1, G + 1, POCKET_ANVIL_Z, POCKET_ANVIL_X + 2, G + 1, POCKET_ANVIL_Z, B_METAL);
+    /* the hearth on the north wall */
+    box(g, 104, G, z0 + 3, 111, G, z0 + 5, B_WALL);
+    box(g, 105, G + 1, z0 + 3, 110, G + 1, z0 + 3, B_WALL);
+    for (int x = 106; x <= 109; x++) g_set_w(g, x, G + 1, z0 + 4, B_FIRE);
+    /* the quench trough and the coal heap */
+    box(g, 112, F, 84, 116, F, 85, B_WATER);
+    box(g, 111, G, 83, 117, G, 83, B_WALL);
+    box(g, 111, G, 86, 117, G, 86, B_WALL);
+    box(g, 100, G, 84, 102, G, 86, B_DIRT);
+    /* racks of tools along the east wall */
+    for (int z = z0 + 8; z <= z0 + 24; z += 4) box(g, x0 + 29, G, z, x0 + 29, G + 3, z, B_WOOD);
+    brazier(g, x0 + 4, z0 + 26);
+    brazier(g, x0 + 27, z0 + 26);
+    if (s >= 2) { /* a blast furnace in the north-west corner, glowing inside */
+        box(g, x0 + 2, G, z0 + 2, x0 + 6, G + h - 1, z0 + 6, B_WALL);
+        box(g, x0 + 3, G + 1, z0 + 3, x0 + 5, G + 3, z0 + 5, B_LAVA);
+        box(g, x0 + 4, G + 1, z0 + 6, x0 + 4, G + 2, z0 + 6, B_AIR); /* its mouth */
+        box(g, x0 + 4, G + h, z0 + 4, x0 + 4, G + h + 4, z0 + 4, B_WALL); /* the chimney */
+        lanterns(g, x0, z0, 32, 32, G + h - 2);
+    }
+    if (s >= 3) { /* runes round the anvil, crystal in the hearth */
+        for (int k = 0; k < 8; k++) {
+            float a = k * PI_F * 0.25f;
+            g_set_w(g, POCKET_ANVIL_X + (int)roundf(cosf(a) * 4.0f), F, POCKET_ANVIL_Z + (int)roundf(sinf(a) * 4.0f), B_CRYSTAL);
+        }
+        box(g, 105, G + 2, z0 + 3, 110, G + 2, z0 + 3, B_CRYSTAL);
+    }
 }
 
 /* What was bought for beauty (realm.c draws the moving parts: the koi, the orrery). */
@@ -463,5 +502,6 @@ void gen_pocket(GenCtx *g) {
     dining(g);
     library(g);
     armory(g);
+    forge(g);
     decorations(g);
 }

@@ -6,6 +6,7 @@
 #include "core/fmath.h"
 #include "game/alchemy.h"
 #include "game/food.h"
+#include "game/forge.h"
 #include "game/items.h"
 #include "game/physics.h"
 #include "game/player.h"
@@ -248,6 +249,12 @@ typedef struct Stats {
     float elixir_k;      /* how strongly it works (half when drunk too soon after another) */
     float tox_t;         /* after an elixir: the body is still full of it */
     u32 formulae_torn;   /* formulae known from a torn page: the ingredients, not the steps */
+    /* the forge (forge.c): materials, smithing skill, blueprints (WB_* bits) and runes known
+     * (PT_* and PE_* bits) */
+    u8 forge[FG_COUNT];
+    int smith_xp;
+    u32 blueprints;
+    u16 runes_t, runes_e;
     /* story (per character) */
     u8 motive;       /* 0: not chosen yet, else MOTIVE_* + 1 */
     int chapter;
@@ -395,6 +402,10 @@ typedef struct PlayerSlot {
     int npot;
     u8 cauldron[FORMULA_STEPS]; /* alchemy: the steps so far, in order */
     int ncauldron, alch_sel, elixir_quick;
+    /* the forge: what is planned at the anvil, and the session at the anvil */
+    struct { u8 base, metal, ess[2], rune[2], heart, oil; } plan; /* ess: FG_* + 1; rune: trigger << 4 | effect */
+    struct { bool on, reforge; float heat, flash, t; int need, done, score, flaws, last; char msg[80]; } fs;
+    int forge_sel;
     /* weapon powers (combat.c): hits per weapon class, and each effect's cooldown */
     u16 hits[WPN_COUNT];
     float pow_cd[PE_COUNT];
@@ -619,7 +630,7 @@ void touch_draw(Game *g);
 int touch_low_width(Game *g, int win_w, int win_h);
 
 /* Character menu tabs. */
-enum { TAB_INVENTORY, TAB_SPELLS, TAB_SKILLS, TAB_STORY, TAB_SHOP, TAB_FOOD, TAB_ALCHEMY, TAB_COUNT };
+enum { TAB_INVENTORY, TAB_SPELLS, TAB_SKILLS, TAB_STORY, TAB_SHOP, TAB_FOOD, TAB_ALCHEMY, TAB_FORGE, TAB_COUNT };
 enum { SANCTUM_BATH = 1, SANCTUM_FEAST = 2, SANCTUM_LIBRARY = 4 };
 
 /* quests.c: motives, chapters, missions, lore, named enemies */
@@ -725,7 +736,7 @@ bool shop_open_here(Game *g, const PlayerSlot *ps);
 void shop_nav(Game *g, PlayerSlot *ps, int nav);
 void shop_tap(Game *g, PlayerSlot *ps, int W, int H, int top, float x, float y);
 void shop_draw(Game *g, PlayerSlot *ps, int W, int H, int top);
-enum { SH_SCRAP, SH_POTION_HP, SH_POTION_MP, SH_RANK, SH_REROLL, SH_RELIC, SH_BUILD, SH_SCROLL, SH_STORE, SH_TAKE, SH_MERCHANT, SH_KEYSTONE, SH_PAGE, SH_COMPLETE, SH_RECIPE, SH_SEALED, SH_REFORGE, SH_TEMPER, SH_DECOR };
+enum { SH_SCRAP, SH_POTION_HP, SH_POTION_MP, SH_RANK, SH_REROLL, SH_RELIC, SH_BUILD, SH_SCROLL, SH_STORE, SH_TAKE, SH_MERCHANT, SH_KEYSTONE, SH_PAGE, SH_COMPLETE, SH_RECIPE, SH_SEALED, SH_DECOR, SH_SUPPLY };
 bool shop_buy_kind(Game *g, PlayerSlot *ps, int kind);
 bool shop_buy_arg(Game *g, PlayerSlot *ps, int kind, int arg);
 /* game.c: the Golden Thread key (right after a death: back where you fell) */
@@ -800,6 +811,24 @@ void alchemy_tap(Game *g, PlayerSlot *ps, int W, int H, int top, float x, float 
 void alchemy_draw(Game *g, PlayerSlot *ps, int W, int H, int top);
 void alchemy_draw_reagent(int rg, vec3 c, float yaw, float s, vec3 light);
 void alchemy_draw_formula(vec3 c, float yaw, vec3 light);
+
+/* forge.c: smithing */
+bool forge_here(Game *g, const PlayerSlot *ps);        /* at the anvil in the Sanctum's forge */
+void forge_give(Game *g, PlayerSlot *ps, int m, int n);
+void forge_tick(Game *g, float dt);                    /* the session at the anvil (runs while the menu is open) */
+void forge_nav(Game *g, PlayerSlot *ps, int nav);
+void forge_tap(Game *g, PlayerSlot *ps, int W, int H, int top, float x, float y);
+void forge_draw(Game *g, PlayerSlot *ps, int W, int H, int top);
+void forge_draw_mat(int m, vec3 c, float yaw, vec3 light);
+void forge_monster_drop(Game *g, const Monster *m);
+bool forge_mine(Game *g, PlayerSlot *ps, int x, int y, int z); /* a blow on an ore vein */
+bool forge_start(Game *g, PlayerSlot *ps, bool reforge);
+void forge_strike(Game *g, PlayerSlot *ps);
+void forge_bellows(Game *g, PlayerSlot *ps);
+bool forge_smelt(Game *g, PlayerSlot *ps, int ore);
+bool forge_salvage(Game *g, PlayerSlot *ps, int bag_slot);
+void forge_window(const PlayerSlot *ps, float *lo, float *hi);
+int forge_region_ore(Game *g, int x, int y, int z, u64 h); /* FG_* ore of the region round a cell */
 
 /* wildlife.c: animals that do not fight */
 void wildlife_spawn_chunk(Game *g, Chunk *c);

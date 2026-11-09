@@ -9,7 +9,7 @@
  *
  *   pz 0:  tower   garden  garden  tower        (garden, library, armory: island stage 2;
  *   pz 1:  library hall    bath    armory        towers and the outer wall: stage 3)
- *   pz 2:  lawn    court   dining  lawn
+ *   pz 2:  lawn    court   dining  forge         (the forge: from island stage 2)
  *   pz 3:  tower   lawn    lawn    tower                                                  */
 
 #include "core/common.h"
@@ -26,7 +26,7 @@ static inline bool world_is_pocket(int cx, int cy, int cz) {
 
 /* What can be built, and the most stages of each. Stage 0 is not built (a ruin or bare
  * ground); a new world starts with the island, the hall and the court at stage 1. */
-enum { SP_ISLAND, SP_HALL, SP_BATH, SP_COURT, SP_DINING, SP_LIBRARY, SP_GARDEN, SP_ARMORY, SP_COUNT };
+enum { SP_ISLAND, SP_HALL, SP_BATH, SP_COURT, SP_DINING, SP_LIBRARY, SP_GARDEN, SP_ARMORY, SP_FORGE, SP_COUNT };
 #define SANCTUM_STAGES 3
 
 /* Decorations for gold (shop.c sells them, gen_pocket.c and realm.c build and draw them):
@@ -36,11 +36,11 @@ enum { SD_STATUE, SD_BANNERS, SD_CARPET, SD_BRAZIERS, SD_FLOWERS, SD_KOI, SD_LAN
 
 /* Each plot's corner (world x, z) on the island grid. */
 static inline int plot_x(int plot) {
-    static const int X[SP_COUNT] = { 0, 32, 64, 32, 64, 0, 32, 96 };
+    static const int X[SP_COUNT] = { 0, 32, 64, 32, 64, 0, 32, 96, 96 };
     return X[plot];
 }
 static inline int plot_z(int plot) {
-    static const int Z[SP_COUNT] = { 0, 32, 32, 64, 64, 32, 0, 32 };
+    static const int Z[SP_COUNT] = { 0, 32, 32, 64, 64, 32, 0, 32, 64 };
     return Z[plot];
 }
 
@@ -71,5 +71,7 @@ static inline int plot_z(int plot) {
 #define POCKET_STASH_Z 52
 #define POCKET_SHRINE_X 15  /* the library's shrine */
 #define POCKET_SHRINE_Z 47
+#define POCKET_ANVIL_X 108  /* the forge's anvil */
+#define POCKET_ANVIL_Z 80
 
 #endif

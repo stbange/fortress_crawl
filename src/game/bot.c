@@ -86,6 +86,7 @@ typedef struct Bot {
     int skip_pick[8];            /* pickups it could not get to */
     float skip_pick_until[8];
     int nskip_pick;
+    bool forged;                 /* this trip home: been to the anvil */
     float max_dist, max_depth, max_height;
     int max_tier;
     float time_in_fight;
@@ -257,6 +258,7 @@ static bool want_pickup(const PlayerSlot *ps, const Pickup *p) {
     case PK_FOOD: return s->food[p->amount] < 20;
     case PK_REAGENT: return s->reag[p->amount] < 20;
     case PK_FORMULA: return true;
+    case PK_FORGE: return s->forge[p->amount] < 99;
     default: return false;
     }
 }
@@ -274,6 +276,7 @@ static void plan(PlayerSlot *ps) {
         if (s->well_fed_t <= 0 && ds >= 1) to = v3(POCKET_TABLE_X0 - 1.5f, POCKET_G, (ds == 1 ? POCKET_TABLE_Z0_SHORT + POCKET_TABLE_Z1_SHORT : POCKET_TABLE_Z0 + POCKET_TABLE_Z1) * 0.5f);
         else if (s->refreshed_t <= 0 && bs >= 1) to = v3((POCKET_BATH_X0 + POCKET_BATH_X1) * 0.5f, POCKET_G - 1, (POCKET_BATH_Z0 + POCKET_BATH_Z1) * 0.5f);
         else if (B.realm_rested < 1) to = v3(POCKET_BED_X0 - 1.5f, POCKET_G, (POCKET_BED_Z0 + POCKET_BED_Z1) * 0.5f);
+        else if (!B.forged && sanctum_stage(G, SP_FORGE) >= 1 && sanctum_stage(G, SP_ISLAND) >= 2) to = v3(POCKET_ANVIL_X + 0.5f, POCKET_G, POCKET_ANVIL_Z + 2.5f);
         else to = v3(POCKET_EXIT_X, POCKET_G, POCKET_EXIT_Z);
         /* the realm is bigger than the search: walk toward the far goal through the nearest cell */
         int best = -1;
@@ -782,6 +785,61 @@ static void bot_alchemy(Game *g, PlayerSlot *ps, bool in_fight, const Monster *m
         }
 }
 
+/* ---------- the forge: break up, smelt, forge for the weapon in use ---------- */
+
+static void bot_forge(Game *g, PlayerSlot *ps) {
+    Stats *s = &ps->st;
+    B.forged = true;
+    /* break up what it will never use (blueprints, runes, ingots) */
+    for (int i = 0; i < BAG_SIZE; i++) {
+        const Item *it = &s->bag[i];
+        if (!it->used || it->unique) continue;
+        int wc = WEAPON_BASES[it->base].wclass;
+        if (weapon_score(it) <= weapon_score(&s->equipped[wc])) forge_salvage(g, ps, i);
+    }
+    for (int o = FG_IRON_ORE; o <= FG_STAR_ORE; o++)
+        for (int k = 0; k < 10 && s->forge[o] >= 2; k++) {
+            if (s->forge[FG_CHARCOAL] < 1 && !shop_buy_kind(g, ps, SH_SUPPLY)) break;
+            if (!forge_smelt(g, ps, o)) break;
+        }
+    /* the best metal it can work and has enough of, for a blade of the class in hand */
+    int wc = s->weapon, base = -1;
+    for (int b = 0; b < WB_COUNT; b++)
+        if (((s->blueprints >> b) & 1) && WEAPON_BASES[b].wclass == wc && (base < 0 || WEAPON_BASES[b].dmg > WEAPON_BASES[base].dmg)) base = b;
+    if (base < 0) return;
+    int best = -1;
+    for (int m = MT_COUNT - 1; m >= 0 && best < 0; m--) {
+        ps->plan.metal = (u8)m;
+        ps->plan.base = (u8)base;
+        if (s->forge[METALS[m].ingot] >= forge_ingots(base)) best = m;
+    }
+    if (best < 0) return;
+    while (s->forge[FG_CHARCOAL] < 1 + forge_ingots(base) && s->gold > 200 && shop_buy_kind(g, ps, SH_SUPPLY)) {}
+    memset(ps->plan.ess, 0, sizeof ps->plan.ess);
+    for (int e = 0, k = 0; e < FG_ESS_COUNT && k < 2; e++)
+        if (s->forge[FG_ESS0 + e]) ps->plan.ess[k++] = (u8)(FG_ESS0 + e + 1);
+    ps->plan.rune[0] = ps->plan.rune[1] = 0;
+    for (int t = 1; t < PT_COUNT && !ps->plan.rune[0]; t++)
+        for (int e = 1; e < PE_COUNT && !ps->plan.rune[0]; e++)
+            if (((s->runes_t >> t) & 1) && ((s->runes_e >> e) & 1) && s->forge[FG_RUNE_INK]) ps->plan.rune[0] = (u8)(t << 4 | e);
+    ps->plan.heart = s->forge[FG_TITAN_HEART] > 0;
+    ps->plan.oil = s->forge[FG_QUENCH_OIL] > 0;
+    if (!forge_start(g, ps, false)) return;
+    /* its hand is as steady as its skill: it aims for the middle of the window, off by a little */
+    float wobble = 0.12f - 0.01f * (float)smith_level(s->smith_xp);
+    u64 h = mix64((u64)(B.t * 1000.0f));
+    for (int guard = 0; ps->fs.on && guard < 20000; guard++) {
+        float lo, hi;
+        forge_window(ps, &lo, &hi);
+        h = mix64(h + 1);
+        float aim = (lo + hi) * 0.5f + ((float)(h & 0xFFFF) / 65536.0f - 0.5f) * 2.0f * wobble;
+        if (ps->fs.heat < aim - 0.03f) forge_bellows(g, ps);
+        if (fabsf(ps->fs.heat - aim) < 0.03f) forge_strike(g, ps);
+        else forge_tick(g, 0.05f);
+    }
+    logf_("%7.1f FORGE %s of %s: %s (smithing %d)\n", B.t, WEAPON_BASES[base].name, METALS[best].name, ps->banner, smith_level(s->smith_xp));
+}
+
 /* ---------- the loop ---------- */
 
 void bot_init(Game *g, const char *style, const char *log_path, float minutes) {
@@ -821,12 +879,13 @@ static void summary(PlayerSlot *ps) {
     Stats *s = &ps->st;
     logf_("SUMMARY style=%s minutes=%.1f level=%d kills=%d deaths=%d gold=%d max_gate_dist=%.0f max_tier=%d max_depth=%.0f max_height=%.0f "
           "cells=%d stuck=%d hard_stuck=%d realm_trips=%d realm_failed=%d keystones=%d builds=%d chapter=%d missions=%d lore=%d fights=%d avg_fight=%.1f fight_share=%.0f%% "
-          "replans=%d no_goal=%d stalemates=%d close_calls=%d food=%d hunted=%d harvested=%d cooked=%d eaten=%d recipes=%d reagents=%d brewed=%d elixirs=%d formulae=%d\n",
+          "replans=%d no_goal=%d stalemates=%d close_calls=%d food=%d hunted=%d harvested=%d cooked=%d eaten=%d recipes=%d reagents=%d brewed=%d elixirs=%d formulae=%d forge_mats=%d forged=%d masterworks=%d smithing=%d\n",
           STYLE_NAMES[B.style], B.t / 60.0f, s->level, s->kills, B.deaths, s->gold, B.max_dist, B.max_tier, B.max_depth, B.max_height,
           nvisited, B.stuck_total, B.hard_stuck, B.realm_trips, B.realm_failed, G->sanctum.keystones, B.builds, s->chapter + 1, s->nmissions, G->nlore, B.fights,
           B.fights ? B.fight_time_total / B.fights : 0.0f, 100.0f * B.time_in_fight / fmaxf(1.0f, B.t), B.replans, B.no_goal, B.stalemates, B.close_calls,
           g_tele.food, g_tele.hunted, g_tele.harvested, g_tele.cooked, g_tele.eaten, __builtin_popcount(s->recipes),
-          g_tele.reagents, g_tele.brewed, g_tele.elixirs, __builtin_popcount(s->formulae));
+          g_tele.reagents, g_tele.brewed, g_tele.elixirs, __builtin_popcount(s->formulae), g_tele.forge_mats, g_tele.forged, g_tele.masterworks,
+          smith_level(s->smith_xp));
     float total = 0;
     for (int i = 0; i < HS_COUNT; i++) total += g_tele.taken[i];
     logf_("DAMAGE_TAKEN total=%.0f", total);
@@ -943,7 +1002,7 @@ bool bot_step(Game *g, PlayerInput *in, float dt) {
         int bought = 0;
         if (realm_has(ps->pl.pos)) {
             /* build up the Sanctum: the comforts first, then wider, then the rest */
-            static const int ORDER[SP_COUNT] = { SP_DINING, SP_BATH, SP_ISLAND, SP_LIBRARY, SP_ARMORY, SP_GARDEN, SP_HALL, SP_COURT };
+            static const int ORDER[SP_COUNT] = { SP_DINING, SP_BATH, SP_ISLAND, SP_FORGE, SP_HALL, SP_LIBRARY, SP_ARMORY, SP_GARDEN, SP_COURT };
             for (int k = 0; k < SP_COUNT; k++)
                 if (s->gold > 400 && shop_buy_arg(g, ps, SH_BUILD, ORDER[k])) {
                     bought++;
@@ -954,14 +1013,6 @@ bool bot_step(Game *g, PlayerInput *in, float dt) {
             if (shop_buy_kind(g, ps, SH_SCROLL)) bought++;
             if (s->gold > 2600 && shop_buy_kind(g, ps, SH_KEYSTONE)) { bought++; logf_("%7.1f BUY keystone\n", B.t); }
             while (s->gold > 1500 && shop_buy_kind(g, ps, SH_MERCHANT)) bought++;
-            /* the forge for every weapon it uses, then beauty with what is left */
-            for (int w = 0; w < WPN_COUNT; w++) {
-                int keep = s->weapon;
-                s->weapon = w;
-                if (s->gold > 150 * s->level + 600 && shop_buy_kind(g, ps, SH_REFORGE)) { bought++; logf_("%7.1f FORGE weapon %d to %d\n", B.t, w, s->level); }
-                if (s->gold > 3000 && shop_buy_kind(g, ps, SH_TEMPER)) { bought++; logf_("%7.1f TEMPER weapon %d\n", B.t, w); }
-                s->weapon = keep;
-            }
             if (s->gold > 1200 && shop_buy_kind(g, ps, SH_PAGE)) bought++;
             if (s->gold > 1000 && shop_buy_kind(g, ps, SH_RECIPE)) bought++;
             while (s->gold > 5000 && shop_buy_kind(g, ps, SH_DECOR)) { bought++; logf_("%7.1f DECOR\n", B.t); }
@@ -981,6 +1032,8 @@ bool bot_step(Game *g, PlayerInput *in, float dt) {
         if (bought) logf_("%7.1f SHOP %d bought, gold left %d\n", B.t, bought, s->gold);
     }
     if (B.realm_phase && realm_has(ps->pl.pos) && s->respawn.y > POCKET_Y0 && B.realm_rested < 1) B.realm_rested = 1;
+    if (B.realm_phase && !B.forged && forge_here(g, ps)) bot_forge(g, ps);
+    if (!realm_has(ps->pl.pos)) B.forged = false;
     if (B.t >= B.next_skills) {
         spend_points(ps);
         manage_gear(g, ps);

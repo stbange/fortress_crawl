@@ -172,6 +172,7 @@ void items_give_start(Stats *s) {
     s->potions_hp = 2;
     s->potions_mp = 1;
     s->formulae = ELIXIRS_START; /* two formulae every alchemist knows */
+    s->blueprints = (1u << WB_DAGGER) | (1u << WB_SWORD) | (1u << WB_SHORTBOW) | (1u << WB_STAFF); /* and four blueprints every smith */
 }
 
 const WeaponBase *equipped_base(const Stats *s, int wclass) { return &WEAPON_BASES[s->equipped[wclass].base]; }
@@ -389,6 +390,12 @@ static void food_place_in_chunk(Game *g, Chunk *c) {
         u64 key = mix64(ck ^ 0xA1C4E1ULL ^ (epoch << 24)) | 1;
         if (!looted_has(g, key) && !pickup_alive_with_key(g, key) && find_spot(g, c, &r, &p)) pickup_spawn(g, PK_REAGENT, p, rg, NULL, key, ck);
     }
+    /* ore lying loose, a chunk in six (the veins are in the rock) */
+    if (rng_chance(&r, 0.16f) && find_spot(g, c, &r, &p)) {
+        u64 key = mix64(ck ^ 0x0BE0ULL ^ (epoch << 24)) | 1;
+        if (!looted_has(g, key) && !pickup_alive_with_key(g, key))
+            pickup_spawn(g, PK_FORGE, p, forge_region_ore(g, (int)floorf(p.x), (int)floorf(p.y), (int)floorf(p.z), key), NULL, key, ck);
+    }
     /* a larder: sacks and bottles in built places */
     bool built = ci->arch == ARCH_ROOMS || ci->arch == ARCH_CELLS || ci->arch == ARCH_ARENA || ci->has_struct;
     if (built && rng_chance(&r, 0.15f)) {
@@ -506,6 +513,10 @@ static bool collect(Game *g, PlayerSlot *ps, Pickup *p) {
         return false; /* read, not taken (quests.c) */
     case PK_QUEST:
         return story_collect_quest(g, ps, p);
+    case PK_FORGE:
+        forge_give(g, ps, p->amount, 1);
+        if (p->key) looted_add(g, p->key);
+        return true;
     case PK_REAGENT: {
         int before = s->reag[p->amount];
         alchemy_give(g, ps, p->amount, 1);
@@ -660,6 +671,7 @@ void pickups_draw(Game *g, vec3 eye) {
             alchemy_draw_reagent(p->amount, p->key ? p->pos : v3_add(p->pos, v3(0, bob + 0.05f, 0)), p->key ? (float)(p->key % 16) * 0.4f : p->t * 1.2f,
                                  1.3f, l);
             break;
+        case PK_FORGE: forge_draw_mat(p->amount, p->key ? p->pos : v3_add(p->pos, v3(0, bob, 0)), p->t * 1.2f, l); break;
         case PK_FORMULA: alchemy_draw_formula(v3_add(p->pos, v3(0, bob, 0)), p->t * 1.2f, l); break;
         case PK_FOOD: /* on the ground where it grew or lies; a dropped one turns slowly */
             food_draw_model(p->amount, p->key ? p->pos : v3_add(p->pos, v3(0, bob + 0.05f, 0)), p->key ? (float)(p->key % 16) * 0.4f : p->t * 1.2f,

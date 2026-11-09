@@ -63,8 +63,10 @@ for the full plan and [`docs/STORY.md`](docs/STORY.md) for how the stories work.
 | Wildlife: hares, hens, goats, rams, crabs, salamanders, grouse, beetles, snails, a hive, quail | The FOOD tab in the Sanctum kitchen: the pot, dishes, the larder, the cookbook |
 | ![Warden's Keep](docs/screenshots/spell_keep.png) | ![Alchemy](docs/screenshots/alchemy.png) |
 | Warden's Keep, a conjured keep of real stone | The ALCHEMY tab: a brew begun, elixirs, reagents |
-| ![Decorations](docs/screenshots/sanctum_decor.png) | |
-| The court with what gold bought for beauty: the founder's statue, golden braziers, a sundial | |
+| ![Decorations](docs/screenshots/sanctum_decor.png) | ![The forge](docs/screenshots/forge.png) |
+| The court with what gold bought for beauty: the founder's statue, golden braziers, a sundial | The forge at stage 3: hearth, anvil, runes in the floor |
+| ![The FORGE tab](docs/screenshots/forge_tab.png) | ![At the anvil](docs/screenshots/forge_session.png) |
+| The FORGE tab: a master's plan of starmetal, two essences, a rune, a titan heart | At the anvil: keep the heat in the window, strike |
 
 ## Build
 
@@ -276,12 +278,23 @@ three reagents a day, a torn page of a formula a day and the other half of any t
 (from the hall's second stage), a cook two rare goods and a recipe a day (from the dining hall's
 second stage), and you can buy one keystone a day (1500 gold, 500 more each time).
 
+**The forge** ([`docs/FORGE.md`](docs/FORGE.md)): a Sanctum plot on the east lawn (from the
+island's second stage) and **smithing**, a skill from 1 to 10 learned only by working at it.
+Mine ore from the veins in the rock (silver in the north, mithril in the deep, adamant in the
+hells, star ore far out), smelt it with charcoal and flux, gather essences from monsters of a
+region's element and titan hearts from bosses, and buy what only the smith sells (charcoal,
+flux, quenching oil, rune ink, steel, moonsilver). Break weapons up to learn their blueprints
+and the runes of their powers. Then forge in the FORGE tab (U): choose blueprint, metal,
+essences (affixes), runes (powers), a titan heart and oil, and work the metal: the bellows heat
+it, it cools, and every strike counts by how close it is to the metal's heat window. The
+quality, the metal and your skill decide the level, the rarity and the material; a master's
+starmetal masterwork is far stronger than anything found. Reforging brings a favourite weapon
+up to your level and beyond.
+
 **Gold** has more to buy now. At any shrine and at home, three **sealed weapons** a day: you see
 the kind and grade, not what is inside (300 gold for anything, 800 for magic or better, 1500 for
-rare or better, which now and then holds one of this world's legendaries). At home, the
-**forge** brings the weapon in your hand up to your level, keeping its affixes, powers and
-memory (150 gold a level), and **tempers** it a step rarer with a new affix (600, then 1500 or
-4000 and a keystone, up to epic). And eleven things can be bought **for beauty**, built at once
+rare or better, which now and then holds one of this world's legendaries). At home, the smith sells the forge's supplies.
+And eleven things can be bought **for beauty**, built at once
 (500-5000 gold): a statue of the founder, banners, a carpet, golden braziers, flower beds, koi in
 the pond, lanterns in the trees, a golden throne, a crystal chandelier, a sundial with benches,
 an orrery in the library.
@@ -335,8 +348,9 @@ last and shows what is saved; *New characters* (press twice) deletes the save of
 | H / J | drink a health / mana potion |
 | K / N | eat the best dish you carry / the FOOD tab (cooking at a fire, the larder, the cookbook) |
 | V / O | drink an elixir (the last one brewed or drunk) / the ALCHEMY tab (brewing at a shrine or at home) |
+| U | the FORGE tab (at the anvil: X or LEFT the bellows, ENTER or UP strikes) |
 | G | Golden Thread: a fading line to your story target (again: next mission) |
-| TAB, I, B, L | character menu: last tab, inventory, spellbook, story; SHOP, FOOD and ALCHEMY are the fifth to seventh tabs (Q/E or [ ] switch tabs) |
+| TAB, I, B, L | character menu: last tab, inventory, spellbook, story; SHOP, FOOD, ALCHEMY and FORGE are the fifth to eighth tabs (Q/E or [ ] switch tabs) |
 | in the menu | arrows or WASD select, Enter equips / uses / learns / makes a spell active, Del or X scraps a weapon |
 | M | map of the cells you have seen |
 | Space, Shift, Ctrl | jump, sprint, crouch (you duck and crawl automatically in low tunnels) |
@@ -389,7 +403,7 @@ fortress_crawl [--seed N] [--pos x y z] [--look yaw pitch] [--fly] [--radius n] 
                [--demo combat|sword|death|skills|map|coop|menu|inventory|spells|loot|magic|bestiary|
                        motive|story|read|named|storytest|vault|levers|plates|statues|beam|
                        darts|spikes|flames|mechtest|cast|realmtest|shop|sanctum|
-                       food|foodtest|wildlife|alchemy|alchtest] [--cast n]
+                       food|foodtest|wildlife|alchemy|alchtest|forge|forgetest|forgesession] [--cast n]
                [--bot STYLE] [--bot-minutes n] [--bot-log file]
                [--players n] [--test-pad] [--touch] [--fresh] [--persist] [--fullbright] [--chapter n]
 ```
@@ -602,7 +616,7 @@ src/world    themes, texture generator, world layout, chunk generators, mesher +
              chunk streaming
 src/render   low-res renderer, sky, post-processing, entity/UI batches
 src/game     player controller, physics, monsters and AI, combat, skills, map, sound effects,
-             wildlife (wildlife.c), food and cooking (food.c), alchemy (alchemy.c), the Sanctum (realm.c, shop.c)
+             wildlife (wildlife.c), food and cooking (food.c), alchemy (alchemy.c), the forge (forge.c), the Sanctum (realm.c, shop.c)
 tests, tools headless generator checks and map exporters, sound generator (tools/gen_sfx.mjs)
 assets/sfx   the sound effects (generated with ElevenLabs)
 ```

@@ -77,6 +77,7 @@ add_executable(fortress_crawl
   src/game/monsters.c
   src/game/food.c
   src/game/alchemy.c
+  src/game/forge.c
   src/game/wildlife.c
   src/game/monster_draw.c
   src/game/combat.c

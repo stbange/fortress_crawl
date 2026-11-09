@@ -435,6 +435,8 @@ Done:
 - Wildlife, 36 ingredients, cooking and 32 recipes: [`FOOD.md`](FOOD.md).
 - Alchemy: 28 reagents (20 from monsters), 27 exact formulae, elixirs with an onset:
   [`ALCHEMY.md`](ALCHEMY.md).
+- The forge: smithing 1-10, ores, essences, bought supplies, blueprints and runes from breaking
+  weapons up, a timed session at the anvil, masterworks: [`FORGE.md`](FORGE.md).
 - The balance pass from those notes ([`BALANCE_PLAN.md`](BALANCE_PLAN.md)): danger that keeps up,
   a costlier death, a shop for gold, melee across ledges, safer stairs, a nearer first chapter.
 - Screenshot and demo modes (`--shot`, `--demo combat|sword|death|skills|map|coop|menu|

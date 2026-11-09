@@ -163,7 +163,7 @@ extern const char *RELIC_BONUS_TEXT[4];
 /* ---------- things on the ground ---------- */
 
 /* PK_TRACE: something to read (amount = TR_*), PK_QUEST: an item a mission asks for. */
-enum { PK_GOLD, PK_POTION_HP, PK_POTION_MP, PK_SCROLL, PK_WEAPON, PK_RELIC, PK_CHEST, PK_TRACE, PK_QUEST, PK_KEYSTONE, PK_FOOD, PK_REAGENT, PK_FORMULA, PK_COUNT }; /* PK_FOOD: amount = FD_*, PK_REAGENT: RG_*, PK_FORMULA: an elixir or -1 */
+enum { PK_GOLD, PK_POTION_HP, PK_POTION_MP, PK_SCROLL, PK_WEAPON, PK_RELIC, PK_CHEST, PK_TRACE, PK_QUEST, PK_KEYSTONE, PK_FOOD, PK_REAGENT, PK_FORMULA, PK_FORGE, PK_COUNT }; /* PK_FOOD: amount = FD_*, PK_REAGENT: RG_*, PK_FORMULA: an elixir or -1 */
 
 typedef struct Pickup {
     bool alive;

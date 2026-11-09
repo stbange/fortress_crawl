@@ -429,6 +429,86 @@ static void demo_setup(Game *g) {
         if (g->opt.persist) SDL_Log("alchtest: saved %d", game_save(g));
         return;
     }
+    if (!strcmp(g_demo_kind, "forgetest") || !strcmp(g_demo_kind, "forge") || !strcmp(g_demo_kind, "forgesession")) {
+        /* the forge: a master's session, a novice's, a reforge, salvage and smelting (log), or
+         * the FORGE tab (forge) and a session at the anvil (forgesession) for screenshots */
+        bool test = !strcmp(g_demo_kind, "forgetest");
+        sanctum_set_stage(g, SP_ISLAND, 2);
+        sanctum_set_stage(g, SP_FORGE, 3);
+        realm_enter(g, p1, p1->pl.pos, 1.0f);
+        p1->pl.pos = v3(POCKET_ANVIL_X + 0.5f, (float)POCKET_G, POCKET_ANVIL_Z + 2.5f);
+        p1->pl.yaw = -PI_F * 0.5f;
+        for (int m = 0; m < FG_COUNT; m++) s->forge[m] = 12;
+        for (int i = 0; i < BAG_SIZE; i++) memset(&s->bag[i], 0, sizeof s->bag[i]);
+        s->bag[0] = item_roll(4242, 12, RAR_RARE);
+        s->bag[0].base = WB_GREATSWORD;
+        s->bag[0].power[0] = (u8)(PT_CRIT << 4 | PE_CHAIN);
+        if (test) {
+            SDL_Log("forgetest: at the anvil %d, smithing %d", forge_here(g, p1), smith_level(s->smith_xp));
+            bool sv = forge_salvage(g, p1, 0);
+            SDL_Log("forgetest: salvage %d: greatsword blueprint %d, runes t%04x e%04x: %s", sv, (s->blueprints >> WB_GREATSWORD) & 1, s->runes_t, s->runes_e, p1->banner);
+            int iron = s->forge[FG_IRON];
+            forge_smelt(g, p1, FG_IRON_ORE);
+            SDL_Log("forgetest: smelt iron ore: ingots %d -> %d", iron, s->forge[FG_IRON]);
+            /* a novice who strikes as soon as the session starts (cold) */
+            p1->plan.base = WB_SWORD; p1->plan.metal = MT_IRON;
+            forge_start(g, p1, false);
+            while (p1->fs.on) forge_strike(g, p1);
+            SDL_Log("forgetest: cold strikes: %s", p1->banner);
+        }
+        /* a master: keep the heat in the window and strike in the middle of it */
+        s->smith_xp = smith_xp_for(SMITH_MAX);
+        p1->plan.base = WB_GREATSWORD; p1->plan.metal = MT_STARMETAL;
+        p1->plan.ess[0] = FG_ESS_FIRE + 1; p1->plan.ess[1] = FG_ESS_STORM + 1;
+        p1->plan.rune[0] = (u8)(PT_CRIT << 4 | PE_CHAIN); p1->plan.rune[1] = 0;
+        p1->plan.heart = 1; p1->plan.oil = 1;
+        if (!strcmp(g_demo_kind, "forge")) { p1->show_skills = true; p1->menu_tab = TAB_FORGE; p1->forge_sel = 2; return; }
+        bool ok = forge_start(g, p1, false);
+        if (!strcmp(g_demo_kind, "forgesession")) {
+            p1->fs.heat = 0.82f; p1->fs.done = 3; p1->fs.score = 8; p1->fs.last = 3;
+            snprintf(p1->fs.msg, sizeof p1->fs.msg, "PERFECT");
+            p1->show_skills = true; p1->menu_tab = TAB_FORGE;
+            return;
+        }
+        for (int guard = 0; p1->fs.on && guard < 20000; guard++) {
+            float lo, hi;
+            forge_window(p1, &lo, &hi);
+            float c = (lo + hi) * 0.5f;
+            if (p1->fs.heat < c - 0.02f) forge_bellows(g, p1);
+            if (fabsf(p1->fs.heat - c) < (hi - lo) * 0.2f) forge_strike(g, p1);
+            else forge_tick(g, 0.05f);
+        }
+        SDL_Log("forgetest: master session %d: %s", ok, p1->banner);
+        for (int i = 0; i < BAG_SIZE; i++)
+            if (s->bag[i].used) {
+                char name[96];
+                item_name(&s->bag[i], name, sizeof name);
+                SDL_Log("forgetest: bag %d: %s level %d rarity %d affix %d/%d power %02x dmg x%.2f", i, name, s->bag[i].level, s->bag[i].rarity,
+                        s->bag[i].affix[0], s->bag[i].affix[1], s->bag[i].power[0], item_damage_mult(&s->bag[i]));
+            }
+        Item found = item_roll(77, (float)s->level, RAR_RARE);
+        SDL_Log("forgetest: a rare found at your level: dmg x%.2f (player level %d)", item_damage_mult(&found), s->level);
+        /* reforge the sword in hand */
+        int lv = s->equipped[WPN_SWORD].level;
+        s->weapon = WPN_SWORD;
+        forge_start(g, p1, true);
+        for (int guard = 0; p1->fs.on && guard < 20000; guard++) {
+            float lo, hi;
+            forge_window(p1, &lo, &hi);
+            float c = (lo + hi) * 0.5f;
+            if (p1->fs.heat < c - 0.02f) forge_bellows(g, p1);
+            if (fabsf(p1->fs.heat - c) < (hi - lo) * 0.2f) forge_strike(g, p1);
+            else forge_tick(g, 0.05f);
+        }
+        SDL_Log("forgetest: reforge: level %d -> %d: %s", lv, s->equipped[WPN_SWORD].level, p1->banner);
+        if (g->opt.persist) SDL_Log("forgetest: saved %d", game_save(g));
+        return;
+    }
+    if (!strcmp(g_demo_kind, "forgecheck")) {
+        SDL_Log("forgetest: loaded smithing xp %d, blueprints %08x, runes %04x/%04x, starmetal %d, forge stage %d", s->smith_xp, s->blueprints, s->runes_t,
+                s->runes_e, s->forge[FG_STARMETAL], sanctum_stage(g, SP_FORGE));
+        return;
+    }
     if (!strcmp(g_demo_kind, "alchcheck")) {
         SDL_Log("alchtest: loaded reagents %d, elixirs %d, formulae %08x, elixir %d", s->reag[RG_GALL], s->elixirs[2], s->formulae, s->elixir);
         return;

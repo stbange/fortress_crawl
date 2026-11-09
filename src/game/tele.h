@@ -21,6 +21,7 @@ typedef struct Tele {
     int lost_found, uniques_found, powers_fired, awakened, banes;
     int food, cooked, eaten, hunted, harvested;
     int reagents, brewed, murky, elixirs, formulae;
+    int forge_mats, forged, masterworks;
 } Tele;
 
 extern Tele g_tele;

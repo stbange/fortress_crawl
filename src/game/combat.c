@@ -560,6 +560,8 @@ static void sword_strike(Game *g, PlayerSlot *ps, bool whirl) {
         vec3 look = dir_from_angles(ps->pl.yaw, ps->pl.pitch);
         float d = phys_raycast(eye, look, range, game_solid, g);
         if (d < range) {
+            vec3 in = v3_add(eye, v3_scale(look, d + 0.05f)); /* an ore vein gives ore to a blow */
+            if (forge_mine(g, ps, (int)floorf(in.x), (int)floorf(in.y), (int)floorf(in.z))) return;
             vec3 at = v3_add(eye, v3_scale(look, d - 0.05f));
             particles_burst(g, at, v3(1.0f, 0.85f, 0.5f), 6, 2.5f, 0.03f, true);
             sfx_at(g, SFX_HIT_WALL, at, 1.0f);

@@ -273,6 +273,15 @@ export const SOUNDS = [
   { id: "elixir_drink", dur: 1.2, text: "drinking a fizzing magical potion in big gulps, glass clink" },
   { id: "elixir_onset", dur: 1.8, text: "a magical elixir takes effect, a deep pulsing surge of power and a rising shimmer" },
 
+  // ---------------- the forge ----------------
+  { id: "anvil", dur: 0.9, v: 3, text: "a blacksmith's hammer striking hot steel on an anvil, a clean bright ringing clang with sparks" },
+  { id: "anvil_bad", dur: 0.8, text: "a hammer striking metal badly on an anvil, a dull cracking clank" },
+  { id: "bellows", dur: 0.8, v: 2, text: "a blacksmith's leather bellows pumped once, a deep whoosh and the forge fire roaring up" },
+  { id: "quench", dur: 1.8, text: "red hot steel plunged into a water trough, a loud violent hiss and bubbling steam" },
+  { id: "smelt", dur: 2.2, text: "a blast furnace roaring, molten metal poured into a mould, crackling heat" },
+  { id: "salvage", dur: 1.0, text: "a weapon broken apart on an anvil, metal snapping and pieces clattering" },
+  { id: "ore_mine", dur: 0.8, v: 2, text: "a blade striking an ore vein in rock, chips of stone and ore breaking loose" },
+
   // ---------------- story and menus ----------------
   { id: "read_note", dur: 1.0, text: "unfolding old parchment, paper rustle" },
   { id: "chapter_done", dur: 3.0, text: "dark epic fantasy victory sting, low brass and timpani swell" },

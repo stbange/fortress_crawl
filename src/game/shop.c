@@ -28,7 +28,7 @@ typedef struct ShopItem {
 
 /* building the Sanctum: per plot and stage, gold and keystones, and what it brings */
 static const char *PLOT_NAMES[SP_COUNT] = { "THE ISLAND", "THE HALL", "THE BATH", "THE COURT", "THE DINING HALL", "THE LIBRARY", "THE GARDEN",
-                                            "THE ARMORY" };
+                                            "THE ARMORY", "THE FORGE" };
 static const int COST[SP_COUNT][SANCTUM_STAGES + 1][2] = {
     [SP_ISLAND] = { { 0, 0 }, { 0, 0 }, { 1500, 1 }, { 5000, 2 } },
     [SP_HALL] = { { 0, 0 }, { 0, 0 }, { 1000, 1 }, { 3000, 2 } },
@@ -38,6 +38,7 @@ static const int COST[SP_COUNT][SANCTUM_STAGES + 1][2] = {
     [SP_LIBRARY] = { { 0, 0 }, { 600, 0 }, { 1800, 1 }, { 5000, 2 } },
     [SP_GARDEN] = { { 0, 0 }, { 300, 0 }, { 1200, 0 }, { 3000, 1 } },
     [SP_ARMORY] = { { 0, 0 }, { 800, 0 }, { 2000, 1 }, { 5000, 2 } },
+    [SP_FORGE] = { { 0, 0 }, { 800, 0 }, { 2500, 1 }, { 6000, 2 } },
 };
 static const char *WHAT[SP_COUNT][SANCTUM_STAGES + 1] = {
     [SP_ISLAND] = { "", "", "twice as wide, room for three more plots", "towers, an outer wall, waterfalls" },
@@ -48,6 +49,8 @@ static const char *WHAT[SP_COUNT][SANCTUM_STAGES + 1] = {
     [SP_LIBRARY] = { "", "empty shelves", "books and a shrine: a scroll every 20 min", "a dome of glass: a scroll every 12 min" },
     [SP_GARDEN] = { "", "paths and lamps", "trees and a pond", "a walled garden with flowers" },
     [SP_ARMORY] = { "", "racks for 8 of your legendaries", "20 racks, the banners of your foes", "statues of your chapters" },
+    [SP_FORGE] = { "", "an anvil and a hearth: iron, steel, silver; a smith who sells supplies", "a blast furnace: mithril, adamant, moonsilver; one rune",
+                   "a runic forge: starmetal, two runes" },
 };
 static float library_every(Game *g) { return sanctum_stage(g, SP_LIBRARY) >= 3 ? 720.0f : 1200.0f; }
 
@@ -126,14 +129,6 @@ static Item sealed_item(Game *g, PlayerSlot *ps, int slot, bool *legend) {
     return item_roll(h, level, slot == 0 ? RAR_COMMON : slot == 1 ? RAR_MAGIC : RAR_RARE);
 }
 
-/* The forge: a weapon brought up to your level keeps everything it is; tempering raises its
- * rarity a step (an affix more, up to epic). */
-static int reforge_price(const Stats *s) { return 150 * s->level; }
-static int temper_price(int rarity, int *keys) {
-    *keys = rarity >= RAR_MAGIC ? 1 : 0;
-    return rarity == RAR_COMMON ? 600 : rarity == RAR_MAGIC ? 1500 : 4000;
-}
-
 static const struct { const char *name; int price, plot, stage; } DECOR[SD_COUNT] = {
     [SD_STATUE] = { "a statue of the founder in the court", 1500, SP_COURT, 1 },
     [SD_BANNERS] = { "banners of your house in the hall", 800, SP_HALL, 1 },
@@ -180,18 +175,6 @@ static int shop_items(Game *g, PlayerSlot *ps, ShopItem *out) {
         }
     }
     if (!home) return n; /* a shrine out there sells potions and sealed weapons; the rest is traded at home */
-    {   /* the forge, by the hall's fire */
-        const Item *it = &s->equipped[s->weapon];
-        char name[64];
-        item_name(it, name, sizeof name);
-        bool low = it->level < s->level;
-        add(out, &n, SH_REFORGE, s->weapon, reforge_price(s), it->used && low, "ALREADY AT YOUR LEVEL", "FORGE %s TO LEVEL %d", name, s->level);
-        int keys, price = temper_price(it->rarity, &keys);
-        bool ok = it->used && it->rarity < RAR_EPIC && !it->unique;
-        add(out, &n, SH_TEMPER, s->weapon, price, ok, it->unique ? "A LEGENDARY IS WHAT IT IS" : "AS FINE AS THE FORGE CAN MAKE IT",
-            "TEMPER %s: A STEP RARER", name);
-        out[n - 1].keys = keys;
-    }
     {
         int id = s->spell, r = s->spell_rank[id];
         SpellInfo si;
@@ -217,7 +200,7 @@ static int shop_items(Game *g, PlayerSlot *ps, ShopItem *out) {
     for (int p = 0; p < SP_COUNT; p++) {
         int cur = sanctum_stage(g, p);
         if (cur >= SANCTUM_STAGES) continue;
-        bool needs_island = (p == SP_LIBRARY || p == SP_GARDEN || p == SP_ARMORY) && sanctum_stage(g, SP_ISLAND) < 2;
+        bool needs_island = (p == SP_LIBRARY || p == SP_GARDEN || p == SP_ARMORY || p == SP_FORGE) && sanctum_stage(g, SP_ISLAND) < 2;
         int gold = COST[p][cur + 1][0], keys = COST[p][cur + 1][1];
         bool ok = !needs_island && keys <= g->sanctum.keystones;
         add(out, &n, SH_BUILD, p, gold, ok, needs_island ? "NEEDS A WIDER ISLAND" : keys > g->sanctum.keystones ? "NOT ENOUGH KEYSTONES" : NULL,
@@ -250,6 +233,16 @@ static int shop_items(Game *g, PlayerSlot *ps, ShopItem *out) {
         for (int r = 0; r < RECIPE_COUNT; r++) unknown += !((s->recipes >> r) & 1);
         bool sold = looted_has(g, merchant_key(g, 97) ^ (u64)ps->index);
         add(out, &n, SH_RECIPE, 0, 300, unknown && !sold, unknown ? "ONE A DAY: MORE TOMORROW" : "YOU KNOW THEM ALL", "THE COOK: A RECIPE YOU DO NOT KNOW");
+    }
+    /* the smith (with the forge): the supplies that are only bought, and two metals */
+    if (sanctum_stage(g, SP_FORGE) >= 1 && sanctum_stage(g, SP_ISLAND) >= 2) {
+        static const struct { int m, n, price; } SUP[] = { { FG_CHARCOAL, 5, 100 }, { FG_FLUX, 1, 80 }, { FG_QUENCH_OIL, 1, 150 }, { FG_RUNE_INK, 1, 300 }, { FG_STEEL, 1, 200 } };
+        for (int k = 0; k < (int)(sizeof SUP / sizeof SUP[0]); k++)
+            add(out, &n, SH_SUPPLY, k, SUP[k].price, s->forge[SUP[k].m] + SUP[k].n <= 99, "YOU CARRY ALL YOU CAN", "THE SMITH: %d %s (YOU HAVE %d)", SUP[k].n,
+                FORGE_MATS[SUP[k].m].name, s->forge[SUP[k].m]);
+        bool sold = looted_has(g, merchant_key(g, 96) ^ (u64)ps->index);
+        add(out, &n, SH_SUPPLY, 99, 1500, !sold && sanctum_stage(g, SP_FORGE) >= 2, sold ? "ONE A DAY: MORE TOMORROW" : "NEEDS THE FORGE AT STAGE 2",
+            "THE SMITH: A MOONSILVER INGOT (ONE A DAY, YOU HAVE %d)", s->forge[FG_MOONSILVER]);
     }
     /* beauty */
     for (int d = 0; d < SD_COUNT; d++) {
@@ -408,34 +401,6 @@ static void buy(Game *g, PlayerSlot *ps, const ShopItem *it) {
         sfx_ui(legend ? SFX_PICKUP_RELIC : SFX_PICKUP_WEAPON, 1.0f);
         break;
     }
-    case SH_REFORGE: {
-        Item *w = &s->equipped[it->arg];
-        w->level = (u8)MINI(250, s->level);
-        char name[96];
-        item_name(w, name, sizeof name);
-        snprintf(buf, sizeof buf, "REFORGED: %s, LEVEL %d", name, w->level);
-        sfx_ui(SFX_EQUIP, 1.0f);
-        stats_refresh(ps);
-        break;
-    }
-    case SH_TEMPER: {
-        Item *w = &s->equipped[it->arg];
-        u64 h = mix64((u64)(g->time * 1000.0f) ^ (u64)w->kills ^ 0x7E5ULL);
-        w->rarity++;
-        /* a new affix where there is room for one */
-        int slots = w->rarity >= RAR_RARE ? 2 : w->rarity >= RAR_MAGIC ? 1 : 0;
-        for (int k = 0; k < slots; k++)
-            if (w->affix[k] == AF_NONE) {
-                int a;
-                do { h = mix64(h + 1); a = 1 + (int)(h % (AF_COUNT - 1)); } while (k == 1 && a == w->affix[0]);
-                w->affix[k] = (u8)a;
-            }
-        char name[96];
-        item_name(w, name, sizeof name);
-        snprintf(buf, sizeof buf, "TEMPERED: %s", name);
-        sfx_ui(SFX_PICKUP_RELIC, 1.0f);
-        break;
-    }
     case SH_PAGE: {
         int unknown[ELIXIR_COUNT], k = 0;
         for (int r = 0; r < ELIXIR_COUNT; r++) if (!((s->formulae | s->formulae_torn) & (1u << r))) unknown[k++] = r;
@@ -457,6 +422,14 @@ static void buy(Game *g, PlayerSlot *ps, const ShopItem *it) {
         snprintf(buf, sizeof buf, "THE COOK TEACHES YOU %s: %s", RECIPES[r].name, need);
         sfx_ui(SFX_RECIPE_LEARNED, 1.0f);
         break;
+    }
+    case SH_SUPPLY: {
+        static const int M[] = { FG_CHARCOAL, FG_FLUX, FG_QUENCH_OIL, FG_RUNE_INK, FG_STEEL }, N[] = { 5, 1, 1, 1, 1 };
+        if (it->arg == 99) {
+            looted_mark(g, merchant_key(g, 96) ^ (u64)ps->index);
+            forge_give(g, ps, FG_MOONSILVER, 1);
+        } else if (it->arg >= 0 && it->arg < 5) forge_give(g, ps, M[it->arg], N[it->arg]);
+        return;
     }
     case SH_DECOR:
         sanctum_add_decor(g, it->arg);

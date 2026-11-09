@@ -354,6 +354,7 @@ static void menu_nav(Game *g, PlayerSlot *ps, int nav) {
     else if (ps->menu_tab == TAB_SHOP) { if (nav != NAV_DROP) shop_nav(g, ps, nav); }
     else if (ps->menu_tab == TAB_FOOD) food_nav(g, ps, nav);
     else if (ps->menu_tab == TAB_ALCHEMY) alchemy_nav(g, ps, nav);
+    else if (ps->menu_tab == TAB_FORGE) forge_nav(g, ps, nav);
     else if (nav != NAV_DROP) game_skills_nav(ps, nav);
 }
 
@@ -525,6 +526,7 @@ void game_event(Game *g, const SDL_Event *e) {
         case SDLK_N: open_menu(ps, TAB_FOOD); break;
         case SDLK_V: alchemy_drink_quick(g, ps); break;
         case SDLK_O: open_menu(ps, TAB_ALCHEMY); break;
+        case SDLK_U: open_menu(ps, TAB_FORGE); break;
         case SDLK_M: ps->show_map = !ps->show_map; ps->show_skills = false; break;
         case SDLK_1: ps->st.weapon = WPN_SWORD; break;
         case SDLK_2: ps->st.weapon = WPN_BOW; break;
@@ -797,6 +799,7 @@ void game_update(Game *g, const PlayerInput *kb, float dt) {
         /* menus pause the game only when playing alone */
         if (g->nplayers == 1 && modal) paused = true;
     }
+    forge_tick(g, dt); /* the metal cools even while the menu is open */
     if (!paused) {
         for (int i = 0; i < MAX_PLAYERS; i++)
             if (g->players[i].active) update_player(g, &g->players[i], &inputs[i], dt);
@@ -859,7 +862,7 @@ static SkillLayout skills_layout(int W, int H) {
 
 /* ---------- character menu: tabs ---------- */
 
-static const char *TAB_NAMES[TAB_COUNT] = { "ITEMS", "SPELLS", "SKILLS", "STORY", "SHOP", "FOOD", "ALCHEMY" };
+static const char *TAB_NAMES[TAB_COUNT] = { "ITEMS", "SPELLS", "SKILLS", "STORY", "SHOP", "FOOD", "ALCHEMY", "FORGE" };
 
 static void tab_rect(int W, int t, float *x, float *y, float *w, float *h) {
     *w = fminf(72.0f, (float)(W - 8) / TAB_COUNT - 3.0f);
@@ -888,6 +891,8 @@ void game_menu_tap(Game *g, PlayerSlot *ps, int W, int H, float x, float y) {
         food_tap(g, ps, W, H, MENU_TOP, x, y);
     } else if (ps->menu_tab == TAB_ALCHEMY) {
         alchemy_tap(g, ps, W, H, MENU_TOP, x, y);
+    } else if (ps->menu_tab == TAB_FORGE) {
+        forge_tap(g, ps, W, H, MENU_TOP, x, y);
     } else {
         int hit = game_skills_hit(ps, W, H, x, y);
         if (hit == -2) game_skills_nav(ps, NAV_LEFT);
@@ -1138,6 +1143,7 @@ static void draw_menu(Game *g, PlayerSlot *ps, int W, int H) {
     else if (ps->menu_tab == TAB_SHOP) shop_draw(g, ps, W, H, MENU_TOP);
     else if (ps->menu_tab == TAB_FOOD) food_draw(g, ps, W, H, MENU_TOP);
     else if (ps->menu_tab == TAB_ALCHEMY) alchemy_draw(g, ps, W, H, MENU_TOP);
+    else if (ps->menu_tab == TAB_FORGE) forge_draw(g, ps, W, H, MENU_TOP);
     else draw_skills(g, ps, W, H);
 }
 
