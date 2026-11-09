@@ -848,7 +848,19 @@ static void bot_forge(Game *g, PlayerSlot *ps) {
 
 /* ---------- the loop ---------- */
 
+/* every banner and story message, for the run's story (deduplicated within a few seconds) */
+static void note(int player, const char *kind, const char *text) {
+    static char last[160];
+    static float last_t;
+    if (player != 0 || !text[0]) return;
+    if (!strcmp(last, text) && B.t - last_t < 20.0f) return;
+    snprintf(last, sizeof last, "%s", text);
+    last_t = B.t;
+    logf_("%7.1f %s %s\n", B.t, kind, text);
+}
+
 void bot_init(Game *g, const char *style, const char *log_path, float minutes) {
+    g_note_hook = note;
     memset(&B, 0, sizeof B);
     G = g;
     B.style = BS_EXPLORER;

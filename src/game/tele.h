@@ -25,6 +25,8 @@ typedef struct Tele {
 } Tele;
 
 extern Tele g_tele;
+/* The playtest bot's ear: banners and story messages for its log (NULL when no bot plays). */
+extern void (*g_note_hook)(int player, const char *kind, const char *text);
 
 static inline void tele_src(int src, int mon, int grade, int rank) {
     g_tele.src = src; g_tele.src_mon = mon; g_tele.src_grade = grade; g_tele.src_rank = rank;

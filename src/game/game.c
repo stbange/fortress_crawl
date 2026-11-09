@@ -17,7 +17,10 @@ int game_solid(void *user, int x, int y, int z) {
     return mech_solid(g, x, y, z) ? 1 : 0;
 }
 
+void (*g_note_hook)(int player, const char *kind, const char *text);
+
 void game_banner(PlayerSlot *ps, const char *text) {
+    if (g_note_hook && strcmp(ps->banner, text) != 0) g_note_hook(ps->index, "BANNER", text);
     snprintf(ps->banner, sizeof ps->banner, "%s", text);
     ps->banner_time = 3.0f;
 }

@@ -76,6 +76,7 @@ static const char *lore_text(Game *g, LoreEntry *e) {
 }
 
 static void show_msg(PlayerSlot *ps, const char *text, const char *then) {
+    if (g_note_hook) { g_note_hook(ps->index, "STORY", text); if (then && then[0]) g_note_hook(ps->index, "STORY", then); }
     snprintf(ps->msg, sizeof ps->msg, "%s", text);
     snprintf(ps->msg_next, sizeof ps->msg_next, "%s", then ? then : "");
     ps->msg_t = 9.0f + (float)strlen(text) * 0.05f;
