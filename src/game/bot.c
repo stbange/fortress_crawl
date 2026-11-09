@@ -806,14 +806,19 @@ static void bot_forge(Game *g, PlayerSlot *ps) {
     int wc = s->weapon, base = -1;
     for (int b = 0; b < WB_COUNT; b++)
         if (((s->blueprints >> b) & 1) && WEAPON_BASES[b].wclass == wc && (base < 0 || WEAPON_BASES[b].dmg > WEAPON_BASES[base].dmg)) base = b;
-    if (base < 0) return;
+    if (base < 0) { logf_("%7.1f FORGE none: no blueprint for class %d\n", B.t, wc); return; }
     int best = -1;
     for (int m = MT_COUNT - 1; m >= 0 && best < 0; m--) {
         ps->plan.metal = (u8)m;
         ps->plan.base = (u8)base;
-        if (s->forge[METALS[m].ingot] >= forge_ingots(base)) best = m;
+        bool open = smith_level(s->smith_xp) >= METALS[m].smith && sanctum_stage(g, SP_FORGE) >= METALS[m].stage;
+        if (open && s->forge[METALS[m].ingot] >= forge_ingots(base)) best = m;
     }
-    if (best < 0) return;
+    if (best < 0) { /* iron from the smith, when there is gold to spare */
+        while (s->forge[FG_IRON] < forge_ingots(base) && s->gold > 600 && shop_buy_arg(g, ps, SH_SUPPLY, 5)) {}
+        if (s->forge[FG_IRON] >= forge_ingots(base)) { best = MT_IRON; ps->plan.metal = MT_IRON; ps->plan.base = (u8)base; }
+    }
+    if (best < 0) { logf_("%7.1f FORGE none: %d iron ingots, gold %d\n", B.t, s->forge[FG_IRON], s->gold); return; }
     while (s->forge[FG_CHARCOAL] < 1 + forge_ingots(base) && s->gold > 200 && shop_buy_kind(g, ps, SH_SUPPLY)) {}
     memset(ps->plan.ess, 0, sizeof ps->plan.ess);
     for (int e = 0, k = 0; e < FG_ESS_COUNT && k < 2; e++)
@@ -824,7 +829,7 @@ static void bot_forge(Game *g, PlayerSlot *ps) {
             if (((s->runes_t >> t) & 1) && ((s->runes_e >> e) & 1) && s->forge[FG_RUNE_INK]) ps->plan.rune[0] = (u8)(t << 4 | e);
     ps->plan.heart = s->forge[FG_TITAN_HEART] > 0;
     ps->plan.oil = s->forge[FG_QUENCH_OIL] > 0;
-    if (!forge_start(g, ps, false)) return;
+    if (!forge_start(g, ps, false)) { logf_("%7.1f FORGE could not start: %s\n", B.t, ps->banner); return; }
     /* its hand is as steady as its skill: it aims for the middle of the window, off by a little */
     float wobble = 0.12f - 0.01f * (float)smith_level(s->smith_xp);
     u64 h = mix64((u64)(B.t * 1000.0f));

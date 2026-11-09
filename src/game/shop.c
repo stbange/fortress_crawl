@@ -236,7 +236,7 @@ static int shop_items(Game *g, PlayerSlot *ps, ShopItem *out) {
     }
     /* the smith (with the forge): the supplies that are only bought, and two metals */
     if (sanctum_stage(g, SP_FORGE) >= 1 && sanctum_stage(g, SP_ISLAND) >= 2) {
-        static const struct { int m, n, price; } SUP[] = { { FG_CHARCOAL, 5, 100 }, { FG_FLUX, 1, 80 }, { FG_QUENCH_OIL, 1, 150 }, { FG_RUNE_INK, 1, 300 }, { FG_STEEL, 1, 200 } };
+        static const struct { int m, n, price; } SUP[] = { { FG_CHARCOAL, 5, 100 }, { FG_FLUX, 1, 80 }, { FG_QUENCH_OIL, 1, 150 }, { FG_RUNE_INK, 1, 300 }, { FG_STEEL, 1, 200 }, { FG_IRON, 1, 50 } };
         for (int k = 0; k < (int)(sizeof SUP / sizeof SUP[0]); k++)
             add(out, &n, SH_SUPPLY, k, SUP[k].price, s->forge[SUP[k].m] + SUP[k].n <= 99, "YOU CARRY ALL YOU CAN", "THE SMITH: %d %s (YOU HAVE %d)", SUP[k].n,
                 FORGE_MATS[SUP[k].m].name, s->forge[SUP[k].m]);
@@ -424,11 +424,11 @@ static void buy(Game *g, PlayerSlot *ps, const ShopItem *it) {
         break;
     }
     case SH_SUPPLY: {
-        static const int M[] = { FG_CHARCOAL, FG_FLUX, FG_QUENCH_OIL, FG_RUNE_INK, FG_STEEL }, N[] = { 5, 1, 1, 1, 1 };
+        static const int M[] = { FG_CHARCOAL, FG_FLUX, FG_QUENCH_OIL, FG_RUNE_INK, FG_STEEL, FG_IRON }, N[] = { 5, 1, 1, 1, 1, 1 };
         if (it->arg == 99) {
             looted_mark(g, merchant_key(g, 96) ^ (u64)ps->index);
             forge_give(g, ps, FG_MOONSILVER, 1);
-        } else if (it->arg >= 0 && it->arg < 5) forge_give(g, ps, M[it->arg], N[it->arg]);
+        } else if (it->arg >= 0 && it->arg < 6) forge_give(g, ps, M[it->arg], N[it->arg]);
         return;
     }
     case SH_DECOR:
