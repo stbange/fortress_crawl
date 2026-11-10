@@ -356,6 +356,7 @@ static void read_trace(Game *g, PlayerSlot *ps, Pickup *p) {
     int cx, cy, cz;
     chunk_of(p->pos, &cx, &cy, &cz);
     story_trace_text(&g->world, cx, cy, cz, ps->reading, sizeof ps->reading);
+    if (g_note_hook) g_note_hook(ps->index, "READ", ps->reading);
     sfx_player(g, ps, SFX_READ_NOTE, 1.0f);
     lore_add(g, LORE_TRACE, cx, cy, cz);
     Trace t;
