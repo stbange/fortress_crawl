@@ -82,7 +82,13 @@ static void expand(char *out, int n, const char *t, Rng *r, const Ctx *c) {
     int at = 0;
     out[0] = 0;
     expand_into(out, n, &at, t, r, c, 0);
-    if (out[0] >= 'a' && out[0] <= 'z') out[0] = (char)(out[0] - 32);
+    /* a capital at the start, after a full stop, and at the start of a quotation */
+    for (int i = 0; out[i]; i++) {
+        if (out[i] < 'a' || out[i] > 'z') continue;
+        bool start = i == 0 || (i >= 2 && out[i - 1] == ' ' && (out[i - 2] == '.' || out[i - 2] == '!' || out[i - 2] == '?')) ||
+                     (out[i - 1] == '\'' && (i == 1 || out[i - 2] == ' '));
+        if (start) out[i] = (char)(out[i] - 32);
+    }
 }
 
 /* ---------- names ---------- */
@@ -601,7 +607,7 @@ static const char *const STELE[] = {
     "Do not dig below. - {name}, last of the #trade#s",
     "We sealed the #door# with #sealmat#. It was not enough.",
     "Count the steps down. If the number changes, turn back.",
-    "{faction} remembers. {faction} does not forgive.",
+    "Remembered by {faction}. Not forgiven.",
     "The #light# went out in {era}. We kept digging.",
     "{sealed} does not sleep. It waits for the door.",
     "Blessed are the buried. They are done.",
@@ -727,7 +733,7 @@ void story_trace_text(const World *w, int cx, int cy, int cz, char *out, int n) 
         cset(&c, "item", rt.item);
         cset(&c, "where", where);
         static const char *const T[] = {
-            "{owner}'s last note: 'Dropped my {item} - no. {item}. Lost it {where}. Take it home. Someone should go home.'",
+            "Beside {owner}, a last note: '{item}. Lost it {where}. Take it home. Someone should go home.'",
             "{owner}, in charcoal: 'They took {item}. Their nest is {where}. Bring it back to the light.'",
             "A dead hand still points. The note: '{item}, {where}. Tell my #kin#.'",
         };
