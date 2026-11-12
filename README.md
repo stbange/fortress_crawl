@@ -19,54 +19,99 @@ notes of the dead and bounty boards**, and **sound**: every monster, weapon, spe
 place has its own sound effects, made with ElevenLabs (see [Sound](#sound)). See [`docs/PLAN.md`](docs/PLAN.md)
 for the full plan and [`docs/STORY.md`](docs/STORY.md) for how the stories work.
 
-## Screenshots (prototype, seed 1337)
+## Screenshots
+
+Seed 1337, taken from the current build with [`tools/screenshots.sh`](tools/screenshots.sh) (it
+uses the game's own `--demo` modes; the region shots carry the debug overlay, F1, which names
+the place).
+
+### The world
 
 | | |
 |---|---|
-| ![Before the gates](docs/screenshots/exterior.png) | ![The Grand Vestibule](docs/screenshots/vestibule.png) |
+| ![exterior](docs/screenshots/exterior.png) | ![vestibule](docs/screenshots/vestibule.png) |
 | Before the gates | The Grand Vestibule |
-| ![Great hall](docs/screenshots/hall_colossus.png) | ![Chasm](docs/screenshots/chasm.png) |
-| A great hall: one layer high, its staircase standing in it like a tower | A chasm: the rare place where two layers meet in the open |
-| ![Layers from above](docs/screenshots/layers.png) | ![Map of a layer](docs/screenshots/map.png) |
-| Two layers from above (gate level, one below): rooms and corridors on one floor each | The map shows your layer and the stairs you have seen |
-| ![Heaven](docs/screenshots/heaven.png) | ![Ember-forged dungeon](docs/screenshots/ember.png) |
-| Heaven (far up) | Ember-forged dungeon (far south) |
-| ![Jade dungeon](docs/screenshots/jade.png) | ![Gothic dungeon](docs/screenshots/gothic.png) |
-| Jade dungeon (far east) | Gothic dungeon (west) |
-| ![Combat](docs/screenshots/combat.png) | ![Combat in the mines](docs/screenshots/combat_mines.png) |
+| ![hall colossus](docs/screenshots/hall_colossus.png) | ![layers](docs/screenshots/layers.png) |
+| A great hall in the Sandstone dungeon: one layer high, braziers along its length | The gate layer and the one below, from above: rooms and corridors on one floor each |
+| ![chasm](docs/screenshots/chasm.png) | ![mines](docs/screenshots/mines.png) |
+| A chasm: the rare place where two layers meet in the open | The mines, one layer below the dungeon: timbered tunnels |
+| ![gothic](docs/screenshots/gothic.png) | ![glacial](docs/screenshots/glacial.png) |
+| Gothic dungeon (west) | Glacial dungeon (far north) |
+| ![drowned](docs/screenshots/drowned.png) | ![ember](docs/screenshots/ember.png) |
+| Drowned dungeon (far west) | Ember-forged dungeon (far south): lava in the floor |
+| ![jade](docs/screenshots/jade.png) | ![heaven](docs/screenshots/heaven.png) |
+| Jade dungeon (far east) | Heaven (far up) |
+| ![suncourt](docs/screenshots/suncourt.png) | ![stormcrown](docs/screenshots/stormcrown.png) |
+| The Sun Court, higher still: a floor of coloured tiles | The Stormcrown: walkways of glass in the void |
+
+### Fighting, spells and gear
+
+| | |
+|---|---|
+| ![combat](docs/screenshots/combat.png) | ![combat mines](docs/screenshots/combat_mines.png) |
 | A pack with an elite brute in the vestibule | A brute in a mine tunnel |
-| ![Skill tree](docs/screenshots/skills.png) | ![Map](docs/screenshots/map.png) |
-| Classless skill tree (TAB) | Map of explored cells (M) |
-| ![Two players](docs/screenshots/coop2.png) | ![Three players](docs/screenshots/coop3.png) |
-| Split screen with two players | Three players and the roster |
-| ![Start screen](docs/screenshots/start.png) | ![Bestiary](docs/screenshots/bestiary.png) |
-| Choose your world's seed | Crawler, brute, wisp, horned, skeleton, slime, bat |
-| ![Inventory](docs/screenshots/inventory.png) | ![Spellbook](docs/screenshots/spellbook.png) |
-| Inventory (I) | Spellbook (B): 8 elements x 11 forms + 38 utility spells |
-| ![Loot](docs/screenshots/loot.png) | ![Spells](docs/screenshots/spells_cast.png) |
-| A chest, a weapon, a scroll, a relic, gold and potions | Firestorm, Fireball and Chain Lightning at a pack |
-| ![Motive](docs/screenshots/story_motive.png) | ![Story](docs/screenshots/story_story.png) |
+| ![spells cast](docs/screenshots/spells_cast.png) | ![buffs](docs/screenshots/buffs.png) |
+| Firestorm, Fireball and Chain Lightning at a pack | What is working in you, under the HUD: a bath, an elixir and a meal, each with its time left |
+| ![inventory](docs/screenshots/inventory.png) | ![lost arts](docs/screenshots/lost_arts.png) |
+| Inventory (I): equipped weapons, the bag, relics; a legendary of this world with its powers, material, kills and lore | The lost arts: whip, flail, scythe, rapier, sling, chakram, hand cannon, tome, censer |
+| ![bestiary](docs/screenshots/bestiary.png) | ![bestiary bosses](docs/screenshots/bestiary_bosses.png) |
+| Every monster kind in a row, asleep | And their bosses, each with a title: Bone Lord, Plague Mother, Elder Eye, Lich... |
+
+### Menus and play
+
+The character menu has eight tabs: ITEMS, SPELLS, SKILLS, STORY, SHOP, FOOD, ALCHEMY and FORGE.
+
+| | |
+|---|---|
+| ![skills](docs/screenshots/skills.png) | ![spellbook](docs/screenshots/spellbook.png) |
+| Classless skill tree (SKILLS) | Spellbook (B): 8 elements x 11 forms + 38 utility spells |
+| ![map](docs/screenshots/map.png) | ![loot](docs/screenshots/loot.png) |
+| Map of explored cells (M) | A chest, a weapon, a scroll, a relic, gold and potions |
+| ![start](docs/screenshots/start.png) | ![coop2](docs/screenshots/coop2.png) |
+| Choose your world's seed | Split screen with two players |
+| ![coop3](docs/screenshots/coop3.png) |  |
+| Three players and the roster |  |
+
+### Stories, vaults and traps
+
+| | |
+|---|---|
+| ![story motive](docs/screenshots/story_motive.png) | ![story story](docs/screenshots/story_story.png) |
 | Every character picks a motive | The STORY tab (L): chapter, target, missions, lore |
-| ![Reading](docs/screenshots/story_read.png) | ![Named enemy](docs/screenshots/story_named.png) |
+| ![story read](docs/screenshots/story_read.png) | ![story named](docs/screenshots/story_named.png) |
 | An inscription and the tracker | A chapter target with its name plate |
-| ![Golden thread](docs/screenshots/golden_thread.png) | ![Vault](docs/screenshots/vault.png) |
+| ![golden thread](docs/screenshots/golden_thread.png) | ![vault](docs/screenshots/vault.png) |
 | The Golden Thread leading to the next target (G) | A sealed vault: lamps over the gate, a hoard behind it |
-| ![Light beam puzzle](docs/screenshots/puzzle_beam.png) | ![Statue puzzle](docs/screenshots/puzzle_statues.png) |
+| ![puzzle beam](docs/screenshots/puzzle_beam.png) | ![puzzle statues](docs/screenshots/puzzle_statues.png) |
 | A light beam puzzle: turn the mirrors toward the lock | The watchers must look at the gate |
-| ![Spike trap](docs/screenshots/trap_spikes.png) | ![Flame vent](docs/screenshots/trap_flames.png) |
+| ![trap spikes](docs/screenshots/trap_spikes.png) | ![trap flames](docs/screenshots/trap_flames.png) |
 | Spikes stab every few seconds | A flame vent |
-| ![The Sanctum](docs/screenshots/sanctum.png) | ![The Sanctum built](docs/screenshots/sanctum_built.png) |
-| The Sanctum at the start: a ruined hall on a small island | Every plot at stage 3: towers, walls, the garden, the domed library |
-| ![The hall](docs/screenshots/sanctum_hall.png) | ![The shop](docs/screenshots/shop.png) |
-| The hall at stage 2: a roof, coloured glass, a chandelier | The SHOP tab at home: building, the stash, everything for sale |
-| ![Wildlife](docs/screenshots/wildlife.png) | ![The FOOD tab](docs/screenshots/food.png) |
+| ![spell keep](docs/screenshots/spell_keep.png) |  |
+| Warden's Keep, a conjured keep of real stone |  |
+
+### The Sanctum
+
+| | |
+|---|---|
+| ![sanctum](docs/screenshots/sanctum.png) | ![sanctum door](docs/screenshots/sanctum_door.png) |
+| The Sanctum at the start: a ruined hall on a small island | The Sanctum Door, after its 3-second ritual |
+| ![sanctum sky](docs/screenshots/sanctum_sky.png) | ![sanctum built](docs/screenshots/sanctum_built.png) |
+| Home has a night sky: stars, three moons, now and then a falling star | Every plot at stage 3: towers, walls, the garden, the domed library |
+| ![sanctum hall](docs/screenshots/sanctum_hall.png) | ![sanctum decor](docs/screenshots/sanctum_decor.png) |
+| The hall at stage 2: a roof, coloured glass, a chandelier | The court with what gold bought for beauty: the founder's statue, golden braziers, a sundial |
+| ![shop](docs/screenshots/shop.png) | ![forge](docs/screenshots/forge.png) |
+| The SHOP tab at home: building, sealed weapons, the stash, everything for sale | The forge at stage 3: hearth, anvil, runes in the floor |
+
+### Food, alchemy and the forge
+
+| | |
+|---|---|
+| ![wildlife](docs/screenshots/wildlife.png) | ![food](docs/screenshots/food.png) |
 | Wildlife: hares, hens, goats, rams, crabs, salamanders, grouse, beetles, snails, a hive, quail | The FOOD tab in the Sanctum kitchen: the pot, dishes, the larder, the cookbook |
-| ![Warden's Keep](docs/screenshots/spell_keep.png) | ![Alchemy](docs/screenshots/alchemy.png) |
-| Warden's Keep, a conjured keep of real stone | The ALCHEMY tab: a brew begun, elixirs, reagents |
-| ![Decorations](docs/screenshots/sanctum_decor.png) | ![The forge](docs/screenshots/forge.png) |
-| The court with what gold bought for beauty: the founder's statue, golden braziers, a sundial | The forge at stage 3: hearth, anvil, runes in the floor |
-| ![The FORGE tab](docs/screenshots/forge_tab.png) | ![At the anvil](docs/screenshots/forge_session.png) |
-| The FORGE tab: a master's plan of starmetal, two essences, a rune, a titan heart | At the anvil: keep the heat in the window, strike |
+| ![alchemy](docs/screenshots/alchemy.png) | ![forge tab](docs/screenshots/forge_tab.png) |
+| The ALCHEMY tab: a brew begun, elixirs, reagents | The FORGE tab: a master's plan of starmetal, two essences, a rune, a titan heart |
+| ![forge session](docs/screenshots/forge_session.png) |  |
+| At the anvil: keep the heat in the window, strike |  |
 
 ## Build
 
@@ -403,7 +448,7 @@ fortress_crawl [--seed N] [--pos x y z] [--look yaw pitch] [--fly] [--radius n] 
                [--demo combat|sword|death|skills|map|coop|menu|inventory|spells|loot|magic|bestiary|
                        motive|story|read|named|storytest|vault|levers|plates|statues|beam|
                        darts|spikes|flames|mechtest|cast|realmtest|shop|sanctum|
-                       food|foodtest|wildlife|alchemy|alchtest|forge|forgetest|forgesession] [--cast n]
+                       food|foodtest|wildlife|alchemy|alchtest|buffs|forge|forgetest|forgesession] [--cast n]
                [--bot STYLE] [--bot-minutes n] [--bot-log file]
                [--players n] [--test-pad] [--touch] [--fresh] [--persist] [--fullbright] [--chapter n]
 ```
@@ -547,7 +592,7 @@ found once.
 
 | | |
 |---|---|
-| ![The lost arts](docs/screenshots/lost_arts.png) | ![A legendary](docs/screenshots/inventory_legendary.png) |
+| ![The lost arts](docs/screenshots/lost_arts.png) | ![A legendary](docs/screenshots/inventory.png) |
 | Whip, flail, scythe; rapier, sling, chakram; hand cannon, tome, censer | A legendary of this world with its powers, material, kills and lore |
 
 Screenshots of them: `--demo weapons` (a rack of the 12 classic ones), `--demo lostarts` (the
@@ -605,7 +650,14 @@ It also rewrites `src/game/sfx_ids.h`, the list of sound ids the game uses.
 ./build/worldmap section 0 20 section.ppm      # vertical slice through the world
 ./build/worldmap blocks 6 -100 -60 200 floor.ppm  # top-down block map of a world layer
 ./build/worldmap mech 6 [cy]                   # vaults (with a --pos to view each) and traps
+./build/worldmap structs 12                    # halls, caverns and chasms near the gate, with positions
+tools/screenshots.sh [name...]                 # the README's screenshots again (xvfb-run, Pillow)
 ```
+
+`--demo buffs` shows the HUD with a meal, an elixir and a bath working. The screenshots in the
+README come from `tools/screenshots.sh`, which lists the demo and position of each one; a few
+(the chasm, the vaults and traps, the Warden's Keep, a fight in the mines) are older shots kept as
+they were, since their features have not changed and the demos frame them dimly.
 
 ## Code layout
 

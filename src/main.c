@@ -217,7 +217,7 @@ static void demo_setup(Game *g) {
     stats_refresh(p1);
     s->hp = s->maxhp * 0.8f;
     s->mana = s->maxmana;
-    if (!strcmp(g_demo_kind, "skills")) { p1->show_skills = true; p1->skill_sel = skill_id(BR_ARCANE, 2); return; }
+    if (!strcmp(g_demo_kind, "skills")) { p1->show_skills = true; p1->menu_tab = TAB_SKILLS; p1->skill_sel = skill_id(BR_ARCANE, 2); return; }
     if (!strcmp(g_demo_kind, "map")) { p1->show_map = true; return; }
     if (!strcmp(g_demo_kind, "inventory") || !strcmp(g_demo_kind, "spells") || !strcmp(g_demo_kind, "loot") ||
         !strcmp(g_demo_kind, "magic")) {
@@ -507,6 +507,20 @@ static void demo_setup(Game *g) {
     if (!strcmp(g_demo_kind, "forgecheck")) {
         SDL_Log("forgetest: loaded smithing xp %d, blueprints %08x, runes %04x/%04x, starmetal %d, forge stage %d", s->smith_xp, s->blueprints, s->runes_t,
                 s->runes_e, s->forge[FG_STARMETAL], sanctum_stage(g, SP_FORGE));
+        return;
+    }
+    if (!strcmp(g_demo_kind, "buffs")) {
+        /* the HUD with what is working in you: a meal, an elixir, spells (a screenshot) */
+        demo_place(g, p1);
+        p1->pl.fly = false;
+        p1->pl.pitch = -0.12f;
+        s->meal = 22; s->meal_q = 1; s->meal_t = 540; s->meal_len = 600; /* a fine "root mash" */
+        s->elixir = 3; s->elixir_onset = 0; s->elixir_t = 17; s->elixir_k = 1.0f; /* berserker's draught */
+        s->refreshed_t = 400;
+        s->invis_t = 0;
+        s->levitate_t = 0;
+        stats_refresh(p1);
+        p1->banner_time = 0;
         return;
     }
     if (!strcmp(g_demo_kind, "alchcheck")) {
