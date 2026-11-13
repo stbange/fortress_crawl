@@ -1137,6 +1137,8 @@ static void build_facts(History *h, Rng *r) {
         u8 era = f->ev != H_NONE ? h->ev[f->ev].era : ERA_BEFORE;
         float d = f->order != H_NONE ? chapter_dist(f->order) * (f->weight >= 3 ? 0.55f : 0.35f) : (era <= ERA_OLD2 ? 0.0f : 2.0f);
         if (i == F_open || i == F_why || i == F_fate) d = MAXI(d, chapter_dist(3));
+        if (i == F_secret && h->ev[h->ev_secret].type != EV_SEAL) d = MAXI(d, chapter_dist(4) * 0.5f); /* the founding's secret: not by the gate */
+        if (f->weight >= 3 && f->order == H_NONE) d = MAXI(d, chapter_dist(2) * 0.5f);
         int copies = f->weight >= 3 ? 3 : f->weight == 2 ? 2 : 1;
         if (f->ev != H_NONE && h->ev[f->ev].type == EV_SWEAR) copies = 0;
         for (int k = 0; k < copies; k++) {
@@ -1163,9 +1165,11 @@ static void build_facts(History *h, Rng *r) {
         int f = -1;
         for (int i = 0; i < h->nfacts && f < 0; i++) /* their best deed */
             if (h->fact[i].kind == FK_DEED && h->fact[i].a == a && h->fact[i].ev != H_NONE && h->ev[h->fact[i].ev].type != EV_SWEAR) f = i;
-        for (int i = 0; i < h->nfacts && f < 0; i++)
+        for (int i = 0; i < h->nfacts && f < 0; i++) /* or whom they serve */
             if (h->fact[i].kind == FK_DEED && h->fact[i].a == a) f = i;
-        if (f < 0) f = h->clue[h->reveal[c]].fact;
+        for (int i = 0; i < h->nfacts && f < 0; i++) /* or whose kin they are */
+            if (h->fact[i].kind == FK_KIN && (h->fact[i].a == a || h->fact[i].b == a)) f = i;
+        if (f < 0) f = add_fact(h, FK_FATE, H_NONE, a, H_NONE, H_NONE, 1); /* only that they live */
         if (li >= UNIQUE_SLOTS) break;
         add_clue(h, f, SRC_LEGEND, a, (u8)legend[li], 0);
         h->cast_legend[c] = (u8)legend[li++];
@@ -1180,7 +1184,7 @@ static void build_facts(History *h, Rng *r) {
     h->nq = 0;
     HQuestion *q;
     q = &h->q[h->nq++];
-    q->kind = Q_WHO; q->need[0] = (u8)F_open; q->nneed = 1; q->alt = H_NONE;
+    q->kind = Q_WHO; q->need[0] = (u8)F_open; q->nneed = 1; q->alt = (u8)F_why; /* the reason names the opener too */
     if (h->scapegoat != H_NONE) {
         q = &h->q[h->nq++];
         q->kind = Q_GUILTY; q->need[0] = (u8)F_crack; q->nneed = 1; q->alt = (u8)F_open;

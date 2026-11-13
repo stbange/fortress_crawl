@@ -264,6 +264,14 @@ Gereos, mother of Ulawyn", and Ulawyn is the second arc's Power.
 9. *Thyvik, the Hidden, dying: 'I opened it so the world would see the bones. No one came to
    look.'*
 
+## In play
+
+Ten quester bots in ten new worlds, 90 minutes each: [RUN_STORIES_3.md](RUN_STORIES_3.md).
+Every world told a different story; the lie and its crack land in the first arc; questions
+get answered from stones, notes, pages and hunters' orders even by bots stuck on their first
+target. Two fixes came from it: a target without a deed of its own no longer borrows a
+revelation for the Roll, and the founding's secret no longer lies by the gate.
+
 ## What changed from the proposal
 
 - Known facts are worked out from the lore already saved rather than kept as a bitset per

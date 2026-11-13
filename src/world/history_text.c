@@ -437,6 +437,10 @@ static void kin_text(const History *h, const HFact *f, bool grave, const HPerson
 }
 
 static void fate_text(const History *h, const HFact *f, int form, const HPersonal *p, Rng *r, char *out, int n) {
+    if (f->a != h->opener) {
+        snprintf(out, (size_t)n, form == FORM_FIRST ? "I lived through %s" : "%s lived through %s", form == FORM_FIRST ? h->fall : h->actor[f->a].name, h->fall);
+        return;
+    }
     for (int i = 0; i < h->nevents; i++)
         if (h->ev[i].type == EV_HIDE && h->ev[i].a == f->a) { deed_text(h, i, form, p, r, out, n); return; }
     snprintf(out, (size_t)n, "%s still lives", h->actor[f->a].name);
@@ -648,7 +652,7 @@ static void legend_deed(const History *h, int c, const HPersonal *p, Rng *r, cha
         if (h->clue[i].src == SRC_LEGEND && h->clue[i].speaker == h->cast[c]) {
             const HFact *f = &h->fact[h->clue[i].fact];
             u8 t = f->ev != H_NONE ? h->ev[f->ev].type : EV_COUNT;
-            if (t == EV_BURN || t == EV_SWEAR || t == EV_BIRTH) break;
+            if (t == EV_BURN || t == EV_SWEAR || t == EV_BIRTH || f->kind != FK_DEED || f->a != h->cast[c]) break;
             fact_plain(h, h->clue[i].fact, H_NONE, p, r, out, n);
             return;
         }
