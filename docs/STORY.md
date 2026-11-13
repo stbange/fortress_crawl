@@ -129,3 +129,6 @@ and their characters are asked for a motive.
   changes; monster families become factions with allies and enemies; wars on the borders.
 - **S5 - choices and endings:** taking sides, mechanical puzzles as mission steps, and a
   closing scene for each chapter of a motive.
+- **Generated stories:** a simulated history per world, from which the mystery, the named
+  enemies and the clues are drawn, so that worlds differ in what happens and not only in their
+  names. Proposed in [STORY_GEN.md](STORY_GEN.md).
