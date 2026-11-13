@@ -491,7 +491,7 @@ static bool collect(Game *g, PlayerSlot *ps, Pickup *p) {
         s->bag[slot] = p->item;
         g_tele.weapons[p->item.rarity % 5]++;
         if (p->item.unique && p->key) looted_add(g, p->key); /* a legendary of this world: found for good */
-        if (p->item.unique) { g_tele.uniques_found++; sanctum_trophy_unique(g, p->item.unique - 1); }
+        if (p->item.unique) { g_tele.uniques_found++; sanctum_trophy_unique(g, p->item.unique - 1); story_legend_found(g, p->item.unique - 1); }
         if (p->item.base >= WB_CLASSIC) g_tele.lost_found++;
         sfx_player(g, ps, SFX_PICKUP_WEAPON, 1.0f);
         item_name(&p->item, name, sizeof name);

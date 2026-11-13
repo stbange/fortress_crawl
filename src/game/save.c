@@ -11,7 +11,7 @@
  * user's preference folder. The world itself never needs saving: the seed rebuilds it. */
 
 #define SAVE_MAGIC 0x56534346u /* "FCSV" */
-#define SAVE_VERSION 12 /* 12: the forge (materials, smithing, blueprints, runes); 11: the Sanctum's decorations, keystones bought; 10: meal variety, toxicity, torn formulae; 9: alchemy (reagents, elixirs, formulae, the elixir working); 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms;
+#define SAVE_VERSION 13 /* 13: the story generator of the world; 12: the forge (materials, smithing, blueprints, runes); 11: the Sanctum's decorations, keystones bought; 10: meal variety, toxicity, torn formulae; 9: alchemy (reagents, elixirs, formulae, the elixir working); 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms;
                           6: weapons with materials, powers, legendaries and memory; 7: the Sanctum per world (written by one
                           build still marked 6); 8: food (the larder, dishes, recipes, the meal) */
 #define EXPLORED_BUDGET (1200 * 1024)
@@ -262,6 +262,7 @@ bool game_save(Game *g) {
     wf(&b, g->sanctum.library_t);
     w32(&b, g->world.sanctum_decor); /* v11 */
     w32(&b, (u32)g->sanctum.keys_bought);
+    w8(&b, g->world.story_gen); /* v13 */
     char key[64];
     save_key(g->opt.seed, key, sizeof key);
     bool ok = store_write(key, b.d, b.n);
@@ -467,7 +468,7 @@ bool game_load(Game *g) {
         for (u32 i = 0; i < nlo && !r.bad; i++) {
             u8 kind = r8(&r);
             int a = (int)r32(&r), b = (int)r32(&r), c = (int)r32(&r);
-            if (!r.bad && (kind == LORE_TRACE || kind == LORE_REVEAL)) lore_add(g, kind, a, b, c);
+            if (!r.bad && kind >= LORE_TRACE && kind < LORE_KINDS) lore_add(g, kind, a, b, c);
         }
     }
     u32 nc = r32(&r);
@@ -506,11 +507,16 @@ bool game_load(Game *g) {
             g->world.sanctum_decor = r32(&r) & ((1u << SD_COUNT) - 1);
             { u32 kb = r32(&r); g->sanctum.keys_bought = (int)MINI(kb, 1000u); }
         }
+        g->world.story_gen = 0; /* a world keeps the story it began with */
+        if (r.ver >= 13) { u8 sg = r8(&r); g->world.story_gen = (u8)MINI(sg, STORY_GEN_LATEST); }
         if (r.bad) { /* a broken tail: the Sanctum as a new world has it */
+            u8 gen = r.ver >= 13 ? g->world.story_gen : 0;
             memset(&g->sanctum, 0, sizeof g->sanctum);
             world_init(&g->world, g->world.seed);
+            g->world.story_gen = gen;
         }
     } else {
+        g->world.story_gen = 0;
         /* before: the comforts were bought per character; the world keeps what any of them had */
         for (int i = 0; i < MAX_PLAYERS; i++) {
             if (!g->saved[i].valid) continue;

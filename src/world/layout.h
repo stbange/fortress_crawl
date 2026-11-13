@@ -34,7 +34,11 @@ typedef struct World {
     u8 sanctum[16];
     u32 sanctum_decor; /* SD_* bits: the decorations bought for it (pocket.h) */
     u32 sanctum_gen;
+    /* the story generator this world was made with: 0 the first (one script, new names),
+     * 1 a simulated history per world (docs/STORY_GEN.md); old saves keep 0 */
+    u8 story_gen;
 } World;
+#define STORY_GEN_LATEST 1
 
 typedef struct Structure {
     u8 type, variant;

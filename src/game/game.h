@@ -103,6 +103,7 @@ typedef struct Monster {
     /* named enemies (chapter targets and domain lords) */
     u64 story_key;
     u8 named_kind;   /* 0 none, else NK_* + 1 */
+    u8 orders;       /* a hunters' leader: 1 + the chapter whose target sent it */
     char name[STORY_NAME];
 } Monster;
 
@@ -181,7 +182,7 @@ typedef struct Mission {
 } Mission;
 
 /* Lore read in this world (shared by all characters). */
-enum { LORE_TRACE = 1, LORE_REVEAL };
+enum { LORE_TRACE = 1, LORE_REVEAL, LORE_LEGEND, LORE_ORDERS, LORE_PAGE, LORE_KINDS };
 #define MAX_LORE 512
 typedef struct LoreEntry {
     u8 kind;
@@ -510,6 +511,7 @@ typedef struct Game {
     StoryWorld story;
     LoreEntry lore[MAX_LORE];
     int nlore;
+    u32 story_answers; /* the questions of the world's history answered so far (history.h) */
     bool world_started;
     bool freeze_monsters; /* screenshot demos: monsters stand still */
     /* utility spells (utility.c): timed changes to the world, cells only monsters cannot pass */
@@ -648,6 +650,8 @@ void story_draw_tracker(Game *g, PlayerSlot *ps, int W, int H, int y);
 void story_draw_plates(Game *g, PlayerSlot *viewer, int W, int H);
 void story_map_markers(Game *g, PlayerSlot *ps, float cx, float cy, int pxw, int pyw, int pzw, int px, float x0, float y0, float x1, float y1);
 void story_on_kill(Game *g, Monster *m);
+void story_orders_found(Game *g, Monster *m);
+void story_legend_found(Game *g, int id);
 bool story_collect_quest(Game *g, PlayerSlot *ps, Pickup *p);
 /* A domain lord lives in this chunk: spawn it (from spawn_chunk). */
 void story_spawn_lord(Game *g, Chunk *c);

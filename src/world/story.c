@@ -1,5 +1,7 @@
 #include "world/story.h"
 #include "world/pocket.h"
+#include "world/story_text.h"
+#include "world/history.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -22,9 +24,14 @@ const char *CULTURE_NAMES[CULT_COUNT] = { "old", "northern", "southern", "easter
 
 /* ---------- template expansion ---------- */
 
-typedef struct Ctx { const char *key[24]; const char *val[24]; int n; } Ctx;
+#define cset story_cset
+#define expand story_expand
+#define make_name story_make_name
+#define make_named story_make_named
+#define faction_name story_faction_name
 
-static void cset(Ctx *c, const char *k, const char *v) {
+
+void story_cset(Ctx *c, const char *k, const char *v) {
     for (int i = 0; i < c->n; i++)
         if (!strcmp(c->key[i], k)) { c->val[i] = v; return; }
     if (c->n < LEN(c->key)) { c->key[c->n] = k; c->val[c->n] = v; c->n++; }
@@ -78,7 +85,7 @@ static void expand_into(char *out, int n, int *at, const char *t, Rng *r, const 
     }
 }
 
-static void expand(char *out, int n, const char *t, Rng *r, const Ctx *c) {
+void story_expand(char *out, int n, const char *t, Rng *r, const Ctx *c) {
     int at = 0;
     out[0] = 0;
     expand_into(out, n, &at, t, r, c, 0);
@@ -117,12 +124,12 @@ static const char *const EPITHETS[] = {
     ", Mother of Worms", "the Blind", "Coldhand", "the Smiling", "Gravewed", "the Unwashed", "Lantern-Jaw", "the Quiet",
 };
 
-static void make_name(u64 h, int cult, char *out, int n) {
+void story_make_name(u64 h, int cult, char *out, int n) {
     Rng r = rng_make(h);
     snprintf(out, (size_t)n, "%s%s%s", PICK(&r, SYL_A[cult]), PICK(&r, SYL_B[cult]), PICK(&r, SYL_C[cult]));
 }
 
-static void make_named(u64 h, int cult, char *out, int n) {
+void story_make_named(u64 h, int cult, char *out, int n) {
     char base[32];
     make_name(h, cult, base, sizeof base);
     Rng r = rng_make(h ^ 0xE91);
@@ -199,7 +206,7 @@ static const char *const PLACE_NOUN[ST_COUNT][4] = {
 
 /* ---------- factions ---------- */
 
-static void faction_name(u64 seed, int cult, int idx, char *out, int n) {
+void story_faction_name(u64 seed, int cult, int idx, char *out, int n) {
     static const char *const ADJ[] = { "Grey", "Ashen", "Pale", "Ninefold", "Black", "Hollow", "Drowned", "Iron",
                                        "Salt", "Lantern", "Weeping", "Unburied", "Red", "Silent", "Last", "Thorned" };
     static const char *const GROUP[] = { "Wardens", "Choir", "Court", "Hand", "Brotherhood", "Host", "Kin", "Covenant",
@@ -367,6 +374,9 @@ static int arc_dir(u64 seed, int arc) {
     return d;
 }
 
+static int arc_culture(u64 seed, int arc);
+int story_arc_culture(u64 seed, int arc) { return arc_culture(seed, arc); }
+
 static int arc_culture(u64 seed, int arc) {
     switch (arc_dir(seed, arc)) {
     case AD_NORTH: return CULT_NORTH;
@@ -393,7 +403,16 @@ static void power_title(u64 seed, int arc, const StoryWorld *sw, char *out, int 
 }
 
 /* Who chapter c is, without finding where it lives (cheap). */
-static void chapter_identity(u64 seed, int chapter, Named *out) {
+/* The history of a world made with the generated stories, or NULL (docs/STORY_GEN.md). */
+static const History *hist(const World *w) { return w->story_gen >= 1 ? history_of(w->seed) : NULL; }
+
+static void hpersonal(const Personal *p, HPersonal *hp) {
+    hp->village = p ? p->village : NULL;
+    hp->kin = p ? p->kin : NULL;
+}
+
+static void chapter_identity(const World *w, int chapter, Named *out) {
+    u64 seed = w->seed;
     memset(out, 0, sizeof *out);
     int arc = chapter / 3, rank = chapter % 3;
     StoryWorld sw;
@@ -426,10 +445,17 @@ static void chapter_identity(u64 seed, int chapter, Named *out) {
     out->scale = SCALE[rank];
     out->hp_mult = HP[rank];
     out->dmg_mult = DMG[rank];
+    const History *h = hist(w);
+    if (h && chapter < H_CAST) {
+        /* someone from the world's history; the key carries the legendary it holds */
+        snprintf(out->name, sizeof out->name, "%s", h->actor[h->cast[chapter]].name);
+        history_title(h, chapter, out->title, sizeof out->title);
+        out->key = ((out->key >> 8) | 1) * UNIQUE_SLOTS + h->cast_legend[chapter];
+    }
 }
 
 void story_chapter_target(const World *w, int chapter, Named *out) {
-    chapter_identity(w->seed, chapter, out);
+    chapter_identity(w, chapter, out);
     int arc = chapter / 3, rank = chapter % 3;
     static const float FRAC[3] = { 0.42f, 0.7f, 1.0f };
     float d = (12.0f + 16.0f * arc) * FRAC[rank];
@@ -472,7 +498,7 @@ void story_chapter_target(const World *w, int chapter, Named *out) {
 
 void story_arc_title(const World *w, int arc, char *out, int n) {
     Named p;
-    chapter_identity(w->seed, arc * 3 + 2, &p);
+    chapter_identity(w, arc * 3 + 2, &p);
     static const char *const ROMAN[] = { "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X" };
     if (arc < LEN(ROMAN)) snprintf(out, (size_t)n, "%s. %s, %s", ROMAN[arc], p.name, p.title);
     else snprintf(out, (size_t)n, "%d. %s, %s", arc + 1, p.name, p.title);
@@ -499,10 +525,10 @@ static void chapter_ctx(const World *w, int chapter, const Personal *p, Ctx *c, 
                         StoryWorld *sw, char *vault, char *codex) {
     story_world(w->seed, sw);
     int arc = chapter / 3;
-    chapter_identity(w->seed, chapter, t);
-    chapter_identity(w->seed, chapter + 1, nx);
-    chapter_identity(w->seed, arc * 3 + 2, pw);
-    chapter_identity(w->seed, arc * 3 + 5, npw);
+    chapter_identity(w, chapter, t);
+    chapter_identity(w, chapter + 1, nx);
+    chapter_identity(w, arc * 3 + 2, pw);
+    chapter_identity(w, arc * 3 + 5, npw);
     vault_name(w->seed, arc, vault, STORY_NAME);
     codex_name(w->seed, arc, codex, STORY_NAME);
     cset(c, "target", t->name);
@@ -568,6 +594,13 @@ static const char *const REVEAL[4][3] = {
 };
 
 void story_chapter_hook(const World *w, int m, int chapter, const Personal *p, char *out, int n) {
+    const History *h = hist(w);
+    if (h && chapter < H_CAST) {
+        HPersonal hp;
+        hpersonal(p, &hp);
+        history_hook(h, m % MOTIVE_COUNT, chapter, &hp, NULL, out, n);
+        return;
+    }
     Ctx c = { 0 };
     Named t, nx, pw, npw;
     StoryWorld sw;
@@ -579,6 +612,15 @@ void story_chapter_hook(const World *w, int m, int chapter, const Personal *p, c
 }
 
 void story_chapter_done(const World *w, int m, int chapter, const Personal *p, char *out, int n) {
+    const History *h = hist(w);
+    if (h && chapter < H_CAST) {
+        HPersonal hp;
+        hpersonal(p, &hp);
+        Named nx;
+        chapter_identity(w, chapter + 1, &nx);
+        history_done(h, m % MOTIVE_COUNT, chapter, &hp, nx.name, out, n);
+        return;
+    }
     Ctx c = { 0 };
     Named t, nx, pw, npw;
     StoryWorld sw;
@@ -588,7 +630,18 @@ void story_chapter_done(const World *w, int m, int chapter, const Personal *p, c
     expand(out, n, DONE[m % MOTIVE_COUNT][chapter % 3], &r, &c);
 }
 
-void story_revelation(const World *w, int chapter, char *out, int n) {
+void story_revelation(const World *w, int chapter, const Personal *p, char *out, int n) {
+    const History *h = hist(w);
+    if (h) {
+        Personal p0;
+        if (!p) { story_personal(w->seed, 0, &p0); p = &p0; }
+        HPersonal hp;
+        hpersonal(p, &hp);
+        Named nx;
+        chapter_identity(w, chapter + 1, &nx);
+        history_reveal(h, chapter, &hp, nx.name, out, n);
+        return;
+    }
     Ctx c = { 0 };
     Named t, nx, pw, npw;
     StoryWorld sw;
@@ -711,10 +764,32 @@ bool story_bounty(const World *w, int cx, int cy, int cz, Named *lord, int *gold
     return true;
 }
 
+/* How far out a chunk lies, in chunks, as the chapters are placed (a layer counts 1.5). */
+static int trace_dist(int cx, int cy, int cz) { return (int)(sqrtf((float)(cx * cx + cz * cz)) + 1.5f * (float)abs(cy)); }
+
+int story_trace_clue(const World *w, int cx, int cy, int cz) {
+    const History *h = hist(w);
+    Trace t;
+    if (!h || !story_trace(w, cx, cy, cz, &t) || (t.kind == TR_CORPSE && t.mission)) return -1;
+    Domain d;
+    story_domain(w, cx, cy, cz, &d);
+    int clue;
+    return history_trace_clue(h, t.key, t.kind, trace_dist(cx, cy, cz), d.culture, &clue) ? clue : -1;
+}
+
 void story_trace_text(const World *w, int cx, int cy, int cz, char *out, int n) {
     Trace t;
     out[0] = 0;
     if (!story_trace(w, cx, cy, cz, &t)) return;
+    int clue = story_trace_clue(w, cx, cy, cz);
+    if (clue >= 0 && t.kind != TR_BOUNTY) {
+        Personal p0;
+        story_personal(w->seed, 0, &p0);
+        HPersonal hp;
+        hpersonal(&p0, &hp);
+        history_clue_text_v(hist(w), clue, &hp, t.key, out, n);
+        return;
+    }
     Ctx c = { 0 };
     StoryWorld sw;
     Domain d;
@@ -752,7 +827,55 @@ void story_trace_text(const World *w, int cx, int cy, int cz, char *out, int n) 
         cset(&c, "gold", g);
         cset(&c, "where", where);
         expand(out, n, "BOUNTY. {lname}, {ltitle}. {where}. {gold} crowns, paid in blood or gold.", &r, &c);
+        if (clue >= 0) { /* and what the poster wants known */
+            char extra[STORY_TEXT];
+            Personal p0;
+            story_personal(w->seed, 0, &p0);
+            HPersonal hp;
+            hpersonal(&p0, &hp);
+            history_clue_text_v(hist(w), clue, &hp, t.key, extra, sizeof extra);
+            size_t len = strlen(out);
+            if (len + 2 + strlen(extra) < (size_t)n) snprintf(out + len, (size_t)n - len, " %s", extra);
+        }
     }
+}
+
+/* ---------- the world's legendaries ---------- */
+
+int story_legend_id(const World *w, u64 key) {
+    int id = (int)(key % UNIQUE_SLOTS);
+    const History *h = hist(w);
+    if (!h) return id;
+    bool cast[UNIQUE_SLOTS] = { 0 };
+    for (int c = 0; c < H_CAST; c++) {
+        Named t;
+        chapter_identity(w, c, &t);
+        if (t.key == key) return h->cast_legend[c];
+        cast[h->cast_legend[c]] = true;
+    }
+    if (!cast[id]) return id;
+    /* another's blade: someone else drops one of the free ones */
+    int free_ids[UNIQUE_SLOTS], nf = 0;
+    for (int i = 0; i < UNIQUE_SLOTS; i++)
+        if (!cast[i]) free_ids[nf++] = i;
+    return nf ? free_ids[(key >> 7) % (u64)nf] : id;
+}
+
+bool story_legend_lore(const World *w, int id, char *out, int n) {
+    const History *h = hist(w);
+    return h && history_legend_lore(h, id, out, n);
+}
+
+/* What the hunters' leader carries (chapter c's target sent them). */
+void story_orders(const World *w, int chapter, char *out, int n) {
+    out[0] = 0;
+    const History *h = hist(w);
+    if (!h || chapter >= H_CAST) return;
+    Personal p0;
+    story_personal(w->seed, 0, &p0);
+    HPersonal hp;
+    hpersonal(&p0, &hp);
+    history_clue_text(h, h->orders[chapter], &hp, out, n);
 }
 
 /* ---------- directions ---------- */

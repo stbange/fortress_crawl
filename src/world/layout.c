@@ -16,6 +16,7 @@ static const u8 PORTAL_SIZE[P_TYPE_COUNT][2] = { { 3, 4 }, { 1, 2 }, { 1, 1 }, {
 void world_init(World *w, u64 seed) {
     memset(w, 0, sizeof *w);
     w->seed = seed;
+    w->story_gen = STORY_GEN_LATEST;
     /* a new world's Sanctum: a small island, a ruined hall, the court with the door home */
     w->sanctum[SP_ISLAND] = 1;
     w->sanctum[SP_HALL] = 1;

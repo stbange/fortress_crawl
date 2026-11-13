@@ -9,7 +9,10 @@ and it will be there when you arrive. Only what players change or learn is saved
 Tone: short, grim fragments. No long dialogue; the dungeon speaks through its dead.
 
 Status: steps S1 (information) and S2 (motive, chapters, named enemies, missions) are in the
-game. S3 to S5 are planned (see the end).
+game. S3 to S5 are planned (see the end). Since save version 13, new worlds generate their
+story from a simulated history ([STORY_GEN.md](STORY_GEN.md)): the first three arcs, their
+targets, revelations, motive texts and most traces come from it. What this page says about the
+metaplot's fixed secret (below) holds for worlds begun before that, which keep their story.
 
 ## Layers
 
@@ -110,14 +113,16 @@ someone already killed says so.
   20 seconds. If the target is beyond the loaded area, the line ends at the reachable spot
   closest to it. Casting again within eight seconds switches to the next mission.
 - **STORY tab** (L, or the menu): motive, chapter, arc, target, the hook, missions with
-  directions, and everything read so far ("What the dead say"), newest first.
+  directions, in a world with a generated history the questions it poses and the answers
+  found ("What you know"), and everything read so far ("What the dead say"), newest first.
 
 ## Saved
 
 Per character: motive, chapter, missions. Per world: the lore read (as positions and chapter
 numbers; the text is regenerated) and, as before, the taken chests and relics, which now also
 cover quest items and dead named enemies. Save format version 2; version 1 saves still load
-and their characters are asked for a motive.
+and their characters are asked for a motive. Version 13 adds the world's story generator
+(0 for worlds begun earlier) and lore kinds for legendaries, hunters' orders and pages.
 
 ## Next steps
 
@@ -129,6 +134,5 @@ and their characters are asked for a motive.
   changes; monster families become factions with allies and enemies; wars on the borders.
 - **S5 - choices and endings:** taking sides, mechanical puzzles as mission steps, and a
   closing scene for each chapter of a motive.
-- **Generated stories:** a simulated history per world, from which the mystery, the named
-  enemies and the clues are drawn, so that worlds differ in what happens and not only in their
-  names. Proposed in [STORY_GEN.md](STORY_GEN.md).
+- **Generated stories:** done, see [STORY_GEN.md](STORY_GEN.md). Choices that change the
+  history are the open part.

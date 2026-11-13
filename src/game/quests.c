@@ -2,6 +2,7 @@
 
 #include "engine/font.h"
 #include "render/batch.h"
+#include "world/history.h"
 
 /* The game side of the stories (world/story.c makes them): each character's motive and
  * chapter in the metaplot, missions found in the dungeon, the lore read so far, the
@@ -51,6 +52,8 @@ static bool chunk_ready(Game *g, int cx, int cy, int cz) {
 
 static bool player_near(Game *g, vec3 p, float r) { return game_nearest_player(g, p, r) != NULL; }
 
+static void story_answers_update(Game *g);
+
 void lore_add(Game *g, int kind, int a, int b, int c) {
     for (int i = 0; i < g->nlore; i++)
         if (g->lore[i].kind == kind && g->lore[i].a == a && g->lore[i].b == b && g->lore[i].c == c) return;
@@ -60,6 +63,7 @@ void lore_add(Game *g, int kind, int a, int b, int c) {
         g->nlore--;
     }
     g->lore[g->nlore++] = (LoreEntry){ (u8)kind, a, b, c, NULL };
+    story_answers_update(g);
 }
 
 /* The text of a lore entry; generating some of them looks up domains and sites, so it is
@@ -67,8 +71,13 @@ void lore_add(Game *g, int kind, int a, int b, int c) {
 static const char *lore_text(Game *g, LoreEntry *e) {
     if (!e->text) {
         char buf[STORY_TEXT];
-        if (e->kind == LORE_REVEAL) story_revelation(&g->world, e->a, buf, sizeof buf);
-        else story_trace_text(&g->world, e->a, e->b, e->c, buf, sizeof buf);
+        const History *h = g->world.story_gen ? history_of(g->world.seed) : NULL;
+        buf[0] = 0;
+        if (e->kind == LORE_REVEAL) story_revelation(&g->world, e->a, NULL, buf, sizeof buf);
+        else if (e->kind == LORE_LEGEND) story_legend_lore(&g->world, e->a, buf, sizeof buf);
+        else if (e->kind == LORE_ORDERS) story_orders(&g->world, e->a, buf, sizeof buf);
+        else if (e->kind == LORE_PAGE && h && e->a >= 0 && e->a < H_CAST) history_clue_text(h, h->page[e->a], NULL, buf, sizeof buf);
+        else if (e->kind == LORE_TRACE) story_trace_text(&g->world, e->a, e->b, e->c, buf, sizeof buf);
         e->text = malloc(strlen(buf) + 1);
         memcpy(e->text, buf, strlen(buf) + 1);
     }
@@ -266,8 +275,9 @@ static void chapter_complete(Game *g, PlayerSlot *ps, bool other_killed) {
     char done[STORY_TEXT], rev[STORY_TEXT], text[STORY_TEXT * 2 + 64], hook[STORY_TEXT];
     story_chapter_done(&g->world, m, ch, &p, done, sizeof done);
     sfx_player(g, ps, SFX_CHAPTER_DONE, 1.0f);
-    story_revelation(&g->world, ch, rev, sizeof rev);
+    story_revelation(&g->world, ch, &p, rev, sizeof rev);
     lore_add(g, LORE_REVEAL, ch, 0, 0);
+    if (m == MOTIVE_TRUTH && g->world.story_gen && ch < H_CAST) lore_add(g, LORE_PAGE, ch, 0, 0); /* the page is read too */
     if (other_killed) snprintf(text, sizeof text, "Someone was faster: %.40s is already dead. %.200s %.200s", ps->target.name, done, rev);
     else snprintf(text, sizeof text, "%.300s %.300s", done, rev);
     /* the motive decides the reward */
@@ -446,6 +456,91 @@ void story_on_kill(Game *g, Monster *mo) {
     }
 }
 
+/* The leader of a band of hunters carries its orders: a clue from the world's history. */
+void story_orders_found(Game *g, Monster *mo) {
+    int ch = mo->orders - 1;
+    char text[STORY_TEXT];
+    story_orders(&g->world, ch, text, sizeof text);
+    if (!text[0]) return;
+    lore_add(g, LORE_ORDERS, ch, 0, 0);
+    for (int i = 0; i < MAX_PLAYERS; i++) {
+        PlayerSlot *ps = &g->players[i];
+        if (ps->active && v3_len(v3_sub(ps->pl.pos, mo->pos)) < 40.0f) show_msg(ps, text, NULL);
+    }
+}
+
+/* A legendary of the world is picked up: its lore joins what the dead say. */
+void story_legend_found(Game *g, int id) {
+    char text[STORY_TEXT];
+    if (story_legend_lore(&g->world, id, text, sizeof text)) lore_add(g, LORE_LEGEND, id, 0, 0);
+}
+
+/* ---------- what you know: the world's history pieced together ---------- */
+
+/* The clue a lore entry carries, or -1. */
+static int lore_clue(Game *g, const History *h, const LoreEntry *e) {
+    switch (e->kind) {
+    case LORE_TRACE: return story_trace_clue(&g->world, e->a, e->b, e->c);
+    case LORE_REVEAL: return history_reveal_clue(h, e->a);
+    case LORE_ORDERS: return e->a >= 0 && e->a < H_CAST ? h->orders[e->a] : -1;
+    case LORE_PAGE: return e->a >= 0 && e->a < H_CAST ? h->page[e->a] : -1;
+    case LORE_LEGEND:
+        for (int i = 0; i < h->nclues; i++)
+            if (h->clue[i].src == SRC_LEGEND && h->clue[i].chapter == e->a) return i;
+        return -1;
+    default: return -1;
+    }
+}
+
+static void known_facts(Game *g, const History *h, bool *known) {
+    memset(known, 0, sizeof(bool) * H_FACTS);
+    for (int i = 0; i < g->nlore; i++) {
+        int c = lore_clue(g, h, &g->lore[i]);
+        if (c >= 0 && c < h->nclues) known[h->clue[c].fact] = true;
+    }
+}
+
+static bool answered(const History *h, const bool *known, int q) {
+    const HQuestion *x = &h->q[q];
+    bool ok = x->nneed > 0;
+    for (int k = 0; k < x->nneed; k++) ok &= known[x->need[k]];
+    return ok || (x->alt != H_NONE && known[x->alt]);
+}
+
+static u32 answers_mask(Game *g, const History *h) {
+    bool known[H_FACTS];
+    known_facts(g, h, known);
+    u32 m = 0;
+    for (int q = 0; q < h->nq; q++)
+        if (answered(h, known, q)) m |= 1u << q;
+    return m;
+}
+
+/* A question answered: a banner for everyone (loaded lore counts silently). */
+static void story_answers_update(Game *g) {
+    if (!g->world.story_gen) return;
+    const History *h = history_of(g->world.seed);
+    u32 m = answers_mask(g, h), fresh = m & ~g->story_answers;
+    g->story_answers = m;
+    if (!fresh || !g->world_started) return;
+    for (int q = 0; q < h->nq; q++) {
+        if (!(fresh & (1u << q))) continue;
+        Personal p;
+        story_personal(g->world.seed, 0, &p);
+        HPersonal hp = { p.village, p.kin };
+        char qt[STORY_TEXT], at[STORY_TEXT], buf[STORY_TEXT * 2];
+        history_question(h, q, &hp, qt, sizeof qt);
+        history_answer(h, q, &hp, at, sizeof at);
+        snprintf(buf, sizeof buf, "A QUESTION ANSWERED: %.200s", qt);
+        upper(buf);
+        game_banner_all(g, buf);
+        if (g_note_hook) {
+            snprintf(buf, sizeof buf, "%s %s", qt, at);
+            g_note_hook(0, "ANSWER", buf);
+        }
+    }
+}
+
 /* ---------- per frame ---------- */
 
 static void update_domain(Game *g, PlayerSlot *ps) {
@@ -518,6 +613,7 @@ static void send_hunters(Game *g, PlayerSlot *ps) {
                 if (k && game_solid(g, (int)floorf(q.x), (int)floorf(q.y), (int)floorf(q.z))) q = p;
                 Monster *m = monster_spawn(g, type, q, level, k == 0, v3(0.6f, 0.4f, 0.3f), 0);
                 if (!m) continue;
+                if (k == 0 && g->world.story_gen && t->chapter >= 0 && t->chapter < H_CAST) m->orders = (u8)(t->chapter + 1); /* the leader carries orders */
                 m->awake = true;
                 m->target = ps->index;
                 m->state = MS_CHASE;
@@ -751,6 +847,39 @@ void story_draw_tab(Game *g, PlayerSlot *ps, int W, int H, int top) {
         if ((int)strlen(buf) > maxc) buf[maxc] = 0;
         font_text(x, y, buf, 1.0f, 0.8f, 0.35f);
         y += 9;
+    }
+    if (g->world.story_gen) {
+        const History *h = history_of(g->world.seed);
+        bool known[H_FACTS];
+        known_facts(g, h, known);
+        int nk = 0;
+        for (int i = 0; i < h->nfacts; i++) nk += known[i];
+        Personal p = personal_of(g, ps);
+        HPersonal hp = { p.village, p.kin };
+        y += 5;
+        snprintf(buf, sizeof buf, "WHAT YOU KNOW - %d FACTS OF THE HISTORY OF %.30s", nk, g->story.fortress);
+        upper(buf);
+        if ((int)strlen(buf) > maxc) buf[maxc] = 0;
+        font_text(x, y, buf, 0.95f, 0.78f, 0.42f);
+        y += 10;
+        bool who = false;
+        for (int q = 0; q < h->nq; q++) {
+            if (h->q[q].kind == Q_WHO) who = answered(h, known, q);
+        }
+        for (int q = 0; q < h->nq && y < H - 40; q++) {
+            if (h->q[q].kind == Q_WHERE && !who) continue; /* would name the one who opened it */
+            bool a = answered(h, known, q);
+            history_question(h, q, &hp, buf, sizeof buf);
+            char line[STORY_TEXT + 8];
+            snprintf(line, sizeof line, "%s %s", a ? "!" : "?", buf);
+            int n = wrap(line, maxc, lines, 2);
+            for (int i = 0; i < n; i++, y += 9) font_text(x, y, lines[i], a ? 0.9f : 0.62f, a ? 0.82f : 0.58f, a ? 0.55f : 0.5f);
+            if (a) {
+                history_answer(h, q, &hp, buf, sizeof buf);
+                n = wrap(buf, maxc - 4, lines, compact ? 2 : 3);
+                for (int i = 0; i < n; i++, y += 9) font_text(x + 12, y, lines[i], 0.72f, 0.68f, 0.6f);
+            }
+        }
     }
     y += 5;
     snprintf(buf, sizeof buf, "WHAT THE DEAD SAY (%d)", g->nlore);

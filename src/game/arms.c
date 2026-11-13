@@ -196,6 +196,15 @@ const char *arms_unique_name(int id) {
     return A.uname[((id % UNIQUE_COUNT) + UNIQUE_COUNT) % UNIQUE_COUNT];
 }
 
+/* In a world with generated stories, the legendaries its named enemies carry tell their
+ * deeds (world/history.c). Called once the world's save is read. */
+void arms_story_lore(const World *w) {
+    static char lore[UNIQUE_COUNT][STORY_TEXT];
+    ensure();
+    for (int id = 0; id < UNIQUE_COUNT; id++)
+        if (story_legend_lore(w, id, lore[id], sizeof lore[id])) A.ulore[id] = lore[id];
+}
+
 const char *arms_unique_lore(int id) {
     ensure();
     return A.ulore[((id % UNIQUE_COUNT) + UNIQUE_COUNT) % UNIQUE_COUNT];

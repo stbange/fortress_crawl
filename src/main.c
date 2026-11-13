@@ -686,10 +686,10 @@ static void demo_setup(Game *g) {
         return;
     }
     if (!strcmp(g_demo_kind, "story") || !strcmp(g_demo_kind, "read") || !strcmp(g_demo_kind, "named")) {
-        /* a revenge story in its second chapter, with some lore read and two missions */
+        /* a revenge story in its fourth chapter, with some lore read and two missions */
         s->motive = MOTIVE_REVENGE + 1;
-        s->chapter = 1;
-        lore_add(g, LORE_REVEAL, 0, 0, 0);
+        s->chapter = !strcmp(g_demo_kind, "story") ? 3 : 1;
+        for (int c = 0; c < s->chapter; c++) lore_add(g, LORE_REVEAL, c, 0, 0);
         int found_bounty = 0, found_retrieve = 0, nread = 0;
         for (int cz = -5; cz <= 5; cz++)
             for (int cx = -5; cx <= 5; cx++) {
@@ -712,7 +712,8 @@ static void demo_setup(Game *g) {
                     s->missions[s->nmissions++] = mi;
                     found_retrieve = 1;
                 }
-                if (!strcmp(g_demo_kind, "read") && t.kind == TR_STELE && !p1->reading[0]) {
+                if (!strcmp(g_demo_kind, "read") && t.kind == TR_STELE && !p1->reading[0] &&
+                    (!g->world.story_gen || story_trace_clue(&g->world, cx, 0, cz) >= 0)) { /* one that tells the history */
                     story_trace_text(&g->world, cx, 0, cz, p1->reading, sizeof p1->reading);
                     p1->reading_t = 100.0f;
                     p1->reading_key = 1;
@@ -1146,6 +1147,7 @@ static void start_world(App *a) {
     chunkmap_init(&g->map, &g->world, &g->r, g->opt.radius, g->opt.vradius);
     /* the saved characters of this world (screenshot and test runs start fresh) */
     if ((!g->opt.shot || g->opt.persist) && !g->opt.fresh) game_load(g);
+    arms_story_lore(&g->world); /* the legendaries of a world with generated stories tell its history */
     vec3 start = g->opt.has_pos ? g->opt.pos : v3(-70.5f, 6.0f, 0.5f);
     bool touch = g->touch.active;
     game_init(g, start, g->opt.yaw);

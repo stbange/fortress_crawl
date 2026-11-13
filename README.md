@@ -77,7 +77,7 @@ The character menu has eight tabs: ITEMS, SPELLS, SKILLS, STORY, SHOP, FOOD, ALC
 | | |
 |---|---|
 | ![story motive](docs/screenshots/story_motive.png) | ![story story](docs/screenshots/story_story.png) |
-| Every character picks a motive | The STORY tab (L): chapter, target, missions, lore |
+| Every character picks a motive | The STORY tab (L): target, missions, the questions of the world's history |
 | ![story read](docs/screenshots/story_read.png) | ![story named](docs/screenshots/story_named.png) |
 | An inscription and the tracker | A chapter target with its name plate |
 | ![golden thread](docs/screenshots/golden_thread.png) | ![vault](docs/screenshots/vault.png) |
@@ -360,6 +360,19 @@ adventurers (some ask you to take something home) and bounty boards on domain lo
 next to one shows its text; everything read goes into the STORY tab. Each region (domain) has
 a name, a ruling faction, a past and a lord; entering one shows a banner. See
 [`docs/STORY.md`](docs/STORY.md).
+
+**Every world has its own history:** when a world begins, a small simulation runs the
+fortress's past from the seed: founders, wars, bargains, heresies, a generation of keepers,
+heirs and rivals with their own griefs and grudges, the night the seal was opened, and the
+lie told about it afterwards. Who opened it and why, whom they blamed, what lies below (a
+hunger, a lure, the walled-in first people, or nothing at all: buried miners and a story to
+keep the diggers out) and why your village burned all differ from world to world. The
+chapter targets are the survivors of that history; their dying words, the papers on their
+bodies, the inscriptions, the notes of the dead, the bounty boards, the hunters' orders and
+the lore of the legendaries are all clues to the same truth, some of them lies. The STORY tab
+keeps the open questions ("Who opened the seal?", "Why did your village burn?") and answers
+them as you find enough. See [`docs/STORY_GEN.md`](docs/STORY_GEN.md); `worldmap history`
+prints a seed's hidden history.
 
 **Traps and vaults:** from danger level 2 on, the floor is not always safe: a loose
 flagstone fires darts from the nearest wall, spike patches stab every few seconds and flame

@@ -56,7 +56,9 @@ add_library(fcworld STATIC
   src/world/gen_exterior.c
   src/world/gen_pocket.c
   src/world/mesher.c
-  src/world/story.c)
+  src/world/story.c
+  src/world/history.c
+  src/world/history_text.c)
 target_include_directories(fcworld PUBLIC src)
 target_compile_options(fcworld PRIVATE ${FC_WARN})
 if(NOT MSVC)

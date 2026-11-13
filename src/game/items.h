@@ -149,6 +149,8 @@ void arms_roll_powers(Item *it, u64 seed);
 Item arms_unique(int id, float level);      /* legendary id (0..UNIQUE_COUNT-1) of this world */
 const char *arms_unique_name(int id);
 const char *arms_unique_lore(int id);
+struct World;
+void arms_story_lore(const struct World *w); /* the history's lore for the legendaries (story_gen 1) */
 void arms_power_text(int power, char *out, int n);
 const char *arms_bane_title(int mon_type);  /* "Crawlerbane" */
 

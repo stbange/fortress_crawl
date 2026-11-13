@@ -548,11 +548,12 @@ void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int 
             if (luck > 0) for (int k = 0; k < 2; k++) loot_drop(g, m->pos, m->level, m->elite, luck);
         }
         if (m->story_key) story_on_kill(g, m);
+        if (m->orders) story_orders_found(g, m);
         if (m->named_kind && m->story_key) sanctum_trophy_named(g, m->story_key);
         if (m->named_kind && m->story_key && m->level >= 6.0f) {
             pickup_spawn(g, PK_KEYSTONE, v3_add(m->pos, v3(0.5f, 0.6f, 0)), 0, NULL, 0, 0); /* named enemies far out carry a keystone */
             /* a named enemy carries one of this world's legendaries (each is found once) */
-            int id = (int)(m->story_key % UNIQUE_COUNT);
+            int id = story_legend_id(&g->world, m->story_key);
             u64 key = mix64(g->world.seed ^ 0x11E6ULL ^ (u64)id * 0x9E3779B9ULL) | 1;
             if (!looted_has(g, key)) {
                 bool lying = false;

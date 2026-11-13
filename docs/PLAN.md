@@ -437,6 +437,9 @@ Done:
   [`ALCHEMY.md`](ALCHEMY.md).
 - The forge: smithing 1-10, ores, essences, bought supplies, blueprints and runes from breaking
   weapons up, a timed session at the anvil, masterworks: [`FORGE.md`](FORGE.md).
+- Generated stories: a simulated history per world (eras, people, kin, drives, the fall and the
+  lie told about it), plot shapes found in it, the first three arcs cast from its survivors,
+  clues in every source, questions answered in the STORY tab: [`STORY_GEN.md`](STORY_GEN.md).
 - The balance pass from those notes ([`BALANCE_PLAN.md`](BALANCE_PLAN.md)): danger that keeps up,
   a costlier death, a shop for gold, melee across ledges, safer stairs, a nearer first chapter.
 - Screenshot and demo modes (`--shot`, `--demo combat|sword|death|skills|map|coop|menu|

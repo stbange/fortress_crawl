@@ -10,6 +10,9 @@
  */
 #include "world/layout.h"
 #include "world/story.h"
+#include "world/history.h"
+
+#include <time.h>
 
 static void write_ppm(const char *path, const u8 *rgb, int w, int h) {
     FILE *f = fopen(path, "wb");
@@ -153,7 +156,7 @@ static void story_dump(const World *w, int chapters, int radius) {
         }
         story_chapter_done(w, MOTIVE_REVENGE, c, &p, buf, sizeof buf);
         printf("    done (revenge): %s\n", buf);
-        story_revelation(w, c, buf, sizeof buf);
+        story_revelation(w, c, &p, buf, sizeof buf);
         printf("    revelation: %s\n", buf);
     }
     printf("\nDOMAINS AND TRACES within %d chunks of the gate (y 0)\n", radius);
@@ -183,6 +186,62 @@ static void story_dump(const World *w, int chapters, int radius) {
         }
 }
 
+/* The variety of generated stories over n worlds (docs/STORY_GEN.md). */
+static void story_stats(int n) {
+    static History h;
+    int shape[SH_COUNT] = { 0 }, shape_any[SH_COUNT] = { 0 }, tone[TONE_COUNT] = { 0 }, below[BL_COUNT] = { 0 }, chain[16] = { 0 },
+        role[RO_COUNT] = { 0 }, motive[MV_COUNT] = { 0 }, attempts[9] = { 0 }, bad = 0, first_suspect = 0, kin_betray = 0, alive = 0,
+        player_kin = 0, burn[4] = { 0 };
+    long clues = 0, facts = 0;
+    u64 combos[4096];
+    int ncombo = 0;
+    clock_t t0 = clock();
+    for (int i = 0; i < n; i++) {
+        history_generate((u64)i * 7919 + 17, &h);
+        if (!history_validate(&h)) {
+            bad++;
+            if (bad <= 8) printf("  seed %llu: %s\n", (unsigned long long)h.seed, h.problems);
+        }
+        shape[h.shape]++;
+        for (int k = 0; k < SH_COUNT; k++) shape_any[k] += h.score[k] >= 5;
+        tone[h.tone]++;
+        below[h.below]++;
+        chain[MINI(h.chain, 15)]++;
+        role[h.culprit_role]++;
+        motive[h.actor[h.opener].motive]++;
+        attempts[MINI(h.attempt, 8)]++;
+        first_suspect += h.scapegoat == h.opener;
+        kin_betray += h.scapegoat != H_NONE && h.score[SH_BETRAYAL] >= 10;
+        alive += h.actor[h.opener].died == H_NONE;
+        player_kin += h.player_kin != H_NONE;
+        if (h.ev_burn != H_NONE) burn[h.ev[h.ev_burn].sub & 3]++;
+        clues += h.nclues;
+        facts += h.nfacts;
+        /* a "plot": shape, motive, who is blamed (role), below, the opener's fate */
+        u64 key = (u64)h.shape | (u64)h.actor[h.opener].motive << 4 | (u64)(h.scapegoat != H_NONE ? h.actor[h.scapegoat].role + 1 : 0) << 8 |
+                  (u64)h.below << 12 | (u64)(h.actor[h.opener].flags & 7) << 16 | (u64)(h.ev_burn != H_NONE ? h.ev[h.ev_burn].sub : 9) << 20;
+        bool seen = false;
+        for (int k = 0; k < ncombo && !seen; k++) seen = combos[k] == key;
+        if (!seen && ncombo < 4096) combos[ncombo++] = key;
+    }
+    double ms = (double)(clock() - t0) * 1000.0 / CLOCKS_PER_SEC;
+    printf("%d worlds, %.3f ms each, %d failed validation\n", n, ms / n, bad);
+    printf("main shape:\n");
+    for (int k = 0; k < SH_COUNT; k++) printf("  %-18s %5.1f%%  (possible in %5.1f%%)\n", SHAPE_NAMES[k], 100.0 * shape[k] / n, 100.0 * shape_any[k] / n);
+    printf("tone:"); for (int k = 0; k < TONE_COUNT; k++) printf("  %s %.0f%%", TONE_NAMES[k], 100.0 * tone[k] / n); printf("\n");
+    printf("below:"); for (int k = 0; k < BL_COUNT; k++) printf("  %s %.0f%%", BELOW_NAMES[k], 100.0 * below[k] / n); printf("\n");
+    printf("opener's drive:"); for (int k = 1; k < MV_COUNT; k++) if (motive[k]) printf("  %s %.0f%%", MOTIVE_V_NAMES[k], 100.0 * motive[k] / n); printf("\n");
+    printf("opener's role:"); for (int k = 0; k < RO_COUNT; k++) if (role[k]) printf("  %s %.0f%%", ROLE_NAMES[k], 100.0 * role[k] / n); printf("\n");
+    printf("causal chain:"); for (int k = 0; k < 16; k++) if (chain[k]) printf("  %d: %.0f%%", k, 100.0 * chain[k] / n); printf("\n");
+    printf("the village burned for: pages %.0f%%, the traitor's child %.0f%%, the bargain %.0f%%, a lesson %.0f%%\n", 100.0 * burn[0] / n,
+           100.0 * burn[1] / n, 100.0 * burn[2] / n, 100.0 * burn[3] / n);
+    printf("blamed one is the opener %.1f%%, betrayed by kin %.0f%%, opener alive now %.0f%%, player's kin in it %.0f%%\n", 100.0 * first_suspect / n,
+           100.0 * kin_betray / n, 100.0 * alive / n, 100.0 * player_kin / n);
+    printf("histories thrown away as dull:"); for (int k = 0; k < 9; k++) if (attempts[k]) printf("  %d: %.0f%%", k, 100.0 * attempts[k] / n); printf("\n");
+    printf("distinct plots (shape, drive, blamed, below, fate, village): %d\n", ncombo);
+    printf("facts %.1f, clues %.1f per world\n", (double)facts / n, (double)clues / n);
+}
+
 int main(int argc, char **argv) {
     World w;
     const char *s = getenv("FC_SEED");
@@ -192,6 +251,13 @@ int main(int argc, char **argv) {
     else if (argc == 7 && strcmp(argv[1], "blocks") == 0)
         block_map(&w, atoi(argv[2]), atoi(argv[3]), atoi(argv[4]), atoi(argv[5]), argv[6]);
     else if (argc == 4 && strcmp(argv[1], "story") == 0) story_dump(&w, atoi(argv[2]), atoi(argv[3]));
+    else if (argc == 2 && strcmp(argv[1], "history") == 0) {
+        static History h;
+        history_generate(w.seed, &h);
+        history_validate(&h);
+        history_dump(&h, stdout);
+        if (h.problems[0]) printf("PROBLEMS: %s\n", h.problems);
+    } else if (argc == 3 && strcmp(argv[1], "storystats") == 0) story_stats(atoi(argv[2]));
     else if (argc == 3 && strcmp(argv[1], "structs") == 0) structs_dump(&w, atoi(argv[2]));
     else if (argc >= 3 && strcmp(argv[1], "mech") == 0) mech_dump(&w, atoi(argv[2]), argc > 3 ? atoi(argv[3]) : 0);
     else {

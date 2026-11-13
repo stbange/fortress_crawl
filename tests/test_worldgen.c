@@ -12,6 +12,7 @@
  *     be solved and does not start solved, traps stand on the floor */
 #include "world/layout.h"
 #include "world/story.h"
+#include "world/history.h"
 #include "world/mech.h"
 #include "world/mesher.h"
 #include "world/texgen.h"
@@ -434,6 +435,60 @@ int main(int argc, char **argv) {
             }
         printf("story: %d traces on a 17-chunk row\n", traces);
         free(b);
+        /* generated histories (docs/STORY_GEN.md): sound, varied, fast, and the same every time */
+        static History hs, hs2;
+        int bad = 0, shapes[SH_COUNT] = { 0 }, nshapes = 0;
+        clock_t t0 = clock();
+        for (int i = 0; i < 200; i++) {
+            history_generate((u64)i * 104729 + 3, &hs);
+            if (!history_validate(&hs)) {
+                if (bad < 5) printf("  history of seed %llu: %s\n", (unsigned long long)hs.seed, hs.problems);
+                bad++;
+            }
+            if (!shapes[hs.shape]++) nshapes++;
+        }
+        double ms = (double)(clock() - t0) * 1000.0 / CLOCKS_PER_SEC / 200.0;
+        printf("story: 200 histories, %d unsound, %d plot shapes, %.2f ms each (with validation)\n", bad, nshapes, ms);
+        CHECK(bad == 0, "%d generated histories failed validation", bad);
+        CHECK(nshapes >= 7, "only %d plot shapes in 200 worlds", nshapes);
+        CHECK(ms < 10.0, "a history takes %.1f ms", ms);
+        history_generate(g_world.seed, &hs);
+        history_generate(g_world.seed, &hs2);
+        CHECK(!memcmp(&hs, &hs2, sizeof hs), "a world's history is not deterministic");
+        /* the story functions of a generated world speak of its history */
+        Personal pp;
+        story_personal(g_world.seed, 0, &pp);
+        int legends[UNIQUE_SLOTS] = { 0 };
+        for (int c = 0; c < H_CAST; c++) {
+            Named t;
+            story_chapter_target(&g_world, c, &t);
+            CHECK(!strcmp(t.name, hs.actor[hs.cast[c]].name), "chapter %d target is not the history's", c + 1);
+            int id = story_legend_id(&g_world, t.key);
+            CHECK(id == hs.cast_legend[c], "chapter %d target carries the wrong legendary", c + 1);
+            CHECK(!legends[id]++, "two chapter targets carry the same legendary");
+            for (int m = 0; m < MOTIVE_COUNT; m++) {
+                story_chapter_hook(&g_world, m, c, &pp, t1, sizeof t1);
+                story_chapter_done(&g_world, m, c, &pp, t2, sizeof t2);
+                CHECK(t1[0] && t2[0] && strlen(t1) < STORY_TEXT - 1 && strlen(t2) < STORY_TEXT - 1, "chapter %d motive %d text empty or cut", c + 1, m);
+            }
+            story_revelation(&g_world, c, &pp, t1, sizeof t1);
+            CHECK(t1[0] != 0, "chapter %d has no revelation", c + 1);
+            char lore[STORY_TEXT];
+            CHECK(story_legend_lore(&g_world, hs.cast_legend[c], lore, sizeof lore) && lore[0], "chapter %d's legendary has no lore", c + 1);
+        }
+        for (int k = 0; k < 40; k++) { /* a lord never carries a chapter target's legendary */
+            Domain d;
+            Named l;
+            story_domain(&g_world, k * 4 - 80, 0, (k % 7) * 4, &d);
+            story_lord(&g_world, &d, &l);
+            int id = story_legend_id(&g_world, l.key);
+            for (int c = 0; c < H_CAST; c++) CHECK(id != hs.cast_legend[c], "a domain lord carries chapter %d's legendary", c + 1);
+        }
+        int clues = 0;
+        for (int cz = -20; cz <= 20; cz++)
+            for (int cx = -20; cx <= 20; cx++) clues += story_trace_clue(&g_world, cx, 0, cz) >= 0;
+        printf("story: %d traces within 20 chunks carry a clue of the history\n", clues);
+        CHECK(clues >= 50, "too few traces carry clues (%d)", clues);
     }
 
     /* 7. mechanisms */

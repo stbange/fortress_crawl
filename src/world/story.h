@@ -104,7 +104,7 @@ void story_chapter_target(const World *w, int chapter, Named *out);
  * when its target falls. The revelation is the metaplot fact the kill uncovers. */
 void story_chapter_hook(const World *w, int m, int chapter, const Personal *p, char *out, int n);
 void story_chapter_done(const World *w, int m, int chapter, const Personal *p, char *out, int n);
-void story_revelation(const World *w, int chapter, char *out, int n);
+void story_revelation(const World *w, int chapter, const Personal *p, char *out, int n);
 void story_arc_title(const World *w, int arc, char *out, int n);
 
 /* Traces: whether chunk (cx,cy,cz) holds one, and what it says. */
@@ -113,6 +113,15 @@ void story_trace_text(const World *w, int cx, int cy, int cz, char *out, int n);
 /* The mission behind a corpse note or a bounty board. */
 bool story_retrieve(const World *w, int cx, int cy, int cz, Retrieve *out);
 bool story_bounty(const World *w, int cx, int cy, int cz, Named *lord, int *gold);
+
+/* The clue a trace carries in a world with generated stories (history.h), or -1. */
+int story_trace_clue(const World *w, int cx, int cy, int cz);
+/* The world legendary (0..19) a named enemy with this story key carries, and its lore
+ * when the world's history tells it (false: the armory's own lore). */
+int story_legend_id(const World *w, u64 key);
+bool story_legend_lore(const World *w, int id, char *out, int n);
+/* The orders the hunters sent by chapter c's target carry (empty: none). */
+void story_orders(const World *w, int chapter, char *out, int n);
 
 /* "140 M NORTH-EAST, 2 LAYERS DOWN" from a world position (feet + 1) to a chunk's centre. */
 void story_direction(float fx, float fy, float fz, int cx, int cy, int cz, char *out, int n);

@@ -1,411 +1,284 @@
 # Fortress Crawl: Generated Stories
 
-A design for stories that differ from world to world in what happens, not only in the names.
-Written before any of it is built; nothing here is in the game yet. It extends
-[STORY.md](STORY.md), which describes the story system as it is today.
+Stories that differ from world to world in what happens, not only in the names. This page
+began as the design written before the work; it now describes what was built, with real
+output of the generator. It extends [STORY.md](STORY.md), which describes the rest of the
+story system (domains, traces, missions, the Golden Thread).
 
-Status: proposal. Effort about 2½-3 weeks, plus about one week if player choices are included
-(see "Decisions").
+Status: built. New worlds (save version 13) use it; worlds begun before keep their old story.
+Player choices that change the history are not part of it (see "Decisions").
 
-## The problem
+Code: `src/world/history.c` (simulation, mystery, casting, facts and clues),
+`src/world/history_text.c` (the grammars and voices), the branches in `src/world/story.c`, and
+the STORY tab in `src/game/quests.c`. `worldmap history` prints a seed's hidden history
+(`FC_SEED=n`), `worldmap storystats 1000` measures the variety, and `test_worldgen` validates
+200 histories on every run.
 
-The story system already generates a lot: the fortress, its builders, what it seals, domains
+## The problem it solves
+
+The story system already generated a lot: the fortress, its builders, what it seals, domains
 with factions and lords, a named captain, general and Power per arc, inscriptions, notes and
-bounty boards. But the metaplot is one fixed script. Every world reveals the same secret in
-the same order, from the `REVEAL[4][3]` table in `src/world/story.c`:
+bounty boards. But the metaplot was one fixed script: every world revealed the same secret in
+the same order (the gate was opened from inside; the builders fed the thing below; the
+fortress is a cage and we are the bait; there is no bottom), and each motive followed one
+fixed chain (the next coin, the next name on the Roll, the next piece of the map, the next
+page). Twenty bot runs in [RUN_STORIES.md](RUN_STORIES.md) and [RUN_STORIES_2.md](RUN_STORIES_2.md)
+showed two worlds telling the same story with different names. The inscriptions were also
+independent of each other: nothing a stele said was confirmed or contradicted anywhere.
 
-1. sealed orders bearing the Power's sign; "the gate was not broken, it was opened from
-   inside"; the Power, dying: "I only opened the door. Ask {next} who walked through";
-2. the builders' brand; "they did not seal it, they fed it"; "we kept it fed";
-3. "the body is older than the fortress"; "the fortress is the cage, and we are the bait";
-4. "its blood runs upward"; "at the bottom the dead are not dead"; "there is no bottom".
+## The approach
 
-The four motives (revenge, glory, riches, truth) also follow one fixed chain each: the target
-always holds the next coin, the next name, the next piece of the map or the next page. The
-twenty bot runs in [RUN_STORIES.md](RUN_STORIES.md) and [RUN_STORIES_2.md](RUN_STORIES_2.md)
-showed it: Cedmark and Aldburg told the same story with different names. Someone who plays
-two worlds will notice in the first hour.
+Generate a hidden history first, then let every story text be a report about it. At world
+start a small simulation runs the fortress's past from the seed alone: people and factions
+with traits, kin and drives act through events with causes and effects. The result is a graph
+of events and the facts they establish. The game searches that graph for the best mystery,
+casts its survivors as the named enemies of the first three arcs, and spreads the facts as
+clues over chapter targets, inscriptions, notes, bounty boards, legendaries, hunters' orders
+and the truth motive's pages. Text comes from small grammars with voices. The player's motive
+decides which thread of the same history they follow.
 
-The inscriptions and notes are also independent of each other: each is a template filled with
-the local domain's names. Nothing a stele says is ever confirmed or contradicted elsewhere.
+Constraints kept: the same seed gives the same story in every build, offline and on the web,
+with no language model at runtime. The history is computed once per world (0.3-0.4 ms) and
+cached; chunks still derive their traces on demand and look the clue up in it. A history
+takes about 60 KB.
 
-## Goals
+## 1. The simulation
 
-- **Different events per world.** Who opened the gate, why, what lies below, and who is guilty
-  should change between worlds, as should the shape of the mystery itself.
-- **Not trivial.** The mystery has a causal chain of several steps, at least one turn the
-  player does not expect, and people with reasons rather than villains with titles.
-- **Consistent.** Every text in a world describes the same history. A stele far out and a
-  confession two chapters later agree, or disagree for a reason (a liar, a partisan, a
-  rumour).
-- **Discoverable.** The truth can be pieced together from what you find; the game does not
-  just announce it at the end.
-- **Measurable.** A tool reports the variety over many seeds and finds contradictions.
+Six eras. Their names come from the world: the Sealing (or the Founding), two of the old ages
+the domains already date themselves by (the War of Fire, the Drowning, the Deep Delving...),
+the last years of the fortress, the night it fell (the world's own name for it, "the Night of
+the Open Gate", "the Quiet Year"), and now.
 
-## Constraints (unchanged from today)
+| Era | What happens |
+|-----|--------------|
+| The founding | The builders raise the fortress over what lies below and make three keys for three houses. What lies below depends on the world's tone (see "Tone"): they seal a hunger (and perhaps feed it a child every winter), build a lure for a sleeper, wall in the first people of the mountain, chain a king who was there first, or seal a shaft on living miners or the plague-sick and invent a monster to keep the diggers out. |
+| Two old eras | Two or three events each: wars between houses (and massacres), a heresy that prays to what lies below (and its purge), a bargain with it made by the loser of a war (the price: one night with the gate open), the hoard hidden from an enemy, the official chronicle, a smith's blade, a house taking the fortress from its builders, the Roll of the Dead. |
+| The last years | The generation of the mystery: a steward, three keepers with the keys, a captain sworn to the steward, a scribe, a priest, a merchant, the heir of a bargain's line. Siblings, a marriage, children. Then four to six personal events, each chosen from who could do it: a child lost (to the fever, to a shaft, to the winter tithe, to the dark), a dead child's voice heard below the seal, someone reading what the founders hid, the steward having them killed for it, a rival for the steward's seat, an exile, a keeper's debt, a conversion to the heresy, the bargain falling due. Each gives someone a drive, and remembers why. |
+| The fall | The strongest drive among the living opens the seal: grief answering a voice, a bargain paid, revenge on the steward, faith, the truth, power, gold, or, in a world built as a lure, the last of the builders finishing what the fortress was built for. If the opener has no key, they steal one (often from their own kin) or are given one. Then the consequences: the opener goes down and comes back changed, hides, seizes the fortress, flees with the gold, or dies; the steward and keepers may die. Whoever is left tells a lie: they blame a keeper, an agitator, or the thing below itself. The one they blame is walled in, hanged or driven into the deep, and their kin want revenge. A scribe writes the false chronicle; someone else writes down the truth and hides the pages. |
+| Now | The survivors and their heirs, and those sworn to them. Someone burned the player's village, on someone's order, for a reason the history explains: the true pages were hidden there, the blamed one's child hid there, the bargain asked for it, or as a lesson to those who ask. In some worlds the one who wrote the true account was the player's own grandparent, and died in that fire. |
 
-- **Deterministic.** The same seed gives the same story, in every build, offline and on the
-  web. No language model at runtime.
-- **A function of the seed.** Today nothing is simulated; every piece of story is computed
-  from the seed and a position on demand. The new history is simulated, but only once per
-  world, at world start, and only from the seed: it is still a pure function of the seed, just
-  computed eagerly and cached in `World`. Chunks still derive their traces on demand; they
-  look up the cached history instead of an independent template.
-- **Cheap.** Generation must take under about 10 ms (native) and the history under about
-  64 KB, so world start and the web build are not affected.
-- **Saves stay compatible.** A world saved before this change keeps its old story (see
-  "Saves").
-- **Short, grim fragments.** No long dialogue. The dungeon speaks through its dead.
+A history that is dull is thrown away and simulated again from the next sub-seed (up to
+eight times): when the chain of causes behind the fall has fewer than three steps, or no plot
+shape scores high enough.
 
-## The approach in one paragraph
+## 2. The mystery
 
-Generate a hidden history first, then let all story text be reports about that history. At
-world start a small simulation runs a few eras of the fortress's past: people and factions
-with traits, goals and relations take actions with preconditions and effects (found, seal,
-make a pact, betray, usurp, steal, flee, open the gate). The result is a graph of events and
-the facts they establish. The game then searches that graph for the best mystery, casts its
-actors as the arcs' named enemies, and distributes the facts as clues over chapters, traces,
-bounties and legendaries. Text comes from small grammars, one per kind of fact, with voices
-for the speaker. The player's motive decides which thread of the same history they follow.
+Ten plot shapes are patterns over the events. Each is scored; the best becomes the main
+mystery, the next two (if strong enough) colour it.
 
-## 1. The world's history
+| Shape | Pattern | Main shape in |
+|-------|---------|---------------|
+| Betrayal | the one blamed is the opener's sibling, spouse, parent or child (or sworn) | 15% |
+| The voice below | the opener heard a dead child calling from beneath the seal | 21% |
+| The wrong monster | the lie blames the thing below; a hand drew the bolts | 14% |
+| The cage was bait | the fortress was built to call it up, and the last of the builders opened it | 13% |
+| Pact | an old bargain fell due, and someone of the line paid it | 12% |
+| Your village | the true pages were hidden in the player's village | 11% |
+| Cover-up | nothing came up: the horror was people, and the chronicle is forged | 9% |
+| Mercy | the opener freed the ones below, who were wronged | 4% |
+| Usurpation | the opener took the fortress in the chaos | 3% |
+| The hidden heir | an heir of the wronged is alive | possible in 9%, never the main shape yet |
 
-### Data model
+The revelations of the nine chapters follow the shape's order: the lie (orders under the
+liars' seal), how the blamed one was punished, the crack in the lie (dying words of the one
+who told it), the forgery or the village's reason, the key and the kinship, the turn (who
+opened it), the root of the drive, the deepest cause (the founding's secret or the old
+bargain), and last the opener's own words, or the words of their heir or herald.
 
-All of this lives in a new pure module, `src/world/history.c` / `history.h`, in the world
-library next to `story.c`, testable without the game.
+## 3. Casting
 
-| Thing | Count per world | What it has |
-|-------|-----------------|-------------|
-| **Actor** | 20-40 | name, culture, faction, role (founder, smith, abbot, heir, soldier, merchant, thief, prisoner...), traits (ambitious, devout, greedy, loyal, cowardly, curious, cruel, merciful: 2 each), a goal, alive or dead and how, birth and death era |
-| **Faction** | 4-8 | name, culture, creed (keepers, miners, priests, soldiers, traders, heretics), stance to each other faction (-3..3), leader, strength, where it sits (domains) |
-| **Relation** | ~60 | between two actors: kin (parent, sibling, spouse), oath, debt, love, rivalry, grudge; with a strength |
-| **Artifact** | 6-12 | a key, a seal, a book, a crown, a map, a weapon: who made it, who held it when, where it is now. The world's legendaries become artifacts here |
-| **Place** | 8-16 | sites of events, tied to real domains and directions (the chapel, the third gate, the drowned vault) |
-| **Event** | 30-80 | type, era, actors in roles (agent, victim, witness, accomplice), place, artifacts, causes (earlier events), effects |
-| **Fact** | 100-250 | a proposition the event establishes: `OPENED(gate, Ysolde)`, `KIN(Ysolde, Marrec)`, `PAID(Ulric, fire at Cedbrook)`, `BELIEVES(Grey Abbots, BETRAYED(Marrec))`. Each fact has a truth value: true, false (a lie), or a belief |
+The first three arcs are the mystery, nine chapters:
 
-Facts are what the player learns. Everything the game says is one or more facts, rendered.
+- **Arc I, the liars:** a sworn blade (who held the bar of the chapel door in the player's
+  village), the one who punished the blamed (gaoler, or the steward's hand), and the one who
+  told the lie (the steward, the captain, or their heir).
+- **Arc II, those who know:** a captain, the merchant who sold silence (or the blamed one's
+  kin), and the one who knows the turn (the blamed one, alive in exile; the keeper whose key it
+  was; the witness).
+- **Arc III, the opener's side:** a follower, the opener's hand (the one who gave the key, or
+  kin), and the opener (returned, hidden, ruling) or the one who speaks for them.
 
-### The simulation
+Their cultures follow the arcs' directions as before, so names are made last, once the cast
+is known. Titles come from their part: "Steward of Edhold", "gaoler of the Last Host", "the
+Exile", "the One Who Came Back", "Herald of the Red Silence", "keeper of the Bone Key". After
+the third arc the old pattern continues (new Powers farther out), and their revelations
+carry the facts no chapter has told yet.
 
-Five to seven eras, matching the strata the world already names (the Sealing, the War of
-Fire, the Drowning, the First Hearths, the Deep Delving, the Last Siege, the Fall). Each era:
+**Legendaries:** each of the nine targets carries a different world legendary, chosen by the
+history, and its lore tells its bearer's deed ("Carried by Ishusut. Ishusut bricked Gereos into
+the wall at the Salt Door."). Domain lords never drop those nine; the old blades of the history
+get the lore of their making.
 
-1. **Needs.** Every living actor with a goal scores the actions open to it (`want`),
-   using its traits, relations and its faction's state. Greedy actors want the vault, devout
-   ones want the seal kept, ambitious heirs want the crown, aggrieved ones want revenge.
-2. **Actions.** A seeded random choice among the best few actions per era (not always the
-   best: people make mistakes). An action applies only if its preconditions hold.
-3. **Effects.** The action changes the world: relations shift (a betrayal turns kin into a
-   grudge), factions gain or lose strength, artifacts change hands, people die, places fall.
-   Each effect is recorded as facts, with the event as their cause.
-4. **Witnesses.** Some actors see the event (and remember it truly), some hear of it (and may
-   remember it wrong), and some factions retell it in their favour (lies, written down).
+**The motives** follow four threads through the same history: revenge goes from the one who
+held the bar to the one who gave the order and why; glory reads the Roll of the Dead, where
+each name stands beside its deed, and finds at the turn that it is the list of those who kept
+the secret; riches follows the hoard hidden in an old war and what was carried off on the
+night of the fall; truth collects the pages of the true account, and each page is a clue
+nobody else gets.
 
-The event library, about 30 types to start, each with preconditions, effects and the facts
-it records:
+## 4. Clues
 
-| Group | Events |
-|-------|--------|
-| Founding | found the fortress; dig too deep; find what is below; seal it; make the key |
-| Power | crown, usurp, abdicate, exile, assassinate, poison, rule as regent |
-| Faith | found a cult; declare a heresy; purge; martyr; claim a miracle |
-| Bonds | marry, swear an oath, betray an oath, adopt, disown, take a hostage |
-| Greed | hide a hoard, steal an artifact, forge a document, bribe, take a tithe |
-| War | declare war, besiege, massacre, surrender, sign a truce, break a truce |
-| The thing below | make a pact with it; feed it; hear it; become its herald; study it |
-| The fall | open the gate; fail to close it; flee; stay behind; burn the evidence |
-| The present | burn a village (the player's); put a name on the Roll; send hunters |
+Every fact gets clues by its weight: the key facts (who opened it, why, the crack in the lie,
+the founding's secret, the lie itself) at least three, important ones two, colour one. They
+are spread over:
 
-**The thing below is part of the history, not a constant.** It can be a sealed god, a
-prisoner, a plague, a machine of the builders, an older people, or nothing at all (see
-"Tone"). What it is decides which events are possible: one does not make a pact with a
-plague, and one does not feed nothing. The world's `sealed` name stays; what it means changes.
+| Source | Voice | Reliable? |
+|--------|-------|-----------|
+| Chapter targets | orders and papers on the body, dying words (first person when it was their deed) | true; the first is the lie itself, under the liars' seal |
+| Inscriptions | a faction's stone, old letters, something cut in a hurry, a grave ("Here lies Raeim, daughter of Amiim") | the liars' stones repeat the lie |
+| Notes of the dead | a diary, a letter never sent, a rumour ("They say...") | true, sometimes second hand |
+| Bounty boards | the lord's bounty, and what the poster wants known | the lie |
+| Legendaries | who carried it and what they did | true |
+| Hunters' orders | the leader of a band of hunters carries orders from the one who sent them | true |
+| Pages (truth motive) | a page of the true account, in the witness's hand | true |
 
-**Constraints that make the history a good one.** The simulation is rerun with the next
-sub-seed (up to 8 times) if the result is dull: fewer than three events in the chain that
-leads to the fall, no betrayal or reversal anywhere, or a cast where nobody important is alive
-in the present era. This keeps every world above a floor of interest.
+Traces carry clues by distance from the gate: the old ages and the lie are close, the turn
+and the reasons farther out (never nearer than the fourth chapter's target lies), and the
+frontier is favoured. Near the gate a little under half of the traces keep the old
+atmosphere lines ("Do not answer if it calls you by name"), farther out about a third. The same
+clue on two traces is worded differently.
 
-### The present era
+## 5. Text
 
-The last era is the player's. The survivors of the history, together with their heirs and
-followers, are alive in the dungeon now: these become the named enemies. Their goals continue:
-someone is still hiding a crime, someone still wants the vault, someone is still feeding the
-thing below, someone wants the player dead because of what the player might learn. The
-player's village and kin (from `story_personal`) are placed into the history in this era too:
-whoever burned the village did it for a reason the history explains.
+Every event type has a grammar in three forms with alternatives: told about the doer ("Ishusut
+bricked Gereos into the wall at the Salt Door"), told by the doer ("I walled Gereos in. Gereos
+did not scream") and told without knowing who ("Gereos was walled in alive for the Night of
+the Open Gate"). Some forms depend on details (hanged, walled in or driven into the deep; a
+king or a people; miners or the sick). The reasons for the fall and for the fire have their
+own grammars per drive, also in the first person for the opener's last words. The voices
+above wrap them. About 300 short templates in all. Everything is deterministic, under 320
+characters, and checked by the validator.
 
-## 2. Choosing the mystery
+## 6. The STORY tab: what you know
 
-The history usually holds several possible stories. A pattern search picks the best one as
-the world's metaplot. Each **plot shape** is a pattern over the event graph:
+A section between the missions and the lore: "WHAT YOU KNOW - N FACTS OF THE HISTORY OF
+EDHOLD", then the world's questions, open (?) or answered (!) with the answer under them:
 
-| Shape | Pattern | The turn |
-|-------|---------|----------|
-| **The betrayal** | A opened the gate; A had an oath or kinship to B; B is blamed | The one everyone blames is the victim |
-| **The usurpation** | A killed or exiled the rightful heir B; A rules; B's line survives | The ruler is a usurper, and the heir is someone you met |
-| **The pact** | A made a pact with the thing below; the price is due now | The fall was the payment, and there is more to pay |
-| **The cage was bait** | The fortress was built to lure something, not to hold it | The builders wanted it to come |
-| **The wrong monster** | The thing below is blamed; a person did it | Nothing came up through the gate; someone went down |
-| **The mercy** | A did a terrible thing to prevent a worse one | The villain was right, or half right |
-| **The cover-up** | The fall is a lie told by the faction that profits | The records are forged; the steles contradict the books |
-| **Your village** | The player's village or kin take part in the history | The fire was revenge for something your kin did |
-| **The forgotten heir** | An artifact proves someone's right to the fortress | It may be you, or the person you just killed |
+- Who opened the seal on the night of the fall?
+- Did the blamed one open it, as the liars say? (or: did the thing break out by itself?)
+- Why was the seal opened?
+- What lies beneath the fortress?
+- Why did your village burn?
+- Where is the opener now? (shown once you know who it was)
 
-Each candidate is scored on:
+A question is answered once a clue of its fact has been read: on a body, a stone, a note, a
+legendary, a page or the hunters' orders. A banner announces it ("A QUESTION ANSWERED: WHY
+DID VARFORD BURN?"). What is known is worked out from the lore read in the world, which is
+already saved, so nothing new needs saving for it.
 
-- **chain length** (the number of causal steps from the deep past to the present, 3-7 best);
-- **surprise** (how far the truth is from the first belief a player meets: a betrayal by kin
-  scores higher than one by a rival; a sympathetic villain higher than a cruel one);
-- **cast** (how many of its actors are alive in the present and can be met);
-- **fit** (whether the world can place its sites: directions, depth and height that the world
-  generator actually provides).
-
-The best shape becomes the **main mystery**, spread over the first three or four arcs. The next
-best one or two become **secondary threads** that the motives and the traces carry. After the
-mystery is solved, later arcs continue as today: new Powers, with smaller stories drawn from
-the rest of the history.
-
-## 3. Casting: who the named enemies are
-
-Today a chapter target is a generated name with a rank. In the new version, each arc's
-captain, general and Power are **actors from the mystery**, chosen by their role in it:
-
-- The **captain** is someone at the edge of the crime: a soldier who held the door, a clerk who
-  forged the ledger, a witness who sold their silence.
-- The **general** is closer: the accomplice, the hand that did it, the one who paid.
-- The **Power** is the one who decided, or the one the mystery turns on. Sometimes the Power is
-  not the culprit, and its death is the turn: "I kept the gate shut for forty years. Who do you
-  think opened it?"
-
-Their culture, home direction and monster family still come from the arc's direction, as
-today, so the world generator does not change; the history is generated with those
-constraints, so a northern Power is an actor of the northern culture. Their titles come from
-their role in the history ("the Oathbreaker", "Keeper of the Third Key", "the Last Heir").
-
-**Domain lords** come from the history's factions and their surviving members, so a lord's
-faction matches what the steles in its domain say about it.
-
-**Legendaries become artifacts.** The world's unique weapons (`arms_unique`) get their maker,
-owners and deeds from the history: the blade that cut the bar of the chapel door, the bow the
-usurper's brother carried. Their lore lines become clues. This also fixes the duplicate
-legendary drops seen in the runs, because each artifact has exactly one place in the present.
-
-## 4. Motives: four ways into one history
-
-The four motives stay, but each follows a thread of the same history instead of a fixed chain:
-
-- **Revenge** follows the burning of your village back through the history: the one who held
-  the bar, the one who paid, and why: a debt, an old grudge against your kin, or an order to
-  silence what your kin knew.
-- **Glory** follows the Roll of the Dead, which is now a real list in the history: who earned
-  each name, and what they did to earn it. Climbing it reveals that the Roll is also a record
-  of the crime.
-- **Riches** follows a hoard someone hid in the history: who hid it, from whom, who stole it
-  since. The map's pieces are held by the people who touched it.
-- **Truth** follows the books: the faction chronicles, a forged one among them, and the real
-  account. Truth hears the most lies and has to tell them apart.
-
-All four arrive at the main mystery by different roads, so two characters with different
-motives in the same world, or two players in co-op, tell each other different halves.
-
-## 5. Clues: how the truth is found
-
-Every fact of the mystery gets a **clue budget**: the important facts (the culprit, the turn)
-at least three clues each, minor ones one or two. The clues are spread over:
-
-| Source | Carries | Reliable? |
-|--------|---------|-----------|
-| Chapter targets: notes on the body, dying words | the fact the arc is about | yes, but dying people lie sometimes (by trait) |
-| Steles (inscriptions) | what a faction wanted remembered | partisan: a faction's steles praise it and blame its enemies |
-| Corpses' notes | what an adventurer saw | true, but partial |
-| Bounty boards | who someone wants dead, and why | the reason is true; the accusation may not be |
-| Legendaries' lore | who made and carried it | true |
-| Sanctum library (books bought or found) | chronicles of factions | one in each world is forged |
-| Hunters' patrols (from the story's target) | orders found on the leader | true; also, as the runs suggested, the target's whereabouts |
-
-**Contradiction is a feature.** When two sources disagree, at least one more source can settle
-it: a stele says the Grey Abbots sealed the gate in the Drowning; a corpse's note says the
-abbots' seal was broken from inside; a legendary's lore says who forged the abbots' key. The
-validator (below) checks that every contradiction has a resolution the player can find.
-
-**Placement.** Clues are put in traces by distance and direction: early facts close to the
-gate, later ones out along the arcs. A trace in a domain prefers facts about that domain's
-faction. About a third of traces still carry pure atmosphere ("Do not answer if it calls you by
-name"); the rest carry facts.
-
-**Order.** The chapter revelations follow the shape's order: first the false belief, then the
-crack in it, then the turn, then the cost. This replaces `REVEAL[4][3]`.
-
-## 6. Text: grammars, not fixed lines
-
-Each fact type has a small grammar (the existing `expand()` with `{key}` and `#sym#` is enough
-to start, extended with conditions) with several phrasings and **voices**:
-
-- **Witness**, first person: "I held the lamp while she turned the key. She was crying."
-- **Partisan**, a faction's stone: "Here the Grey Abbots held the seal for nine generations.
-  The traitor Marrec broke it."
-- **Record**, a ledger or an order: "Paid to Ulric: forty crowns, for the matter of
-  Cedbrook."
-- **Rumour**, uncertain: "They say the heir did not die in the flood."
-- **Dying words**, short and personal: "Tell Ysolde I kept the key. Tell her I am sorry."
-
-The voice is chosen from the source and the speaker's traits; the tone from the era and the
-culture (northern stones are terse, southern ones speak of fire, the old culture is formal).
-Each grammar has 4-8 alternatives per voice so that two worlds with the same shape still read
-differently. About 150 grammar entries in all to begin with; the existing steles and notes
-stay as atmosphere entries.
-
-The capitalisation fixes in `expand()` stay. Text stays within `STORY_TEXT` (320 bytes).
-
-## 7. The STORY tab: what you know
-
-The tab gets a section **"What you know"**: the mystery's facts the player has found, each as
-one line with its sources, grouped by person. Contradictions are shown as such ("The Grey
-Abbots say Marrec broke the seal. A dead delver says it was broken from inside."). Open
-questions are listed: "Who opened the gate?", "Where is the heir?" Each question closes when
-enough clues have been found, with a short banner. The arcs and the current target stay as
-they are.
-
-There are no menus for deduction and no accusations to make (unless player choices are
-included, see "Decisions"); the satisfaction is in the pieces fitting together.
-
-## 8. Tone
-
-Today every world is a cosmic horror: something below, older than the fortress. The history
-model allows more, chosen per world:
+## 7. Tone
 
 | Tone | Share | What lies below |
 |------|-------|-----------------|
-| Cosmic horror | ~55% | something old and hungry, as today |
-| Human drama | ~25% | nothing, or something harmless: the horror was people (a mine of prisoners, a plague hidden for profit, a war covered up) |
-| Tragedy | ~20% | something that was wronged: the thing below was the first people, imprisoned by the builders |
+| Cosmic horror | 59% | a hunger (fed, in two thirds of them) or a sleeper the fortress was built to lure |
+| Human drama | 22% | nothing: miners sealed in alive, or the plague-sick walled in, and a monster invented |
+| Tragedy | 19% | the first people of the mountain, or a king who was there first, walled in and named a monster |
 
 The monsters are the same in every world; what changes is what the dead say about them.
 
-## 9. Saves
+## 8. Saves
 
-The new story replaces the old only in **new worlds**. The world save gets a `story_gen` byte:
-0 for the existing generator, 1 for the new one. Old worlds keep the old story exactly, and the
-old code stays in `story.c` behind that byte. Per character, the save adds the fact ids the
-character has found (a bitset of 256 bits: 32 bytes) and the closed questions. Save format
-version 13.
+The world save has a byte for its story generator (version 13): 0 for worlds begun before,
+which keep the old story exactly, and 1 for new ones. Lore entries gained three kinds (a
+legendary's lore, hunters' orders, a page); everything else (the questions, what is known) is
+worked out from the lore.
 
-## 10. Tools and measurements
+## Measurements
 
-- `worldmap story` prints the world's history (eras, events, actors and relations), the
-  candidate shapes with their scores, the chosen mystery, the casting and the clue
-  placement, so a person can read the hidden truth of any seed.
-- `worldmap storystats N` generates N worlds (1,000 by default) and reports: the distribution
-  of shapes, tones and chain lengths; how many distinct culprits by role; the share of worlds
-  where the culprit is the first suspect (should be low); generation time; and the
-  validator's failures.
-- **The validator** (also in `test_worldgen`, over 200 seeds): every main fact has at least its
-  budget of clues; every contradiction has a resolving clue; no actor acts after their death;
-  each artifact is in one place; every cast actor has a reachable site; no text overflows.
-- **Bot story batches**: ten quester runs on new worlds, written up as in RUN_STORIES.md, to
-  read how the stories feel in play.
+`worldmap storystats 1000`:
 
-## Example histories
+| | |
+|---|---|
+| Time | 0.3-0.4 ms per world |
+| Validation | 0 of 1000 failed (key facts with three clues, every lie with a crack, no one acting after their death, cast distinct and alive, every question answerable, distinct names, every text fits) |
+| Distinct plots | 379 combinations of shape, drive, the blamed one's role, what lies below, the opener's fate and the village's reason |
+| The opener's drive | grief 30%, duty 17%, revenge 16%, pact 14%, truth 12%, faith 7%, power 4%, greed 1% |
+| The opener | keeper 34%, scribe 18%, heir 17%, priest 11%, merchant 8%, captain 7%, steward 4% |
+| The blamed one is the opener | 0% (betrayed by their own kin: 19%) |
+| Causal chain behind the fall | 3 steps 70%, 4 steps 18%, 5 steps 10% |
+| The village burned for | the pages 60%, a lesson 17%, the traitor's child 14%, the bargain 9% |
+| The player's grandparent in it | 15% |
+| Facts, clues | 34 facts and 89 clues per world |
+| Thrown away as dull | none in 66% of worlds, one in 17% |
 
-These are sketches written by hand of what the generator should produce, to make the target
-concrete. They are not output from a prototype; the first step of the plan builds that
-prototype, and its real output will replace these examples here.
+## Three worlds, as generated
 
-### Seed A: the betrayal (cosmic horror)
+Real output of `worldmap history` (village and kin as for player 1 of the dump: "Aldmere").
 
-*The history.* In the Sealing, the Grey Abbots built Cedmark over the Pale Hunger and made
-three keys. In the Drowning, Abbot Marrec and his sister Ysolde held two of them. Ysolde, devout
-and afraid, heard the Hunger speak her dead child's name. She came to believe the child was
-below, alive. In the Last Siege she stole Marrec's key, opened the seal and went down. The
-abbots blamed Marrec, who had argued for opening the vaults, and walled him in. Ysolde is the
-Power of the second arc: what came back up wearing her.
+### Morwall (seed 9): the cage was bait, with a betrayal
 
-*What the player meets.* Chapter 1: an abbot captain, carrying an order to keep Marrec's tomb
-shut. The steles near the gate, the abbots' own, all curse the traitor Marrec. Chapter 3: a
-corpse's note: "Marrec's key was still on his belt when they walled him in. So whose key turned
-in the seal?" Chapter 5, the turn, a legendary's lore: Ysolde's ring, "given by her brother,
-on the day she lost her child". Chapter 6, the Power, dying: "Marrec? He held my hand. I told
-him I would only look."
+Cosmic horror. Halowen of the Ninefold Kings built Morwall as a lure for the Sleeper, not a
+cage. In the Deep Delving the Salt Choir massacred the Lantern Host, whose Tameim bargained
+with the Sleeper for a hundred years without war. In the last years of Morwall, Ilezad and
+Amiim both lost a child "to the dark below the seal"; Ilezad began to hear the dead son
+calling. But it was Branewen, the last of the builders' line, who read the old books and
+learned what the fortress was for. On the Quiet Year Branewen stole the Amber Key from Amiim,
+Branewen's own brother, and opened the Ninth Door. The Grey Court named Amiim the traitor and
+drove him into the deep.
 
-*Motives.* Revenge: the village burned because it sheltered the last abbot who knew. Riches:
-the abbots' tithe hoard, which Marrec had wanted opened to feed the town.
+1. *Orders on the body, under the seal of the Grey Court: 'Amiim opened the seal and let the
+   Sleeper into Morwall. Let no one say otherwise.'*
+2. *'Radawei drove Amiim down into the deep for opening the seal.'*
+3. *Radawei, dying: 'I named Amiim. But Amiim's key was gone the day before. Amiim told me so.
+   I did not listen.'*
+4. *'Mirorin wrote the chronicle of the Quiet Year for the Grey Court, and wrote it false.'*
+5. *'Branewen stole the Amber Key from Amiim, Branewen's own brother.'*
+6. *Amiim (the Exile), dying: 'Branewen opened the Ninth Door with the Amber Key.'*
+7. *'Branewen found out what lies beneath Morwall.'*
+8. *Cedimund, dying: 'It is in the oldest books: Halowen never meant Morwall to hold the
+   Sleeper. It was built to call it up.'*
+9. *Branewen, dying: 'I opened it because that is what Morwall was built for. I learned what
+   lies below. I wish I had not. I only finished it.'*
 
-### Seed B: the cover-up (human drama)
+### Gerhold (seed 2025): the voice below, and the wrong monster
 
-*The history.* Aldburg's founders, the Salt Covenant, dug for silver with convicts. In the
-Deep Delving a collapse buried two hundred of them; the Covenant sealed the shaft with the men
-still alive and invented the Thing Below to keep anyone from digging them out. In the War of
-Fire the convicts' families rose; the Covenant crushed them and wrote the chronicle that the
-steles now repeat. The Fall was the families' heirs, opening the gate to let the truth out.
+Tragedy. The First Masons walled the first people of the mountain under Gerhold and called
+them the Red Silence. Ulwen, a keeper, lost a daughter, Cedohold, to the dark below the seal,
+and then heard the ones below singing, and Cedohold's voice among them. On the Last Siege
+Ulwen turned the Glass Key and went down to them. The Ninefold Host said no hand opened it.
 
-*What the player meets.* Steles warn of the Thing Below and praise the Covenant's sacrifice. A
-miner's note far down: "The knocking stops after three days. It always stopped after three
-days." A bounty board from the Covenant offers gold for "the agitator Varard", the Power of the
-first arc, who dies saying: "Go down. Count the bones. Then decide which of us is the monster."
-The Covenant's own chronicle, sold in the Sanctum library, is the forged source.
+1. *'No one opened the Salt Door. The Red Silence broke it from below. Let no one say
+   otherwise.'*
+3. *Branaric, dying: 'I said the Red Silence broke it from below. But the bolts were drawn back
+   from our side. Nothing below draws bolts.'*
+4. *'Aldmere burned as a lesson to those who ask about the Last Siege. Gerwyn gave the order.'*
+6. *Gwyiys, dying: 'Ulwen turned the Glass Key in the Salt Door on the night of the Last Siege.
+   I was there.'*
+7. *'Ulwen heard the ones below singing, and Cedohold's voice among them.'*
+9. *Aldowen, Herald of the Red Silence, dying: 'Ulwen opened it for Cedohold, the daughter Ulwen
+   had lost: Cedohold's voice called from below, and Ulwen went to answer.'*
 
-*Motives.* Glory: the Roll of the Dead is the Covenant's honour roll; the player's name will be
-carved next to the men who sealed the shaft. Truth: the real account is a convict's ledger of
-names.
+### Edhold (seed 1337, the README's screenshots): betrayal and cover-up
 
-### Seed C: your village (the pact)
+Human drama. The Grey Abbots shut the lower shaft on living miners and told the world of the
+Thing That Counts. Thyvik, a scribe, found out; on the Night of the Open Gate Thyvik opened the
+Salt Door with the Bone Key so the world would see the bones. The Grey Abbots blamed Thyvik's
+sister Gereos, whose key had been stolen the day before, and bricked her into the wall. The
+village burned because Gereos's child hid there; a gravestone near the gate reads "Here lies
+Gereos, mother of Ulawyn", and Ulawyn is the second arc's Power.
 
-*The history.* The player's grandmother was the Steward of Cedstead, a village that paid the
-fortress's tithe. In the Last Siege she made the pact with what lay below: the village would
-be spared if the gate stayed open one night every hundred years. The night came due this year.
-The ones who burned Cedstead were not raiders: they were the Steward's own order, trying to
-break the pact by destroying the village it protects.
+2. *'Ishusut bricked Gereos into the wall at the Salt Door.'*
+5. *Gerahold, dying: 'Gereos and Thyvik: one blood. Thyvik was Gereos's brother.'*
+8. *'The Grey Abbots shut the lower shaft on living miners and told the world of the Thing That
+   Counts.'*
+9. *Thyvik, the Hidden, dying: 'I opened it so the world would see the bones. No one came to
+   look.'*
 
-*What the player meets.* Revenge leads to the captain who held the chapel bar, who dies saying
-"We did it to save you." Then the Steward's seal on the general's orders. The turn: the
-player's kin is in the pact's text. The last arc of the mystery asks what the player will do
-about the night the gate opens, which is where player choices would come in.
+## What changed from the proposal
 
-## Plan
-
-| Step | Work | Days |
-|------|------|------|
-| 1 | `history.c`: data model, event library (30 types), simulation, dullness reruns; `worldmap story` prints it. **Checkpoint: real example histories for ten seeds go into this document for review.** | 4 |
-| 2 | Plot shapes as patterns, scoring, choosing the main mystery and secondary threads; tones | 3 |
-| 3 | Casting: chapter targets, domain lords, legendaries and the player's village from the history; motives as threads | 4 |
-| 4 | Clue budget and placement, grammars and voices (~150 entries), the validator | 4 |
-| 5 | The STORY tab's "What you know", save v13, `worldmap storystats`, a bot story batch and its write-up | 3 |
-| | **Total** | **~18 days** |
-
-Optional, after step 5: **player choices** (about 5 days, see below).
-
-Step 1 ends with a checkpoint: the generated histories are shown here before anything else is
-built on them, so the variety can be judged early and cheaply.
-
-## Risks
-
-- **Generated histories read like lists.** The simulation can produce events no one cares
-  about. Mitigated by the shape search (only the best chain is shown as the mystery), the
-  dullness reruns, and the checkpoint after step 1.
-- **Clues the player never finds.** Clues sit in traces that may not be visited. Mitigated by
-  the clue budget (three sources for each important fact), clues on chapter targets (which
-  every quester meets) and on hunters' patrols (which everyone meets).
-- **Contradictions that are just bugs.** The validator checks every contradiction for a
-  resolution; unintended ones are failures.
-- **Text that reads generated.** Short fragments help; so do voices tied to the speaker, and
-  a writing pass on the grammars after the first batch of real output.
-- **The generator grows too big.** The event library starts at 30 types; new types are added
-  only when the measurements show that a shape is missing.
+- Known facts are worked out from the lore already saved rather than kept as a bitset per
+  character; so they are per world, like the lore, and shared in co-op.
+- Domain lords and domain factions are as before; the history's factions have names of their
+  own. Lords do not come from the history.
+- The Sanctum library does not sell chronicles; the false chronicle and the true account reach
+  the player through clues, pages and dying words instead.
+- The duplicate legendary drops of the earlier runs turned out to be legendaries left lying
+  (a full bag) and dropped again later; the nine targets now carry nine different ones.
+- Hunters' orders are found on the band's leader when it dies.
 
 ## Decisions
 
-Two questions are open; the plan above assumes the defaults.
-
-1. **Player choices.** Default: *not in the first version.* The story is a mystery to uncover;
-   what the player does decides only what they learn. With choices (about 5 more days): a few
-   targets can be spared instead of killed (and tell you something, or betray you later), the
-   player can side with one faction in a war (which changes which lords are hostile and which
-   steles are true), and the main mystery ends with a decision (the pact in seed C: keep it,
-   break it, or take it over). Choices would be saved per world, and the history's present era
-   continues from them.
-2. **Tone.** Default: *mostly cosmic horror, with human dramas and tragedies mixed in*, in the
-   shares given under "Tone". The alternative is cosmic horror in every world, which keeps the
-   current mood but reduces the variety of the turns.
+1. **Player choices:** not in this version, as proposed. The story is a mystery to uncover;
+   what the player does decides only what they learn. Sparing targets, siding with a faction
+   and a closing decision would come next, about a week of work.
+2. **Tone:** mostly cosmic horror, with human dramas and tragedies mixed in, as proposed.
