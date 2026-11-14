@@ -81,6 +81,12 @@ static bool parse_args(Options *o, int argc, char **argv) {
         else if (!strcmp(a, "--bot") && i + 1 < argc) o->bot = argv[++i];
         else if (!strcmp(a, "--bot-log") && i + 1 < argc) o->bot_log = argv[++i];
         else if (!strcmp(a, "--bot-minutes") && i + 1 < argc) o->bot_minutes = strtof(argv[++i], NULL);
+        else if (!strcmp(a, "--capture") && i + 1 < argc) o->capture = argv[++i];
+        else if (!strcmp(a, "--capture-start") && i + 1 < argc) o->capture_start = strtof(argv[++i], NULL);
+        else if (!strcmp(a, "--capture-seconds") && i + 1 < argc) o->capture_seconds = strtof(argv[++i], NULL);
+        else if (!strcmp(a, "--capture-fps") && i + 1 < argc) o->capture_fps = strtof(argv[++i], NULL);
+        else if (!strcmp(a, "--capture-orbit") && i + 1 < argc) o->capture_orbit = strtof(argv[++i], NULL);
+        else if (!strcmp(a, "--capture-drift") && i + 1 < argc) o->capture_drift = strtof(argv[++i], NULL);
         else if (!strcmp(a, "--sound")) o->sound = true;
         else if (!strcmp(a, "--chapter") && i + 1 < argc) o->demo_chapter = atoi(argv[++i]) - 1;
         else {
@@ -1101,6 +1107,18 @@ static void screenshot_step(App *a, float frame_dt) {
             p1->st.weapon = wc;
         } else if (g_demo_weapon) SDL_Log("--weapon: not understood: %s", g_demo_weapon);
     }
+    if (g->opt.capture && a->shot_wait > g->opt.capture_start) {
+        static int shots, tick;
+        float fps = g->opt.capture_fps > 0 ? g->opt.capture_fps : 30.0f;
+        int per = (int)(60.0f / fps + 0.5f);
+        if (tick++ % per == 0) {
+            char path[512];
+            snprintf(path, sizeof path, "%s/%05d.bmp", g->opt.capture, shots);
+            save_screenshot(g, path);
+            if (++shots >= (int)(g->opt.capture_seconds * fps)) a->running = false;
+        }
+        return;
+    }
     const char *kind = g_demo_kind ? g_demo_kind : "";
     bool fight = !strcmp(kind, "combat") || !strcmp(kind, "sword") || !strcmp(kind, "death") || !strcmp(kind, "coop") ||
                  !strcmp(kind, "impact");
@@ -1243,6 +1261,11 @@ static void frame(void *user) {
         in.down = in.crouch;
         in.sprint = keys[SDL_SCANCODE_LSHIFT];
     }
+    if (g->opt.capture && g->opt.shot && !g->opt.bot && a->shot_wait > g->opt.capture_start) {
+        /* footage of a demo: a slow turn and a steady walk (or flight) */
+        g->players[0].pl.yaw += g->opt.capture_orbit * (PI_F / 180.0f) * frame_dt;
+        in.move_z = g->opt.capture_drift;
+    }
     vec3 centres[MAX_PLAYERS];
     int ncentres = game_centres(g, centres);
     chunkmap_update(&g->map, centres, ncentres);
@@ -1259,6 +1282,26 @@ static void frame(void *user) {
                 g->players[0].st.equipped[wc] = it;
                 g->players[0].st.weapon = wc;
             }
+        }
+        if (g->opt.capture && g->time >= g->opt.capture_start) {
+            /* footage: steady steps, every frame drawn and saved */
+            static int shots, per;
+            float fps = g->opt.capture_fps > 0 ? g->opt.capture_fps : 30.0f;
+            if (!per) per = (int)(60.0f / fps + 0.5f);
+            if (!chunkmap_settled(&g->map, player_eye(&g->players[0].pl))) return;
+            for (int k = 0; k < per; k++) {
+                if (!bot_step(g, &in, DT)) { a->running = false; return; }
+                game_update(g, &in, DT);
+            }
+            for (int i = 0; i < MAX_PLAYERS; i++)
+                if (g->players[i].active) game_update_atmosphere(g, &g->players[i], per * DT);
+            game_render(g);
+            char path[512];
+            snprintf(path, sizeof path, "%s/%05d.bmp", g->opt.capture, shots);
+            save_screenshot(g, path);
+            SDL_GL_SwapWindow(a->win);
+            if (++shots >= (int)(g->opt.capture_seconds * fps)) a->running = false;
+            return;
         }
         u64 t0 = SDL_GetTicksNS();
         while (SDL_GetTicksNS() - t0 < 30000000ull && chunkmap_settled(&g->map, player_eye(&g->players[0].pl))) {

@@ -7,6 +7,7 @@
 #   tools/screenshots.sh forge_tab food   only these
 #   OUT=/tmp/shots tools/screenshots.sh   write somewhere else
 #   BIN=build/fortress_crawl              the game
+#   SIZE=1920x1080 OUT=...                every shot at this size (social media: 1920x1080, 1080x1350)
 #
 # A shot that needs a place uses --demo place (the open floor of the chunk at --pos) or an
 # exact --pos / --look; positions come from `build/worldmap structs 12` for seed 1337.
@@ -25,6 +26,7 @@ shot() {
     local name=$1 size=960x540
     shift
     if [[ "$1" =~ ^[0-9]+x[0-9]+$ ]]; then size=$1; shift; fi
+    [ -n "$SIZE" ] && size=$SIZE
     want "$name" || return 0
     while [ "$(jobs -r | wc -l)" -ge "${PAR:-4}" ]; do sleep 0.5; done   # a few at a time
     (

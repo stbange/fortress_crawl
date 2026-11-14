@@ -306,6 +306,12 @@ typedef struct Options {
     const char *bot;  /* --bot STYLE: a playtest bot plays player 1 (bot.c) */
     const char *bot_log;
     float bot_minutes;
+    /* --capture dir: with --bot, plays at full speed until --capture-start seconds of game time,
+     * then writes dir/NNNNN.bmp, one frame per 1/--capture-fps seconds of game time (steady,
+     * whatever the machine's speed), for --capture-seconds seconds: footage for ffmpeg */
+    const char *capture;
+    float capture_start, capture_seconds, capture_fps;
+    float capture_orbit, capture_drift; /* demos: turn the view this many degrees a second; walk or fly forward (0..1) */
 } Options;
 
 /* On-screen touch controls for player 1 (phones and tablets). */
