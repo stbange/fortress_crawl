@@ -1340,3 +1340,163 @@ bool history_validate(History *h) {
     }
     return h->problems[0] == 0;
 }
+
+/* ---------- what the player did: standing, grudges, and the arcs that follow ---------- */
+
+int history_enemy_faction(const History *h, int f) {
+    if (f == h->arc_faction[0]) return h->arc_faction[2] != f ? h->arc_faction[2] : h->arc_faction[1];
+    return h->arc_faction[0];
+}
+
+int history_standing(const History *h, const HLedger *l, int faction) {
+    int s = 0;
+    for (int c = 0; c < H_CAST; c++) {
+        if (!(l->done & (1u << c))) continue;
+        int f = h->actor[h->cast[c]].faction;
+        switch (l->choice[c]) {
+        case CH_KILL: s -= f == faction ? 2 : 0; break;
+        case CH_SPARE: s += f == faction ? 1 : 0; break;
+        default: /* a bargain: friends of one side, enemies of the other */
+            if (f == faction) s += 3;
+            else if (history_enemy_faction(h, f) == faction) s -= 3;
+            break;
+        }
+    }
+    return s;
+}
+
+bool history_spare_betrays(const History *h, int chapter) {
+    const HActor *a = &h->actor[h->cast[chapter]];
+    int bad = has(a, TT_CRUEL) + has(a, TT_AMBITIOUS) + has(a, TT_PROUD) + has(a, TT_GREEDY);
+    int good = has(a, TT_LOYAL) + has(a, TT_MERCIFUL) + has(a, TT_DEVOUT);
+    if (bad != good) return bad > good;
+    return hash_unit(hash3(h->seed, chapter, 0, 0, 0xBE7A)) < 0.5f;
+}
+
+/* The killed target that weighs most: a Power before a general before a captain, later first. */
+static int heaviest_kill(const History *h, const HLedger *l) {
+    int best = -1, score = -1;
+    for (int c = 0; c < H_CAST - 1; c++) { /* (the finale has an arc of its own) */
+        if (!(l->done & (1u << c)) || l->choice[c] != CH_KILL) continue;
+        int s = (c % 3) * 10 + c;
+        if (s > score) { score = s; best = c; }
+    }
+    (void)h;
+    return best;
+}
+
+static const char *rel_name(const History *h, u8 a, u8 b) {
+    /* what a is to b */
+    const HActor *x = &h->actor[a];
+    bool f = x->female;
+    const HActor *y = &h->actor[b];
+    if (y->sibling == a) return f ? "sister" : "brother";
+    if (y->spouse == a) return f ? "widow" : "widower";
+    if (y->child == a) return f ? "daughter" : "son";
+    if (y->parent == a) return f ? "mother" : "father";
+    return "sworn friend";
+}
+
+/* A name for someone new: never one the history already uses. */
+static void fresh_name(const History *h, u64 seed, int cult, char *out) {
+    for (int t = 0; t < 16; t++) {
+        story_make_name(mix64(seed + (u64)t * 0x9E37), cult, out, H_NAME);
+        bool clash = false;
+        for (int i = 0; i < h->nactors && !clash; i++) clash = !strcmp(h->actor[i].name, out);
+        if (!clash) return;
+    }
+}
+
+void history_sequel(const History *h, const HLedger *l, int chapter, HSequel *out) {
+    memset(out, 0, sizeof *out);
+    int arc = chapter / 3, rank = chapter % 3;
+    out->culture = (u8)story_arc_culture(h->seed, arc);
+    out->victim_ch = H_NONE;
+    u64 bits = (u64)l->done | (u64)l->choice[0] << 16 | (u64)l->choice[2] << 18 | (u64)l->choice[5] << 20 | (u64)l->choice[8] << 22;
+    char power[H_NAME] = "", title[H_NAME] = "";
+    if (arc == 3) {
+        int v = heaviest_kill(h, l);
+        if (v >= 0) {
+            out->cause = SQ_AVENGE;
+            out->victim_ch = (u8)v;
+            u8 va = h->cast[v];
+            snprintf(out->victim, H_NAME, "%s", h->actor[va].name);
+            out->faction[0] = 0;
+            snprintf(out->faction, H_NAME, "%s", h->faction[h->actor[va].faction].name);
+            /* their kin, if any lives and is not in the story already, else one who swore by them */
+            u8 k = living_kin(h, va, h->cast, H_CAST);
+            if (k != H_NONE) {
+                snprintf(power, H_NAME, "%s", h->actor[k].name);
+                snprintf(out->rel, sizeof out->rel, "%s", rel_name(h, k, va));
+            } else {
+                fresh_name(h, hash3(h->seed, 31, (int)bits, 0, 0x5E91), out->culture, power);
+                snprintf(out->rel, sizeof out->rel, "sworn friend");
+            }
+            snprintf(title, H_NAME, "%.16s of %.28s", out->rel, out->victim);
+        } else {
+            /* no blood on your hands: a mercy that bites, or an enemy of your friends */
+            int b = -1;
+            for (int c = 0; c < H_CAST && b < 0; c++)
+                if ((l->done & (1u << c)) && l->choice[c] == CH_SPARE && history_spare_betrays(h, c)) b = c;
+            if (b >= 0) {
+                out->cause = SQ_BETRAYED;
+                out->victim_ch = (u8)b;
+                snprintf(power, H_NAME, "%s", h->actor[h->cast[b]].name);
+                snprintf(out->victim, H_NAME, "%s", power);
+                snprintf(title, H_NAME, "who you let live");
+                snprintf(out->faction, H_NAME, "%s", h->faction[h->actor[h->cast[b]].faction].name);
+            } else {
+                out->cause = SQ_ENEMY;
+                int f = h->arc_faction[0];
+                for (int c = 0; c < H_CAST; c++)
+                    if ((l->done & (1u << c)) && l->choice[c] == CH_BARGAIN) { f = history_enemy_faction(h, h->actor[h->cast[c]].faction); out->victim_ch = (u8)c; }
+                snprintf(out->faction, H_NAME, "%s", h->faction[f].name);
+                if (out->victim_ch != H_NONE) snprintf(out->victim, H_NAME, "%s", h->actor[h->cast[out->victim_ch]].name);
+                fresh_name(h, hash3(h->seed, 32, (int)bits, 0, 0x5E92), out->culture, power);
+                snprintf(title, H_NAME, "marshal of %.36s", out->faction);
+            }
+        }
+    } else {
+        /* what the end made: the finale's choice */
+        u8 O = h->opener;
+        int fin = (l->done & (1u << 8)) ? l->choice[8] : CH_KILL;
+        snprintf(out->victim, H_NAME, "%s", h->actor[h->cast[8]].name);
+        out->victim_ch = 8;
+        if (fin == CH_KILL) {
+            out->cause = SQ_HEIR;
+            u8 k = living_kin(h, h->cast[8], h->cast, H_CAST);
+            if (k == H_NONE && O != h->cast[8]) k = living_kin(h, O, h->cast, H_CAST);
+            if (k != H_NONE) snprintf(power, H_NAME, "%s", h->actor[k].name);
+            else fresh_name(h, hash3(h->seed, 41, (int)bits, 0, 0x5E93), out->culture, power);
+            snprintf(title, H_NAME, "heir of %.38s", out->victim);
+            snprintf(out->faction, H_NAME, "%s", h->faction[h->actor[h->cast[8]].faction].name);
+        } else if (fin == CH_SPARE) {
+            out->cause = h->tone == TONE_HORROR ? SQ_HERALD : h->tone == TONE_TRAGEDY ? SQ_FREED : SQ_PURGE;
+            fresh_name(h, hash3(h->seed, 42, (int)bits, 0, 0x5E94), out->cause == SQ_FREED ? 0 : out->culture, power);
+            if (out->cause == SQ_HERALD) snprintf(title, H_NAME, "Herald of %.34s", h->sealed);
+            else if (out->cause == SQ_FREED) snprintf(title, H_NAME, "who came up from below");
+            else snprintf(title, H_NAME, "Steward of %.34s", h->fortress);
+            snprintf(out->faction, H_NAME, "%s", h->faction[h->cover].name);
+        } else {
+            out->cause = SQ_KEY;
+            int worst = h->arc_faction[0], ws = 1 << 20;
+            for (int f = 0; f < h->nfactions; f++) {
+                int s = history_standing(h, l, f);
+                if (s < ws) { ws = s; worst = f; }
+            }
+            snprintf(out->faction, H_NAME, "%s", h->faction[worst].name);
+            fresh_name(h, hash3(h->seed, 43, (int)bits, 0, 0x5E95), out->culture, power);
+            snprintf(title, H_NAME, "claimant of %.34s", h->fortress);
+        }
+    }
+    snprintf(out->power, H_NAME, "%s", power);
+    if (rank == 2) {
+        snprintf(out->name, H_NAME, "%s", power);
+        snprintf(out->title, H_NAME, "%s", title);
+    } else {
+        fresh_name(h, hash3(h->seed, chapter, (int)bits, 0, 0x5E9F), out->culture, out->name);
+        if (!strcmp(out->name, power)) out->name[0] = (char)(out->name[0] == 'Z' ? 'A' : out->name[0] + 1);
+        if (rank == 0) snprintf(out->title, H_NAME, "sworn to %.38s", power);
+        else snprintf(out->title, H_NAME, "the hand of %.34s", power);
+    }
+}

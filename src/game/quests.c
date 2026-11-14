@@ -73,10 +73,13 @@ static const char *lore_text(Game *g, LoreEntry *e) {
         char buf[STORY_TEXT];
         const History *h = g->world.story_gen ? history_of(g->world.seed) : NULL;
         buf[0] = 0;
-        if (e->kind == LORE_REVEAL) story_revelation(&g->world, e->a, NULL, buf, sizeof buf);
+        const Deed *dd = h && e->kind == LORE_REVEAL && e->a >= 0 && e->a < H_CAST ? story_chapter_deed(&g->world, e->a) : NULL;
+        if (dd && dd->choice != CH_KILL) history_reveal_spoken(h, e->a, NULL, buf, sizeof buf); /* they lived to tell it */
+        else if (e->kind == LORE_REVEAL) story_revelation(&g->world, e->a, NULL, buf, sizeof buf);
         else if (e->kind == LORE_LEGEND) story_legend_lore(&g->world, e->a, buf, sizeof buf);
         else if (e->kind == LORE_ORDERS) story_orders(&g->world, e->a, buf, sizeof buf);
         else if (e->kind == LORE_PAGE && h && e->a >= 0 && e->a < H_CAST) history_clue_text(h, h->page[e->a], NULL, buf, sizeof buf);
+        else if (e->kind == LORE_RESIDENT && h && e->a >= 0 && e->a < H_CAST) history_resident_line(h, e->a, NULL, buf, sizeof buf);
         else if (e->kind == LORE_TRACE) story_trace_text(&g->world, e->a, e->b, e->c, buf, sizeof buf);
         e->text = malloc(strlen(buf) + 1);
         memcpy(e->text, buf, strlen(buf) + 1);
@@ -268,18 +271,46 @@ static void ensure_target(Game *g, PlayerSlot *ps) {
 
 /* ---------- chapters ---------- */
 
-static void chapter_complete(Game *g, PlayerSlot *ps, bool other_killed) {
+enum { HOW_KILL, HOW_SPARE, HOW_BARGAIN, HOW_OTHER };
+
+static void chapter_complete(Game *g, PlayerSlot *ps, int how) {
     Stats *s = &ps->st;
     int m = s->motive - 1, ch = s->chapter;
     Personal p = personal_of(g, ps);
-    char done[STORY_TEXT], rev[STORY_TEXT], text[STORY_TEXT * 2 + 64], hook[STORY_TEXT];
-    story_chapter_done(&g->world, m, ch, &p, done, sizeof done);
+    char done[STORY_TEXT], rev[STORY_TEXT], text[STORY_TEXT * 2 + 64], hook[STORY_TEXT], then[STORY_TEXT] = "";
+    const History *h = g->world.story_gen ? history_of(g->world.seed) : NULL;
+    HPersonal hp = { p.village, p.kin };
+    Named nx;
+    story_chapter_target(&g->world, ch + 1, &nx);
+    if (h && ch < H_CAST && (how == HOW_SPARE || how == HOW_BARGAIN)) history_choice_done(h, ch, how, &hp, nx.name, done, sizeof done);
+    else story_chapter_done(&g->world, m, ch, &p, done, sizeof done);
     sfx_player(g, ps, SFX_CHAPTER_DONE, 1.0f);
     story_revelation(&g->world, ch, &p, rev, sizeof rev);
+    if (h && ch < H_CAST && (how == HOW_SPARE || how == HOW_BARGAIN)) history_reveal_spoken(h, ch, &hp, rev, sizeof rev);
     lore_add(g, LORE_REVEAL, ch, 0, 0);
-    if (m == MOTIVE_TRUTH && g->world.story_gen && ch < H_CAST) lore_add(g, LORE_PAGE, ch, 0, 0); /* the page is read too */
-    if (other_killed) snprintf(text, sizeof text, "Someone was faster: %.40s is already dead. %.200s %.200s", ps->target.name, done, rev);
-    else snprintf(text, sizeof text, "%.300s %.300s", done, rev);
+    if (m == MOTIVE_TRUTH && h && ch < H_CAST) lore_add(g, LORE_PAGE, ch, 0, 0); /* the page is read too */
+    if (how == HOW_OTHER) {
+        const Deed *d = h && ch < H_CAST ? story_chapter_deed(&g->world, ch) : NULL;
+        const char *verb = !d || d->choice == CH_KILL ? "is already dead" : d->choice == CH_SPARE ? "was spared by someone else" : "has made a deal with someone else";
+        snprintf(text, sizeof text, "Someone was faster: %.40s %s. %.300s", ps->target.name, verb, rev);
+    } else snprintf(text, sizeof text, "%.300s %.300s", done, rev);
+    if (how == HOW_SPARE && h && ch < H_CAST && ch != 8) {
+        /* the spared tell more */
+        char fact[STORY_TEXT];
+        history_fact_line(h, h->clue[h->page[ch]].fact, &hp, fact, sizeof fact);
+        snprintf(then, sizeof then, "%.40s adds, quietly: '%.240s'", ps->target.name, fact);
+        lore_add(g, LORE_PAGE, ch, 0, 0);
+    }
+    if (h && ch == 8 && how != HOW_OTHER) {
+        const Deed *d = story_chapter_deed(&g->world, 8);
+        history_epilogue(h, d ? d->choice : CH_KILL, &hp, then, sizeof then);
+    }
+    if (m == MOTIVE_GLORY && how != HOW_OTHER && h) {
+        char ep[64];
+        story_epithet(&g->world, ep, sizeof ep);
+        size_t len = strlen(text);
+        if (ep[0] && len + 60 < sizeof text) snprintf(text + len, sizeof text - len, " On the Roll they carve you as %s.", ep);
+    }
     /* the motive decides the reward */
     game_add_xp(g, ps, 120.0f * (ch + 1));
     vec3 at = v3_add(ps->pl.pos, v3(0, 0.5f, 0));
@@ -319,7 +350,7 @@ static void chapter_complete(Game *g, PlayerSlot *ps, bool other_killed) {
     ps->target_chapter = 0;
     ps->story_quiet = 0;
     story_chapter_hook(&g->world, m, s->chapter, &p, hook, sizeof hook);
-    show_msg(ps, text, hook);
+    show_msg(ps, text, then[0] ? then : hook);
     g->autosave_timer = 1e9f;
 }
 
@@ -434,6 +465,20 @@ bool story_collect_quest(Game *g, PlayerSlot *ps, Pickup *p) {
 void story_on_kill(Game *g, Monster *mo) {
     u64 key = mo->story_key;
     looted_mark(g, key);
+    /* the ledger: a chapter target or a domain lord killed */
+    int by = mo->last_hitter >= 0 && mo->last_hitter < MAX_PLAYERS ? mo->last_hitter : 0;
+    if (mo->named_kind - 1 == NK_LORD) {
+        Domain d;
+        story_domain(&g->world, floordiv((int)floorf(mo->pos.x), CHUNK), floordiv((int)floorf(mo->pos.y), CHUNK), floordiv((int)floorf(mo->pos.z), CHUNK), &d);
+        story_deed(&g->world, DK_LORD, 0, CH_KILL, by, key, d.gx, d.gy, d.gz);
+        for (int i = 0; i < MAX_PLAYERS; i++) g->players[i].domain_id = 0; /* the domain banner shows what changed */
+    } else if (g->world.story_gen) {
+        int c = story_chapter_of_key(&g->world, key);
+        if (c >= 0 && c < H_CAST) {
+            story_deed(&g->world, DK_CHAPTER, c, CH_KILL, by, key, 0, 0, 0);
+            if (g_note_hook) g_note_hook(by, "CHOICE", mo->parley == 2 ? "killed (after it yielded)" : "killed");
+        }
+    }
     for (int i = 0; i < MAX_PLAYERS; i++) {
         PlayerSlot *ps = &g->players[i];
         if (!ps->active) continue;
@@ -447,7 +492,7 @@ void story_on_kill(Game *g, Monster *mo) {
             snprintf(what, sizeof what, "Bounty paid: %s", mo->name);
             mission_reward(g, ps, &done, what);
         }
-        if (chapter) chapter_complete(g, ps, false);
+        if (chapter) chapter_complete(g, ps, HOW_KILL);
         else if (!m && v3_len(v3_sub(ps->pl.pos, mo->pos)) < 40.0f) {
             char buf[96];
             snprintf(buf, sizeof buf, "%s IS DEAD", mo->name);
@@ -469,6 +514,250 @@ void story_orders_found(Game *g, Monster *mo) {
     }
 }
 
+/* ---------- choices: a chapter target that yields (docs/STORY_CHOICES.md) ---------- */
+
+static vec3 mon_centre(const Monster *m) { return v3_add(m->pos, v3(0, MONSTERS[m->type].h * m->scale * 0.5f, 0)); }
+
+bool story_parley_open(const PlayerSlot *ps) { return ps->parley > 0; }
+
+bool story_parley_begin(Game *g, Monster *m) {
+    if (!g->world.story_gen || m->parley || !m->story_key) return false;
+    int c = story_chapter_of_key(&g->world, m->story_key);
+    if (c < 0 || c >= H_CAST || story_chapter_deed(&g->world, c)) return false;
+    m->parley = 1;
+    m->awake = false;
+    m->state = MS_IDLE;
+    m->vel = v3(0, 0, 0);
+    m->burn_t = m->poison_t = 0;
+    char buf[96];
+    snprintf(buf, sizeof buf, "%s YIELDS - GO TO THEM AND CHOOSE", m->name);
+    upper(buf);
+    for (int i = 0; i < MAX_PLAYERS; i++) {
+        PlayerSlot *ps = &g->players[i];
+        if (ps->active && v3_len(v3_sub(ps->pl.pos, m->pos)) < 40.0f) game_banner(ps, buf);
+    }
+    flash_add(g, mon_centre(m), v3(0.9f, 0.85f, 0.7f), 6.0f, 0.4f);
+    return true;
+}
+
+static Monster *parley_monster(Game *g, const PlayerSlot *ps) {
+    if (ps->parley <= 0 || ps->parley > MAX_MONSTERS) return NULL;
+    Monster *m = &g->mons[ps->parley - 1];
+    return m->alive && m->parley == 1 ? m : NULL;
+}
+
+/* Opens the choice for whoever stands near a yielded target, and closes it if they leave. */
+static void update_parley(Game *g) {
+    g->parley_hold = false;
+    for (int i = 0; i < MAX_PLAYERS; i++) {
+        PlayerSlot *ps = &g->players[i];
+        if (!ps->active) continue;
+        if (ps->parley) {
+            Monster *m = parley_monster(g, ps);
+            if (!m || v3_len(v3_sub(m->pos, ps->pl.pos)) > 9.0f || ps->st.dead) ps->parley = 0;
+            else g->parley_hold = g->nplayers > 1;
+            continue;
+        }
+        if (ps->st.dead || ps->show_skills || ps->show_map || story_motive_pending(g, ps)) continue;
+        for (int k = 0; k < MAX_MONSTERS; k++) {
+            Monster *m = &g->mons[k];
+            if (!m->alive || m->parley != 1 || v3_len(v3_sub(m->pos, ps->pl.pos)) > 6.0f + m->scale) continue;
+            bool taken = false; /* one player chooses */
+            for (int j = 0; j < MAX_PLAYERS; j++) taken |= j != i && g->players[j].active && g->players[j].parley == k + 1;
+            if (taken) continue;
+            ps->parley = k + 1;
+            ps->parley_sel = 0;
+            break;
+        }
+    }
+}
+
+void story_parley_choose(Game *g, PlayerSlot *ps, int choice) {
+    Monster *m = parley_monster(g, ps);
+    ps->parley = 0;
+    if (!m) return;
+    int c = story_chapter_of_key(&g->world, m->story_key);
+    if (c < 0 || c >= H_CAST) { m->parley = 2; return; }
+    choice = CLAMPI(choice, 0, CH_COUNT - 1);
+    story_deed(&g->world, DK_CHAPTER, c, choice, ps->index, m->story_key, 0, 0, 0);
+    static const char *const SAY[CH_COUNT] = { "killed", "spared", "bargained with" };
+    static const char *const SAY8[CH_COUNT] = { "killed", "spared: let them finish it", "took the key" };
+    if (g_note_hook) {
+        char buf[160];
+        snprintf(buf, sizeof buf, "chapter %d: %s %s", c + 1, c == 8 ? SAY8[choice] : SAY[choice], m->name);
+        g_note_hook(ps->index, "CHOICE", buf);
+    }
+    if (choice == CH_KILL) {
+        m->parley = 2;
+        monster_damage(g, m, m->hp + m->maxhp, ps->pl.pos, 0.0f, ps->index);
+        return;
+    }
+    /* spared or bought off: it leaves the story alive */
+    vec3 cpos = mon_centre(m);
+    particles_burst(g, cpos, v3(0.9f, 0.85f, 0.7f), 16, 2.5f, 0.06f, true);
+    m->alive = false;
+    looted_mark(g, m->story_key);
+    if (choice == CH_BARGAIN) {
+        if (c == 8) {
+            g->sanctum.keystones += 3; /* the key, and what it opens */
+            game_banner(ps, "THE KEY IS YOURS - 3 KEYSTONES");
+        } else {
+            ps->st.gold += 100 * (c + 1);
+            int id = story_legend_id(&g->world, m->story_key);
+            u64 key = mix64(g->world.seed ^ 0x11E6ULL ^ (u64)id * 0x9E3779B9ULL) | 1;
+            if (!looted_has(g, key)) {
+                Item it = arms_unique(id, m->level + 3.0f);
+                pickup_spawn(g, PK_WEAPON, v3_add(m->pos, v3(0, 0.6f, 0)), 0, &it, key, 0);
+            }
+            char buf[96];
+            snprintf(buf, sizeof buf, "%d GOLD AND %s", 100 * (c + 1), arms_unique_name(id));
+            upper(buf);
+            game_banner(ps, buf);
+        }
+    }
+    for (int i = 0; i < MAX_PLAYERS; i++) {
+        PlayerSlot *p = &g->players[i];
+        if (!p->active || !p->st.motive) continue;
+        ensure_target(g, p);
+        if (p->target.key == m->story_key) chapter_complete(g, p, p == ps ? choice : HOW_OTHER);
+    }
+}
+
+#define PARLEY_ROWS CH_COUNT
+
+static void parley_row(int W, int H, int i, float *x, float *y, float *w, float *h) {
+    *w = (float)MINI(W - 16, 420);
+    *h = W < 440 ? 26.0f : 34.0f;
+    *x = (W - *w) * 0.5f;
+    *y = H * 0.4f + i * (*h + 4);
+}
+
+void story_parley_nav(Game *g, PlayerSlot *ps, int nav) {
+    if (nav == NAV_UP) ps->parley_sel = (ps->parley_sel + PARLEY_ROWS - 1) % PARLEY_ROWS;
+    else if (nav == NAV_DOWN) ps->parley_sel = (ps->parley_sel + 1) % PARLEY_ROWS;
+    else if (nav == NAV_BUY) story_parley_choose(g, ps, ps->parley_sel);
+}
+
+void story_parley_tap(Game *g, PlayerSlot *ps, int W, int H, float tx, float ty) {
+    for (int i = 0; i < PARLEY_ROWS; i++) {
+        float x, y, w, h;
+        parley_row(W, H, i, &x, &y, &w, &h);
+        if (tx >= x && tx < x + w && ty >= y && ty < y + h) {
+            if (ps->parley_sel == i) story_parley_choose(g, ps, i);
+            else ps->parley_sel = i;
+        }
+    }
+}
+
+void story_draw_parley(Game *g, PlayerSlot *ps, int W, int H) {
+    Monster *m = parley_monster(g, ps);
+    if (!m) return;
+    const History *h = history_of(g->world.seed);
+    int c = story_chapter_of_key(&g->world, m->story_key);
+    if (c < 0 || c >= H_CAST) return;
+    Personal p = personal_of(g, ps);
+    HPersonal hp = { p.village, p.kin };
+    char plea[STORY_TEXT], desc[CH_COUNT][STORY_TEXT_H];
+    history_parley(h, c, &hp, plea, sizeof plea, desc);
+    bool compact = W < 440;
+    batch2d_begin(W, H);
+    batch2d_rect(0, 0, (float)W, (float)H, 0.01f, 0.008f, 0.012f, 0.7f);
+    for (int i = 0; i < PARLEY_ROWS; i++) {
+        float x, y, w, rh;
+        parley_row(W, H, i, &x, &y, &w, &rh);
+        bool sel = ps->parley_sel == i;
+        batch2d_rect(x, y, w, rh, sel ? 0.16f : 0.07f, sel ? 0.1f : 0.05f, sel ? 0.06f : 0.04f, 0.95f);
+        if (sel) {
+            batch2d_rect(x, y, w, 1, 0.95f, 0.75f, 0.35f, 1.0f);
+            batch2d_rect(x, y + rh - 1, w, 1, 0.95f, 0.75f, 0.35f, 1.0f);
+        }
+    }
+    batch2d_flush();
+    font_begin(W, H);
+    char buf[STORY_TEXT], lines[4][WRAP_MAX];
+    snprintf(buf, sizeof buf, c == 8 ? "%s - THE END OF IT" : "%s YIELDS", m->name);
+    upper(buf);
+    int top = (int)(H * 0.4f) - 64;
+    font_text((W - font_text_width(buf)) / 2, top, buf, 0.95f, 0.8f, 0.45f);
+    int maxc = MINI(70, (W - 24) / 6), n = wrap(plea, maxc, lines, 4);
+    for (int k = 0; k < n; k++) font_text((W - font_text_width(lines[k])) / 2, top + 14 + k * 9, lines[k], 0.82f, 0.76f, 0.66f);
+    for (int i = 0; i < PARLEY_ROWS; i++) {
+        float x, y, w, rh;
+        parley_row(W, H, i, &x, &y, &w, &rh);
+        float cl = ps->parley_sel == i ? 1.0f : 0.6f;
+        char label[32];
+        const char *dash = strstr(desc[i], " - ");
+        int ll = dash ? (int)(dash - desc[i]) : (int)strlen(desc[i]);
+        snprintf(label, sizeof label, "%.*s", MINI(ll, 30), desc[i]);
+        font_text((int)x + 6, (int)y + 3, label, cl, cl * 0.82f, cl * 0.5f);
+        char ln[2][WRAP_MAX];
+        int k = wrap(dash ? dash + 3 : "", (int)(w - 12) / 6, ln, compact ? 1 : 2);
+        for (int j = 0; j < k; j++) font_text((int)x + 6, (int)y + (compact ? 12 : 12) + j * 8, ln[j], 0.65f * cl, 0.6f * cl, 0.52f * cl);
+    }
+    const char *help = ps->keyboard && g->touch.active ? "TAP TWICE TO CHOOSE"
+                       : ps->pad && !(ps->keyboard && g->mouse) ? "D-PAD AND A TO CHOOSE" : "UP/DOWN AND ENTER TO CHOOSE";
+    font_text((W - font_text_width(help)) / 2, (int)(H * 0.4f) + PARLEY_ROWS * (compact ? 30 : 38) + 6, help, 0.5f, 0.46f, 0.4f);
+    font_end();
+}
+
+/* ---------- the spared: grateful ones live in the Sanctum ---------- */
+
+static bool grateful(Game *g, const Deed *d) {
+    const History *h = history_of(g->world.seed);
+    return d->kind == DK_CHAPTER && d->choice == CH_SPARE && d->chapter < 8 && !history_spare_betrays(h, d->chapter);
+}
+
+static void update_residents(Game *g) {
+    if (!g->world.story_gen) return;
+    bool home = false;
+    for (int i = 0; i < MAX_PLAYERS; i++) home |= g->players[i].active && realm_has(g->players[i].pl.pos);
+    if (!home) return;
+    int k = 0;
+    for (int i = 0; i < g->world.ndeeds && k < 4; i++) {
+        const Deed *d = &g->world.deeds[i];
+        if (!grateful(g, d)) continue;
+        u64 key = (d->key ^ 0x5E5A1DE5ULL) | 1;
+        int slot = k++;
+        if (find_named(g, key)) continue;
+        /* a place in the court, near where one arrives */
+        for (int t = 0; t < 12; t++) {
+            int x = (int)POCKET_ARRIVE_X - 3 + (slot % 2) * 6 + (t % 3) - 1, z = (int)POCKET_ARRIVE_Z - 5 - slot / 2 * 3 - t / 3; /* in front of where one arrives */
+            if (game_solid(g, x, POCKET_G - 1, z) != 1 || game_solid(g, x, POCKET_G, z) || game_solid(g, x, POCKET_G + 1, z)) continue;
+            Named n;
+            story_chapter_target(&g->world, d->chapter, &n);
+            n.key = key;
+            n.scale = 1.0f;
+            Monster *m = story_spawn_named_at(g, &n, v3(x + 0.5f, (float)POCKET_G, z + 0.5f));
+            if (m) { m->resident = 1; m->awake = false; m->state = MS_IDLE; }
+            break;
+        }
+    }
+}
+
+/* Standing by a resident: what it tells you. */
+static bool resident_talk(Game *g, PlayerSlot *ps) {
+    if (!g->world.story_gen || !realm_has(ps->pl.pos)) return false;
+    for (int i = 0; i < MAX_MONSTERS; i++) {
+        Monster *m = &g->mons[i];
+        if (!m->alive || !m->resident || v3_len(v3_sub(m->pos, ps->pl.pos)) > 2.8f) continue;
+        for (int k = 0; k < g->world.ndeeds; k++) {
+            const Deed *d = &g->world.deeds[k];
+            if (((d->key ^ 0x5E5A1DE5ULL) | 1) != m->story_key) continue;
+            if (ps->reading_key != m->story_key) {
+                Personal p = personal_of(g, ps);
+                HPersonal hp = { p.village, p.kin };
+                history_resident_line(history_of(g->world.seed), d->chapter, &hp, ps->reading, sizeof ps->reading);
+                ps->reading_key = m->story_key;
+                lore_add(g, LORE_RESIDENT, d->chapter, 0, 0);
+                if (g_note_hook) g_note_hook(ps->index, "READ", ps->reading);
+            }
+            ps->reading_t = 0.3f;
+            return true;
+        }
+    }
+    return false;
+}
+
 /* A legendary of the world is picked up: its lore joins what the dead say. */
 void story_legend_found(Game *g, int id) {
     char text[STORY_TEXT];
@@ -483,7 +772,8 @@ static int lore_clue(Game *g, const History *h, const LoreEntry *e) {
     case LORE_TRACE: return story_trace_clue(&g->world, e->a, e->b, e->c);
     case LORE_REVEAL: return history_reveal_clue(h, e->a);
     case LORE_ORDERS: return e->a >= 0 && e->a < H_CAST ? h->orders[e->a] : -1;
-    case LORE_PAGE: return e->a >= 0 && e->a < H_CAST ? h->page[e->a] : -1;
+    case LORE_PAGE:
+    case LORE_RESIDENT: return e->a >= 0 && e->a < H_CAST ? h->page[e->a] : -1;
     case LORE_LEGEND:
         for (int i = 0; i < h->nclues; i++)
             if (h->clue[i].src == SRC_LEGEND && h->clue[i].chapter == e->a) return i;
@@ -595,6 +885,35 @@ static void update_reading(Game *g, PlayerSlot *ps) {
 #define STORY_QUIET 600.0f
 static void send_hunters(Game *g, PlayerSlot *ps) {
     const Named *t = &ps->target;
+    /* what the players did decides who comes, and how many */
+    int mood = story_hunter_mood(&g->world, ps->st.chapter), count = 3, elites = 1;
+    const History *hist = g->world.story_gen ? history_of(g->world.seed) : NULL;
+    if (mood == 1) {
+        char buf[160];
+        snprintf(buf, sizeof buf, "%s SENDS NO HUNTERS: YOU STAND WITH THEIR PEOPLE", t->name);
+        upper(buf);
+        game_banner(ps, buf);
+        return;
+    }
+    if (mood == 2) { count = 5; elites = 2; }
+    Deed *betrayer = NULL;
+    const char *warner = NULL;
+    if (hist) {
+        for (int i = 0; i < g->world.ndeeds; i++) {
+            Deed *d = &g->world.deeds[i];
+            if (d->kind != DK_CHAPTER || d->choice != CH_SPARE || d->chapter >= 8) continue;
+            if (history_spare_betrays(hist, d->chapter)) { if (!(d->flags & DF_RETURNED) && !betrayer) betrayer = d; }
+            else if (!warner && hash_unit(mix64((u64)(g->time * 10.0f) ^ d->key)) < 0.5f) warner = hist->actor[hist->cast[d->chapter]].name;
+        }
+    }
+    if (warner && !betrayer) {
+        char buf[160];
+        snprintf(buf, sizeof buf, "A WARNING FROM %s: HUNTERS ARE COMING. FEWER THAN THEY MEANT TO SEND.", warner);
+        upper(buf);
+        game_banner(ps, buf);
+        count = 1;
+        elites = 1;
+    }
     vec3 f = ps->pl.pos;
     int fx = (int)floorf(f.x), fy = (int)floorf(f.y), fz = (int)floorf(f.z);
     u64 h = mix64((u64)(g->time * 1000.0f) ^ t->key);
@@ -608,20 +927,43 @@ static void send_hunters(Game *g, PlayerSlot *ps) {
             int tier, level = (int)world_difficulty(floordiv(x, CHUNK), floordiv(y, CHUNK), floordiv(z, CHUNK));
             world_region(&g->world, floordiv(x, CHUNK), floordiv(y, CHUNK), floordiv(z, CHUNK), &tier);
             int type = level >= MONSTERS[t->mon].min_level ? t->mon : MON_HOUND;
-            for (int k = 0; k < 3; k++) {
+            if (betrayer) {
+                /* the one you spared leads them */
+                Named n;
+                story_chapter_target(&g->world, betrayer->chapter, &n);
+                n.key = (betrayer->key ^ 0xBE7A0BE7ULL) | 1;
+                Monster *bm = story_spawn_named_at(g, &n, p);
+                if (bm) {
+                    bm->awake = true;
+                    bm->target = ps->index;
+                    bm->state = MS_CHASE;
+                    betrayer->flags |= DF_RETURNED;
+                    char buf[160];
+                    snprintf(buf, sizeof buf, "%s RETURNS WITH HUNTERS. YOU SHOULD NOT HAVE SPARED THEM.", n.name);
+                    upper(buf);
+                    game_banner(ps, buf);
+                    if (g_note_hook) g_note_hook(ps->index, "STORY", buf);
+                    story_cast_thread(g, ps);
+                    count = 2;
+                    elites = 0;
+                }
+            }
+            for (int k = 0; k < count; k++) {
                 vec3 q = v3_add(p, v3((float)(k % 2), 0, (float)(k / 2)));
                 if (k && game_solid(g, (int)floorf(q.x), (int)floorf(q.y), (int)floorf(q.z))) q = p;
-                Monster *m = monster_spawn(g, type, q, level, k == 0, v3(0.6f, 0.4f, 0.3f), 0);
+                Monster *m = monster_spawn(g, type, q, level, k < elites, v3(0.6f, 0.4f, 0.3f), 0);
                 if (!m) continue;
-                if (k == 0 && g->world.story_gen && t->chapter >= 0 && t->chapter < H_CAST) m->orders = (u8)(t->chapter + 1); /* the leader carries orders */
+                if (k == 0 && g->world.story_gen && t->chapter >= 0 && t->chapter < H_CAST + H_SEQUEL) m->orders = (u8)(t->chapter + 1); /* the leader carries orders */
                 m->awake = true;
                 m->target = ps->index;
                 m->state = MS_CHASE;
             }
-            char buf[160];
-            snprintf(buf, sizeof buf, "%s SENDS HUNTERS AFTER YOU", t->name);
-            for (char *c = buf; *c; c++) if (*c >= 'a' && *c <= 'z') *c -= 32;
-            game_banner(ps, buf);
+            if (!(betrayer && (betrayer->flags & DF_RETURNED) && count == 2) && !warner) {
+                char buf[160];
+                snprintf(buf, sizeof buf, mood == 2 ? "%s SENDS MORE HUNTERS: THEY HAVE NOT FORGOTTEN WHAT YOU DID" : "%s SENDS HUNTERS AFTER YOU", t->name);
+                for (char *c = buf; *c; c++) if (*c >= 'a' && *c <= 'z') *c -= 32;
+                game_banner(ps, buf);
+            }
             story_cast_thread(g, ps); /* and the way back to whoever sent them */
             return;
         }
@@ -637,7 +979,7 @@ static void update_targets(Game *g, PlayerSlot *ps, float dt) {
     ps->target_retry -= dt;
     Named *t = &ps->target;
     if (looted_has(g, t->key)) {
-        chapter_complete(g, ps, true);
+        chapter_complete(g, ps, HOW_OTHER);
         return;
     }
     if (ps->target_retry <= 0 && !find_named(g, t->key) && chunk_ready(g, t->cx, t->cy, t->cz) &&
@@ -662,6 +1004,8 @@ static void update_targets(Game *g, PlayerSlot *ps, float dt) {
 }
 
 void story_update(Game *g, float dt) {
+    update_parley(g);
+    update_residents(g);
     for (int i = 0; i < MAX_PLAYERS; i++) {
         PlayerSlot *ps = &g->players[i];
         if (!ps->active) continue;
@@ -674,7 +1018,7 @@ void story_update(Game *g, float dt) {
         }
         if (story_motive_pending(g, ps) || ps->st.dead) continue;
         update_domain(g, ps);
-        update_reading(g, ps);
+        if (!resident_talk(g, ps)) update_reading(g, ps);
         if (ps->st.motive) update_targets(g, ps, dt);
     }
 }
@@ -742,22 +1086,24 @@ void story_draw_plates(Game *g, PlayerSlot *viewer, int W, int H) {
         plates[n].y = sy;
         plates[n].frac = mo->hp / mo->maxhp;
         plates[n].name = mo->name;
-        plates[n].kind = mo->named_kind - 1;
+        plates[n].kind = mo->resident ? 9 : mo->parley == 1 ? 8 : mo->named_kind - 1; /* (a friend; one that yielded) */
         n++;
     }
     if (!n) return;
     batch2d_begin(W, H);
     for (int i = 0; i < n; i++) {
         float w = 40;
+        if (plates[i].kind >= 8) continue; /* no health bar for friends, nor for one that yielded */
         batch2d_rect(plates[i].x - w / 2 - 1, plates[i].y + 9, w + 2, 4, 0, 0, 0, 0.8f);
         batch2d_rect(plates[i].x - w / 2, plates[i].y + 10, w * clampf(plates[i].frac, 0, 1), 2, 0.9f, 0.2f, 0.15f, 1.0f);
     }
     batch2d_flush();
     font_begin(W, H);
     for (int i = 0; i < n; i++) {
-        bool lord = plates[i].kind == NK_LORD;
-        font_text((int)plates[i].x - font_text_width(plates[i].name) / 2, (int)plates[i].y, plates[i].name, lord ? 0.9f : 1.0f,
-                  lord ? 0.75f : 0.45f, lord ? 0.5f : 0.3f);
+        bool lord = plates[i].kind == NK_LORD, friend_ = plates[i].kind == 9, yielded = plates[i].kind == 8;
+        float r = friend_ ? 0.6f : yielded ? 0.95f : lord ? 0.9f : 1.0f, gg = friend_ ? 0.95f : yielded ? 0.9f : lord ? 0.75f : 0.45f,
+              b = friend_ ? 0.6f : yielded ? 0.7f : lord ? 0.5f : 0.3f;
+        font_text((int)plates[i].x - font_text_width(plates[i].name) / 2, (int)plates[i].y, plates[i].name, r, gg, b);
     }
     font_end();
 }
@@ -878,6 +1224,28 @@ void story_draw_tab(Game *g, PlayerSlot *ps, int W, int H, int top) {
                 history_answer(h, q, &hp, buf, sizeof buf);
                 n = wrap(buf, maxc - 4, lines, compact ? 2 : 3);
                 for (int i = 0; i < n; i++, y += 9) font_text(x + 12, y, lines[i], 0.72f, 0.68f, 0.6f);
+            }
+        }
+    }
+    if (g->world.ndeeds) {
+        /* what you did, and what came of it */
+        static char dl[6][STORY_TEXT];
+        Personal p = personal_of(g, ps);
+        int nd = story_deed_lines(&g->world, &p, dl, compact ? 3 : 5);
+        char ep[64];
+        story_epithet(&g->world, ep, sizeof ep);
+        y += 5;
+        if (ep[0]) snprintf(buf, sizeof buf, "WHAT YOU DID - THEY CALL YOU %s", ep);
+        else snprintf(buf, sizeof buf, "WHAT YOU DID");
+        upper(buf);
+        if ((int)strlen(buf) > maxc) buf[maxc] = 0;
+        font_text(x, y, buf, 0.95f, 0.78f, 0.42f);
+        y += 10;
+        for (int i = 0; i < nd && y < H - 40; i++) {
+            int n = wrap(dl[i], maxc - 2, lines, 2);
+            for (int k = 0; k < n; k++, y += 9) {
+                if (k == 0) font_text(x, y, ">", 0.6f, 0.5f, 0.4f);
+                font_text(x + 12, y, lines[k], 0.85f, 0.7f, 0.55f);
             }
         }
     }

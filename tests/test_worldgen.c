@@ -489,6 +489,74 @@ int main(int argc, char **argv) {
             for (int cx = -20; cx <= 20; cx++) clues += story_trace_clue(&g_world, cx, 0, cz) >= 0;
         printf("story: %d traces within 20 chunks carry a clue of the history\n", clues);
         CHECK(clues >= 50, "too few traces carry clues (%d)", clues);
+        /* choices (docs/STORY_CHOICES.md): every ending, every text, and the world answering */
+        World cw = g_world;
+        Named before[H_CAST];
+        for (int c = 0; c < H_CAST; c++) story_chapter_target(&cw, c, &before[c]);
+        int texts = 0;
+        for (int policy = 0; policy < CH_COUNT; policy++)
+            for (int fin = 0; fin < CH_COUNT; fin++) {
+                cw.ndeeds = 0;
+                for (int c = 0; c < H_CAST; c++)
+                    story_deed(&cw, DK_CHAPTER, c, c == 8 ? fin : (policy + c) % CH_COUNT, 0, before[c].key, 0, 0, 0);
+                CHECK(story_chapter_of_key(&cw, before[4].key) == 4, "a chapter target is not found by its key");
+                char names[H_SEQUEL][STORY_NAME];
+                for (int c = 0; c < H_CAST + H_SEQUEL; c++) {
+                    Named t;
+                    story_chapter_target(&cw, c, &t);
+                    if (c < H_CAST) CHECK(t.key == before[c].key && !strcmp(t.name, before[c].name), "a deed changed chapter %d's target", c + 1);
+                    else {
+                        snprintf(names[c - H_CAST], STORY_NAME, "%s", t.name);
+                        CHECK(t.name[0] && t.title[0], "chapter %d of the sequel has no target", c + 1);
+                        for (int k = 0; k < c - H_CAST; k++) CHECK(strcmp(names[k], t.name), "two sequel targets share a name (%s)", t.name);
+                        CHECK(story_chapter_of_key(&cw, t.key) == c, "sequel chapter %d not found by its key", c + 1);
+                    }
+                    for (int m = 0; m < MOTIVE_COUNT; m++) {
+                        story_chapter_hook(&cw, m, c, &pp, t1, sizeof t1);
+                        CHECK(t1[0] && strlen(t1) < STORY_TEXT - 1, "chapter %d hook empty or cut", c + 1);
+                    }
+                    story_revelation(&cw, c, &pp, t2, sizeof t2);
+                    CHECK(t2[0] && strlen(t2) < STORY_TEXT - 1, "chapter %d revelation empty or cut", c + 1);
+                    story_orders(&cw, c, t2, sizeof t2);
+                    texts += 2;
+                }
+                char lines[12][STORY_TEXT];
+                int n = story_deed_lines(&cw, &pp, lines, 12);
+                CHECK(n == H_CAST, "the deeds list has %d lines, not %d", n, H_CAST);
+                for (int i = 0; i < n; i++) CHECK(lines[i][0] && strlen(lines[i]) < STORY_TEXT - 1, "a deed line is empty or cut");
+            }
+        HPersonal hp2 = { pp.village, pp.kin };
+        for (int c = 0; c < H_CAST; c++) {
+            char plea[STORY_TEXT], desc[CH_COUNT][STORY_TEXT_H];
+            history_parley(&hs, c, &hp2, plea, sizeof plea, desc);
+            CHECK(plea[0] && strlen(plea) < STORY_TEXT - 1, "chapter %d plea empty or cut", c + 1);
+            for (int k = 0; k < CH_COUNT; k++) CHECK(strstr(desc[k], " - ") && strlen(desc[k]) < STORY_TEXT - 1, "chapter %d choice %d text", c + 1, k);
+        }
+        /* a killed lord changes its domain: emptied, or taken by the rival under a new lord */
+        int changed = 0, emptied = 0, lords_tested = 0;
+        for (int k = 0; k < 24; k++) {
+            cw.ndeeds = 0;
+            Domain d, d2;
+            story_domain(&cw, k * 4 - 48, 0, (k % 5) * 4 - 8, &d);
+            if (d.level < 2) continue;
+            Named l, l2;
+            story_lord(&cw, &d, &l);
+            story_deed(&cw, DK_LORD, 0, CH_KILL, 0, l.key, d.gx, d.gy, d.gz);
+            fill_check:
+            story_domain(&cw, k * 4 - 48, 0, (k % 5) * 4 - 8, &d2);
+            lords_tested++;
+            CHECK(d2.changed, "killing a lord did not change its domain");
+            changed += d2.changed != 0;
+            if (d2.changed == 2) {
+                story_lord(&cw, &d2, &l2);
+                CHECK(l2.key != l.key && strcmp(d2.faction, d.faction), "a taken domain kept its lord or faction");
+                if (!cw.ndeeds || cw.deeds[cw.ndeeds - 1].key != l2.key) { story_deed(&cw, DK_LORD, 0, CH_KILL, 0, l2.key, d.gx, d.gy, d.gz); goto fill_check; }
+            } else emptied++;
+            Named here;
+            CHECK(!story_lord_here(&cw, l.cx, l.cy, l.cz, &here) || here.key != l.key, "a killed lord came back");
+        }
+        printf("story: choices give %d texts that fit; %d killed lords changed their domains (%d emptied)\n", texts, changed, emptied);
+        CHECK(lords_tested > 4, "too few lords tested");
     }
 
     /* 7. mechanisms */

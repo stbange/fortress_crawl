@@ -568,7 +568,7 @@ static Monster *pick_enemy(PlayerSlot *ps) {
     float bd = 1e9f;
     for (int i = 0; i < MAX_MONSTERS; i++) {
         Monster *m = &G->mons[i];
-        if (!m->alive || m->hidden || m->charm_t > 0 || m->sulk_t > 0) continue; /* (a sulking one leaves you be) */
+        if (!m->alive || m->hidden || m->charm_t > 0 || m->sulk_t > 0 || m->parley == 1 || m->resident) continue; /* (a sulking one leaves you be) */
         bool skip = false;
         for (int k = 0; k < 8; k++) skip |= B.ignore[k] == m && B.ignore_until[k] > B.t;
         if (skip) continue;
@@ -955,6 +955,14 @@ bool bot_step(Game *g, PlayerInput *in, float dt) {
         return false;
     }
     if (story_motive_pending(g, ps)) story_pick_motive(g, ps, (B.style + (int)(g->opt.seed % 4)) % MOTIVE_COUNT);
+    if (!story_parley_open(ps))
+        for (int i = 0; i < MAX_MONSTERS; i++) /* (it does not walk over to a target that yields at range) */
+            if (g->mons[i].alive && g->mons[i].parley == 1 && v3_len(v3_sub(g->mons[i].pos, ps->pl.pos)) < 30.0f) { ps->parley = i + 1; break; }
+    if (story_parley_open(ps)) {
+        /* a target yields: a fixed policy per style and chapter, so every choice gets played */
+        story_parley_choose(g, ps, (B.style + ps->st.chapter + (int)(g->opt.seed % 3)) % CH_COUNT);
+        return true;
+    }
     ps->show_map = ps->show_skills = false;
     vec3 p = ps->pl.pos;
     if (!realm_has(p)) {

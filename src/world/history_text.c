@@ -574,6 +574,18 @@ static int late_fact(const History *h, int chapter) {
     return -1;
 }
 
+void history_reveal_spoken(const History *h, int chapter, const HPersonal *p, char *out, int n) {
+    out[0] = 0;
+    if (chapter < 0 || chapter >= H_CAST) return;
+    const HClue *cl = &h->clue[h->reveal[chapter]];
+    Rng r = rng_make(h->seed ^ (u64)(chapter + 1) * 0x5B0E);
+    char plain[STORY_TEXT];
+    fact_plain(h, cl->fact, h->cast[chapter], p, &r, plain, sizeof plain);
+    static const char *const T[] = { "%.40s, on their way out: '%.250s.'", "%.40s, not meeting your eyes: '%.250s.'", "%.40s, at the door: '%.250s.'" };
+    snprintf(out, (size_t)n, PICK(&r, T), h->actor[h->cast[chapter]].name, plain);
+    for (char *q = strchr(out, '\''); q && q[1]; q = NULL) if (q[1] >= 'a' && q[1] <= 'z') q[1] = (char)(q[1] - 32);
+}
+
 int history_reveal_clue(const History *h, int chapter) {
     if (chapter < 0) return -1;
     if (chapter < H_CAST) return h->reveal[chapter];
@@ -899,4 +911,213 @@ void history_dump(const History *h, FILE *f) {
         fprintf(f, "  %s\n      %s\n", t, a);
     }
     fprintf(f, "  %d actors, %d events, %d facts, %d clues\n", h->nactors, h->nevents, h->nfacts, h->nclues);
+}
+
+/* ---------- choices (docs/STORY_CHOICES.md) ---------- */
+
+static bool has_trait(const HActor *a, int t) { return a->trait[0] == t || a->trait[1] == t; }
+
+static void choice_ctx(const History *h, int c, const HPersonal *p, TCtx *t, char *title, char *key, char *legend_note) {
+    u8 a = h->cast[c];
+    tctx(h, -1, a, h->actor[a].sworn != H_NONE ? h->actor[a].sworn : h->cast[c / 3 * 3 + 2], p, t);
+    history_title(h, c, title, H_NAME);
+    snprintf(key, H_NAME, "%s", h->ev_open != H_NONE && h->ev[h->ev_open].art != H_NONE ? h->art[h->ev[h->ev_open].art].name : "the key");
+    snprintf(legend_note, 64, "the blade %s carries", h->actor[a].name);
+    int f = h->actor[a].faction, e = history_enemy_faction(h, f);
+    story_cset(&t->c, "target", t->a);
+    story_cset(&t->c, "title", title);
+    story_cset(&t->c, "key", key);
+    story_cset(&t->c, "blade", legend_note);
+    story_cset(&t->c, "fac", h->faction[f].name);
+    story_cset(&t->c, "enemy", h->faction[e].name);
+    story_cset(&t->c, "opener", h->actor[h->opener].name);
+}
+
+void history_parley(const History *h, int c, const HPersonal *p, char *plea, int n, char desc[][STORY_TEXT_H]) {
+    Rng r = rng_make(h->seed ^ (u64)(c + 1) * 0x9A41E);
+    TCtx t;
+    char title[H_NAME], key[H_NAME], blade[64];
+    choice_ctx(h, c, p, &t, title, key, blade);
+    u8 a = h->cast[c];
+    const HActor *x = &h->actor[a];
+    char gold[16];
+    snprintf(gold, sizeof gold, "%d", 100 * (c + 1));
+    story_cset(&t.c, "gold", gold);
+    const char *pl;
+    if (c == 8) {
+        switch (x->motive) {
+        case MV_GRIEF: pl = "{target}, on both knees: 'I only wanted {b} back. Let me go down to them.'"; break;
+        case MV_PACT: pl = "{target}, bleeding: 'Kill me, and the bargain falls on someone else. On you, perhaps.'"; break;
+        case MV_POWER: pl = "{target}, laughing through blood: 'Take {key}, then, and rule the ruins. Or kill me and rule nothing.'"; break;
+        case MV_TRUTH: pl = "{target}, lowering the blade: 'Kill me and the truth goes down with me. Or let it out.'"; break;
+        case MV_DUTY: pl = "{target}: '{fort} was built for this. Finish it with me, or finish me.'"; break;
+        default: pl = "{target}, at the end: 'You came all this way. Now choose what it was for.'"; break;
+        }
+    } else if (a == h->scapegoat) pl = "{target}: 'I did not open it! Let me live, and I will prove it to you.'";
+    else if (c % 3 == 2 && (has_trait(x, TT_COWARDLY) || has_trait(x, TT_GREEDY)))
+        pl = "{target}, on both knees: 'Everything I did, I did for {fac}. Let me live, and I will tell you all of it.'";
+    else if (c % 3 == 2) pl = "{target}, on one knee: 'Finish it. Or be wiser than the ones who sent you, and listen.'";
+    else if (has_trait(x, TT_COWARDLY)) pl = "{target}, crawling: 'Mercy! I only did what {b} told me!'";
+    else if (has_trait(x, TT_PROUD) || has_trait(x, TT_CRUEL)) pl = "{target}, on one knee: 'Finish it. Or be wiser than {b} and listen.'";
+    else if (has_trait(x, TT_GREEDY)) pl = "{target}: 'Wait! Everyone has a price. Name yours.'";
+    else pl = "{target} drops the blade: 'Enough. I can tell you things {b} never will.'";
+    story_expand(plea, n, pl, &r, &t.c);
+    if (c == 8) {
+        story_expand(desc[CH_KILL], STORY_TEXT_H, "KILL - end it at {seal}. Whatever {target} wanted ends here.", &r, &t.c);
+        const char *sp = h->tone == TONE_HORROR ? "SPARE - let {target} finish it, and go down to what waits below."
+                       : h->tone == TONE_TRAGEDY ? "SPARE - let {target} open the way for the ones below."
+                                                 : "SPARE - let {target} go, and the truth with them.";
+        story_expand(desc[CH_SPARE], STORY_TEXT_H, sp, &r, &t.c);
+        story_expand(desc[CH_BARGAIN], STORY_TEXT_H, "TAKE {key} - the seal will answer to you. Everyone who wants it will know your name.", &r, &t.c);
+    } else {
+        story_expand(desc[CH_KILL], STORY_TEXT_H, "KILL - end it. {fac} will not forget.", &r, &t.c);
+        story_expand(desc[CH_SPARE], STORY_TEXT_H, "SPARE - let {target} go. {target} will tell you more, and remember you.", &r, &t.c);
+        story_expand(desc[CH_BARGAIN], STORY_TEXT_H, "BARGAIN - take {gold} crowns and {blade}. {fac} will let you pass; {enemy} will not.", &r, &t.c);
+    }
+}
+
+void history_choice_done(const History *h, int c, int choice, const HPersonal *p, const char *next, char *out, int n) {
+    Rng r = rng_make(h->seed ^ (u64)(c + 1) * 0xC401CE ^ (u64)choice);
+    TCtx t;
+    char title[H_NAME], key[H_NAME], blade[64];
+    choice_ctx(h, c, p, &t, title, key, blade);
+    story_cset(&t.c, "next", next ? next : "another");
+    const char *tm;
+    if (c == 8) tm = choice == CH_SPARE ? "{target} lives, and goes to finish what {target} began." : "{key} is yours. {target} lets go of it, and of everything else.";
+    else if (choice == CH_SPARE) tm = "{target} lives. Before going, a name: {next}.";
+    else tm = "{target} counts out the gold and hands over the blade. 'Go to {next}. And do not come back here.'";
+    story_expand(out, n, tm, &r, &t.c);
+}
+
+void history_epilogue(const History *h, int choice, const HPersonal *p, char *out, int n) {
+    Rng r = rng_make(h->seed ^ 0xE91 ^ (u64)choice);
+    TCtx t;
+    char title[H_NAME], key[H_NAME], blade[64];
+    choice_ctx(h, 8, p, &t, title, key, blade);
+    char cover[H_NAME];
+    snprintf(cover, sizeof cover, "%s", h->faction[h->cover].name);
+    story_cset(&t.c, "cover", cover);
+    const char *tm;
+    if (choice == CH_KILL) tm = "{target} dies at {seal}. Whatever began on {night} ends with {target}. Not everyone will thank you for it.";
+    else if (choice == CH_SPARE)
+        tm = h->tone == TONE_HORROR ? "You let {target} go down through {seal}. Far below, something turns toward the light, and toward you."
+           : h->tone == TONE_TRAGEDY ? "You let {target} open the way. The ones below climb into the halls, blinking, and they remember who chained them."
+                                     : "You let {target} go. The bones below will be seen at last, and {cover} will never forgive you for it.";
+    else tm = "You take {key} from {target}'s hand. The seal answers to you now, and everyone who ever wanted it knows your name.";
+    story_expand(out, n, tm, &r, &t.c);
+}
+
+void history_deed_line(const History *h, const HLedger *l, int c, const HPersonal *p, char *out, int n) {
+    out[0] = 0;
+    if (!(l->done & (1u << c))) return;
+    Rng r = rng_make(h->seed ^ (u64)(c + 1) * 0xDEED);
+    TCtx t;
+    char title[H_NAME], key[H_NAME], blade[64];
+    choice_ctx(h, c, p, &t, title, key, blade);
+    int f = h->actor[h->cast[c]].faction, s = history_standing(h, l, f);
+    const char *tm;
+    if (c == 8) {
+        char ep[STORY_TEXT];
+        history_epilogue(h, l->choice[8], p, ep, sizeof ep);
+        snprintf(out, (size_t)n, "%s", ep);
+        return;
+    }
+    switch (l->choice[c]) {
+    case CH_KILL: tm = s < 0 ? "You killed {target}, {title}. {fac} want you dead for it." : "You killed {target}, {title}."; break;
+    case CH_SPARE:
+        if (history_spare_betrays(h, c)) tm = (l->returned & (1u << c)) ? "You spared {target}. {target} came back for you, with hunters." : "You spared {target}. {target} has not forgiven the mercy.";
+        else tm = "You spared {target}. {target} is grateful, and waits in your Sanctum.";
+        break;
+    default: tm = s >= 3 ? "You took {target}'s offer. {fac} let you pass; {enemy} hunt you for it." : "You took {target}'s offer. {enemy} hunt you for it."; break;
+    }
+    story_expand(out, n, tm, &r, &t.c);
+}
+
+void history_resident_line(const History *h, int c, const HPersonal *p, char *out, int n) {
+    char fact[STORY_TEXT];
+    history_fact_line(h, h->clue[h->page[c]].fact, p, fact, sizeof fact);
+    snprintf(out, (size_t)n, "%.40s, in your hall: 'You let me live. So hear this: %.230s'", h->actor[h->cast[c]].name, fact);
+}
+
+static void sequel_ctx(const History *h, const HLedger *l, int chapter, const HPersonal *p, TCtx *t, HSequel *s, HSequel *pw) {
+    history_sequel(h, l, chapter, s);
+    history_sequel(h, l, chapter / 3 * 3 + 2, pw);
+    tctx(h, -1, H_NONE, H_NONE, p, t);
+    story_cset(&t->c, "target", s->name);
+    story_cset(&t->c, "title", s->title);
+    story_cset(&t->c, "power", pw->power);
+    story_cset(&t->c, "victim", s->victim);
+    story_cset(&t->c, "rel", s->rel);
+    story_cset(&t->c, "fac", s->faction);
+    story_cset(&t->c, "opener", h->actor[h->opener].name);
+    story_cset(&t->c, "key", h->ev_open != H_NONE && h->ev[h->ev_open].art != H_NONE ? h->art[h->ev[h->ev_open].art].name : "the key");
+}
+
+void history_sequel_hook(const History *h, const HLedger *l, int chapter, const HPersonal *p, char *out, int n) {
+    Rng r = rng_make(h->seed ^ (u64)chapter * 0x5E1);
+    TCtx t;
+    HSequel s, pw;
+    sequel_ctx(h, l, chapter, p, &t, &s, &pw);
+    static const char *const T[SQ_COUNT][3] = {
+        [SQ_AVENGE] = { "{target} wears {victim}'s colours. {victim} died by your hand, and {power} has not forgotten.",
+                        "{target} keeps a list for {power}. Your name is the only one left on it.",
+                        "{power}, {victim}'s {rel}, swore at the grave to bury you beside it." },
+        [SQ_BETRAYED] = { "{target} rides for {power}. {power} lived because you let them.",
+                          "{target} knows where you sleep. {power} told them.",
+                          "{power} pays back your mercy, in blood." },
+        [SQ_ENEMY] = { "{fac} remember that you stood with their enemies. {target} leads the hunt.",
+                       "{target} has your description, and a reward to pay.",
+                       "{power}, {title}, wants to see you hang beside {victim}'s friends." },
+        [SQ_HEIR] = { "{opener}'s line did not end at the seal. {target} serves {power}.",
+                      "{target} knows where {key} went.",
+                      "{power}, heir of {victim}, wants {key}, and the seal opened again." },
+        [SQ_HERALD] = { "What came up through {seal} has servants now. {target} is one.",
+                        "{target} speaks with a voice from below.",
+                        "What {victim} let up has a voice now: {power}, {title}." },
+        [SQ_FREED] = { "The ones below walk the halls again. {target} guards their way.",
+                       "{target} remembers the chains, and who forged them.",
+                       "{power} speaks for the ones below, and remembers who chained them." },
+        [SQ_PURGE] = { "{fac} are burying the truth again, with everyone who knows it. {target} digs the graves.",
+                       "{target} keeps the list of those who know. You are on it.",
+                       "{power}, {title}, comes for everyone who saw the bones. You saw them." },
+        [SQ_KEY] = { "Everyone wants {key}, and you have it. {target} rides for {fac}.",
+                     "{target} has orders: bring back {key}, and the hand that holds it.",
+                     "{power} of {fac} wants {key} most of all." },
+    };
+    story_expand(out, n, T[s.cause][chapter % 3], &r, &t.c);
+}
+
+void history_sequel_reveal(const History *h, const HLedger *l, int chapter, const HPersonal *p, const char *next, char *out, int n) {
+    Rng r = rng_make(h->seed ^ (u64)chapter * 0x5E2);
+    TCtx t;
+    HSequel s, pw;
+    sequel_ctx(h, l, chapter, p, &t, &s, &pw);
+    story_cset(&t.c, "next", next ? next : "another");
+    static const char *const T[SQ_COUNT][3] = {
+        [SQ_AVENGE] = { "Papers on the body: a list of names. Yours is first, for {victim}.",
+                        "{target}, dying: '{power} buried {victim} with their own blade, and swore on the grave.'",
+                        "{power}, dying: 'Every kill leaves someone behind. Remember that, when {next} finds you.'" },
+        [SQ_BETRAYED] = { "Orders on the body, in {power}'s hand: 'The fool who spared me walks these halls. Find them.'",
+                          "{target}, dying: '{power} laughed about your mercy. Every night.'",
+                          "{power}, dying: 'You should have finished it the first time. {next} will not make your mistake.'" },
+        [SQ_ENEMY] = { "A poster on the body: your face, badly drawn, and a price.",
+                       "{target}, dying: '{fac} never forgive those who deal with their enemies.'",
+                       "{power}, dying: 'There are always more of us than of you. Ask {next}.'" },
+        [SQ_HEIR] = { "A letter on the body: '{power} will have {key}, whatever it costs.'",
+                      "{target}, dying: '{power} means to finish what {victim} began.'",
+                      "{power}, dying: 'You killed {victim} and still it is not over. It is never over. {next} knows.'" },
+        [SQ_HERALD] = { "The body is cold, and colder inside than it should be.",
+                        "{target}, dying, in a voice not their own: 'You let it up. It thanks you.'",
+                        "{power}, dying: 'You opened the door by keeping it open. {next} waits further down.'" },
+        [SQ_FREED] = { "Chains on the body, worn as a reminder.",
+                       "{target}, dying: 'We were people before your kind made us monsters. We are people still.'",
+                       "{power}, dying: 'Freedom is not forgiveness. Ask {next}.'" },
+        [SQ_PURGE] = { "A list on the body: everyone who saw the bones. Many are crossed out.",
+                       "{target}, dying: '{fac} wrote the chronicle once. They will write it again, without you in it.'",
+                       "{power}, dying: 'The truth is out, and still they bury it. {next} buries it deeper.'" },
+        [SQ_KEY] = { "Orders on the body: 'Take {key}. Leave nothing of the one who holds it.'",
+                     "{target}, dying: 'You think {key} is yours? It belongs to whoever is left standing.'",
+                     "{power}, dying: '{key} does not care who holds it. {next} wants it too.'" },
+    };
+    story_expand(out, n, T[s.cause][chapter % 3], &r, &t.c);
 }

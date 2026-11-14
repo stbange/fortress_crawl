@@ -80,6 +80,8 @@ The character menu has eight tabs: ITEMS, SPELLS, SKILLS, STORY, SHOP, FOOD, ALC
 | Every character picks a motive | The STORY tab (L): target, missions, the questions of the world's history |
 | ![story read](docs/screenshots/story_read.png) | ![story named](docs/screenshots/story_named.png) |
 | An inscription and the tracker | A chapter target with its name plate |
+| ![story choice](docs/screenshots/story_choice.png) | ![story residents](docs/screenshots/story_residents.png) |
+| A chapter target yields: kill, spare or bargain | The ones you spared, at home in your Sanctum |
 | ![golden thread](docs/screenshots/golden_thread.png) | ![vault](docs/screenshots/vault.png) |
 | The Golden Thread leading to the next target (G) | A sealed vault: lamps over the gate, a hoard behind it |
 | ![puzzle beam](docs/screenshots/puzzle_beam.png) | ![puzzle statues](docs/screenshots/puzzle_statues.png) |
@@ -373,6 +375,15 @@ the lore of the legendaries are all clues to the same truth, some of them lies. 
 keeps the open questions ("Who opened the seal?", "Why did your village burn?") and answers
 them as you find enough. See [`docs/STORY_GEN.md`](docs/STORY_GEN.md); `worldmap history`
 prints a seed's hidden history.
+
+**Your deeds change the story:** a chapter target near death yields, and you choose: kill it,
+spare it (it tells you more, and comes back grateful or with a grudge), or take its offer (its
+people let you pass, their enemies hunt you). The finale ends with killing the one who opened
+the seal, letting them finish, or taking the key, and the arcs after the mystery come of what
+you did: the kin of those you killed, the heir of the opener, the ones you let up from below.
+Killed lords leave their domains empty or to their rivals, posters on the boards name you
+("the Butcher of Edhold"), the grateful live in your Sanctum, and the STORY tab lists what you
+did and what came of it. See [`docs/STORY_CHOICES.md`](docs/STORY_CHOICES.md).
 
 **Traps and vaults:** from danger level 2 on, the floor is not always safe: a loose
 flagstone fires darts from the nearest wall, spike patches stab every few seconds and flame

@@ -16,6 +16,7 @@
 #include "engine/gl.h"
 #include "engine/jobs.h"
 #include "game/game.h"
+#include "world/history.h"
 #include "game/bot.h"
 #include "render/batch.h"
 
@@ -589,6 +590,21 @@ static void demo_setup(Game *g) {
         p1->st.invis_t = 30.0f; /* so they do not run */
         return;
     }
+    if (!strcmp(g_demo_kind, "residents") && g->world.story_gen) {
+        /* the court of the Sanctum, where the grateful ones you spared now live */
+        const History *h = history_of(g->world.seed);
+        for (int c = 0, n = 0; c < 8 && n < 3; c++) {
+            if (history_spare_betrays(h, c)) continue;
+            Named t;
+            story_chapter_target(&g->world, c, &t);
+            story_deed(&g->world, DK_CHAPTER, c, CH_SPARE, 0, t.key, 0, 0, 0);
+            n++;
+        }
+        for (int k = 0; k < SP_COUNT; k++) sanctum_set_stage(g, k, 2);
+        realm_enter(g, p1, p1->pl.pos, 1.0f);
+        p1->banner_time = 0;
+        return;
+    }
     if (!strcmp(g_demo_kind, "sanctum")) {
         /* the Sanctum with every plot at one stage (--cast N picks it; 0 = the start), seen from
          * above the court; --pos and --look move the camera */
@@ -691,11 +707,37 @@ static void demo_setup(Game *g) {
                 p1->thread.n, p1->thread.reached, (SDL_GetTicksNS() - t0) / 1e6, t.name, t.cx, t.cy, t.cz, p1->banner);
         return;
     }
+    if (!strcmp(g_demo_kind, "parley")) {
+        /* a chapter target on its knees, and the choice (docs/STORY_CHOICES.md) */
+        s->motive = MOTIVE_REVENGE + 1;
+        s->chapter = g_demo_cast > 0 ? g_demo_cast - 1 : 1;
+        for (int i = 0; i < MAX_MONSTERS; i++) g->mons[i].alive = false;
+        Named t;
+        story_chapter_target(&g->world, s->chapter, &t);
+        vec3 f = v3(cosf(p1->pl.yaw), 0, sinf(p1->pl.yaw));
+        Monster *m = story_spawn_named_at(g, &t, v3_add(p1->pl.pos, v3_scale(f, 4.0f)));
+        if (m) {
+            m->yaw = p1->pl.yaw + PI_F;
+            m->hp = m->maxhp * 0.1f;
+            story_parley_begin(g, m);
+            p1->parley = (int)(m - g->mons) + 1;
+            p1->parley_sel = 1;
+            p1->banner_time = 0;
+        }
+        return;
+    }
     if (!strcmp(g_demo_kind, "story") || !strcmp(g_demo_kind, "read") || !strcmp(g_demo_kind, "named")) {
         /* a revenge story in its fourth chapter, with some lore read and two missions */
         s->motive = MOTIVE_REVENGE + 1;
         s->chapter = !strcmp(g_demo_kind, "story") ? 3 : 1;
-        for (int c = 0; c < s->chapter; c++) lore_add(g, LORE_REVEAL, c, 0, 0);
+        for (int c = 0; c < s->chapter; c++) {
+            lore_add(g, LORE_REVEAL, c, 0, 0);
+            if (!strcmp(g_demo_kind, "story") && g->world.story_gen) { /* and what was done with them */
+                Named t;
+                story_chapter_target(&g->world, c, &t);
+                story_deed(&g->world, DK_CHAPTER, c, c % CH_COUNT, 0, t.key, 0, 0, 0);
+            }
+        }
         int found_bounty = 0, found_retrieve = 0, nread = 0;
         for (int cz = -5; cz <= 5; cz++)
             for (int cx = -5; cx <= 5; cx++) {

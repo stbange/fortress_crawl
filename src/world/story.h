@@ -52,6 +52,8 @@ typedef struct Domain {
     char faction[STORY_NAME]; /* "the Grey Wardens" */
     char rival[STORY_NAME];   /* the other side when the state is DS_WARRING */
     char era[STORY_NAME];     /* when its history happened (deeper = older) */
+    u8 changed;               /* 0 as the seed made it; 1 emptied, 2 taken by the rival, since its lord was killed */
+    char fallen[STORY_NAME];  /* the lord whose death changed it */
 } Domain;
 
 /* A named enemy: chapter targets and domain lords. */
@@ -122,6 +124,24 @@ int story_legend_id(const World *w, u64 key);
 bool story_legend_lore(const World *w, int id, char *out, int n);
 /* The orders the hunters sent by chapter c's target carry (empty: none). */
 void story_orders(const World *w, int chapter, char *out, int n);
+
+/* ---------- what players did (docs/STORY_CHOICES.md) ---------- */
+struct HLedger;
+/* Records a deed in the world's ledger (once per kind and key). */
+void story_deed(World *w, int kind, int chapter, int choice, int by, u64 key, int gx, int gy, int gz);
+const Deed *story_deed_of(const World *w, int kind, u64 key);
+const Deed *story_chapter_deed(const World *w, int chapter);
+Deed *story_chapter_deed_mut(World *w, int chapter);
+void story_ledger(const World *w, struct HLedger *l);
+/* The chapter whose target has this key (generated stories: 0..14), or -1. */
+int story_chapter_of_key(const World *w, u64 key);
+/* What the world calls the players after their deeds ("the Merciful"), or "" before any. */
+void story_epithet(const World *w, char *out, int n);
+/* How chapter c's target's people treat you: 0 they send hunters, 1 they let you pass, 2 they
+ * send more of them. */
+int story_hunter_mood(const World *w, int chapter);
+/* The STORY tab's list of deeds and what came of them, newest first; returns the count. */
+int story_deed_lines(const World *w, const Personal *p, char lines[][STORY_TEXT], int max);
 
 /* "140 M NORTH-EAST, 2 LAYERS DOWN" from a world position (feet + 1) to a chunk's centre. */
 void story_direction(float fx, float fy, float fz, int cx, int cy, int cz, char *out, int n);

@@ -107,7 +107,11 @@ void touch_event(Game *g, const SDL_Event *e) {
         if (i >= 0) release(g, i);
         if (t->nfingers >= TOUCH_MAX_FINGERS) return;
         int role = TOUCH_NONE;
-        if (story_motive_pending(g, ps)) {
+        if (story_parley_open(ps)) {
+            int vx, vy, vw, vh;
+            game_view_rect(g, ps, &vx, &vy, &vw, &vh);
+            story_parley_tap(g, ps, vw, vh, x - vx, y - vy);
+        } else if (story_motive_pending(g, ps)) {
             int vx, vy, vw, vh;
             game_view_rect(g, ps, &vx, &vy, &vw, &vh);
             story_picker_tap(g, ps, vw, vh, x - vx, y - vy);
@@ -220,7 +224,7 @@ void touch_draw(Game *g) {
         font_end();
         return;
     }
-    if (story_motive_pending(g, ps)) {
+    if (story_motive_pending(g, ps) || story_parley_open(ps)) {
         batch2d_flush();
         return;
     }

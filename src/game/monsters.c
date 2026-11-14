@@ -500,6 +500,7 @@ static void bloater_burst(Game *g, Monster *m, float mult);
 
 void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int attacker) {
     if (!m->alive || m->hidden) return; /* vanished or underground */
+    if (m->parley == 1 || m->resident) return; /* yielded, waiting for a choice; or at home in the Sanctum */
     if (m->rank >= 4) dmg *= 0.85f; /* armoured, far out */
     if (attacker >= 0) g_tele.dealt += fminf(dmg, m->hp);
     if (m->type == MON_KNIGHT && m->state != MS_STUN && !(g_hit_flags & WBF_SHIELDBREAK)) {
@@ -517,6 +518,11 @@ void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int 
     }
     m->hp -= dmg;
     m->flash = 0.15f;
+    if (attacker >= 0 && attacker < MAX_PLAYERS) m->last_hitter = attacker;
+    if (m->hp < m->maxhp * 0.15f && !m->parley && m->story_key && m->named_kind && m->named_kind - 1 != NK_LORD && story_parley_begin(g, m)) {
+        m->hp = fmaxf(m->hp, m->maxhp * 0.05f); /* it yields instead of dying: a choice */
+        return;
+    }
     if (attacker >= 0 && attacker < MAX_PLAYERS && g->players[attacker].active) {
         m->last_hitter = attacker;
         if (!g->players[attacker].st.dead) m->target = attacker; /* turn on whoever hurts you */
@@ -1182,9 +1188,18 @@ static void pick_alt(Game *g, Monster *m, int self, vec3 c, float player_dist, v
 
 void monsters_update(Game *g, float dt) {
     if (g->freeze_monsters) return;
+    if (g->parley_hold) return; /* someone is choosing */
     for (int i = 0; i < MAX_MONSTERS; i++) {
         Monster *m = &g->mons[i];
         if (!m->alive) continue;
+        if (m->parley == 1 || m->resident) {
+            /* waiting: still, facing the nearest player */
+            PlayerSlot *np = game_nearest_player(g, m->pos, 30.0f);
+            m->vel.x = m->vel.z = 0;
+            if (np) m->yaw = atan2f(np->pl.pos.z - m->pos.z, np->pl.pos.x - m->pos.x);
+            m->anim += dt * 0.3f;
+            continue;
+        }
         const MonsterDef *d = &MONSTERS[m->type];
         vec3 c = monster_centre(m);
         PlayerSlot *tp = monster_target(g, m, c);

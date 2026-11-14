@@ -134,5 +134,8 @@ and their characters are asked for a motive. Version 13 adds the world's story g
   changes; monster families become factions with allies and enemies; wars on the borders.
 - **S5 - choices and endings:** taking sides, mechanical puzzles as mission steps, and a
   closing scene for each chapter of a motive.
-- **Generated stories:** done, see [STORY_GEN.md](STORY_GEN.md). Choices that change the
-  history are the open part.
+- **Generated stories:** done, see [STORY_GEN.md](STORY_GEN.md).
+- **S4 and S5, consequences and choices:** done for the stories' own people, see
+  [STORY_CHOICES.md](STORY_CHOICES.md): targets yield and are killed, spared or bargained with,
+  factions keep a standing, killed lords change their domains, the spared come back, the finale
+  is a decision and two arcs follow from the deeds. Camps and people (S3) remain.

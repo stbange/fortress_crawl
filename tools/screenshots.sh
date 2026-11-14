@@ -80,6 +80,9 @@ shot story_story      --demo story
 shot story_read       --demo read
 shot story_named      --demo named
 shot golden_thread    --demo thread
+shot story_choice     --demo parley --cast 2
+shot story_finale     --demo parley --cast 9
+SHOT_TIME=4 shot story_residents --demo residents --look 90 -8
 
 # ---- the Sanctum: ruin, door, built, hall, decorations, shop, forge ----
 shot sanctum          --demo sanctum --cast 0

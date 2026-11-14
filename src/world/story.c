@@ -257,6 +257,25 @@ static void fill_domain(const World *w, int gx, int gy, int gz, Domain *d) {
     cset(&c, "builders", sw.builders);
     expand(d->era, sizeof d->era, ERAS[d->stratum], &r, &c);
     d->era[0] = (char)(d->era[0] >= 'A' && d->era[0] <= 'Z' ? d->era[0] + 32 : d->era[0]);
+    /* a killed lord changes the domain: it empties, or the rival moves in under a new lord */
+    u64 lk = hash3(w->seed, gx, gy, gz, 0x10AD) | 1;
+    if (w->ndeeds && story_deed_of(w, DK_LORD, lk)) {
+        u64 lk2 = hash3(w->seed, gx, gy, gz, 0x10AE) | 1;
+        bool taken = hash_unit(mix64(d->id ^ 0xC4A7)) < 0.5f;
+        make_named(lk, d->culture, d->fallen, sizeof d->fallen);
+        if (taken && !story_deed_of(w, DK_LORD, lk2)) {
+            char t[STORY_NAME];
+            snprintf(t, sizeof t, "%s", d->faction);
+            snprintf(d->faction, sizeof d->faction, "%s", d->rival);
+            snprintf(d->rival, sizeof d->rival, "%s", t);
+            d->state = DS_HELD;
+            d->changed = 2;
+        } else {
+            if (taken) make_named(lk2, d->culture, d->fallen, sizeof d->fallen);
+            d->state = DS_ABANDONED;
+            d->changed = 1;
+        }
+    }
 }
 
 /* The domain cell a chunk belongs to (cheap: no names). */
@@ -282,6 +301,8 @@ void story_domain(const World *w, int cx, int cy, int cz, Domain *out) {
 }
 
 void story_domain_line(const Domain *d, char *out, int n) {
+    if (d->changed == 1) { snprintf(out, (size_t)n, "empty since you killed %.40s", d->fallen); return; }
+    if (d->changed == 2) { snprintf(out, (size_t)n, "taken by %.40s since you killed %.36s", d->faction, d->fallen); return; }
     switch (d->state) {
     case DS_HELD: snprintf(out, (size_t)n, "held by %s", d->faction); break;
     case DS_ABANDONED: snprintf(out, (size_t)n, "empty since %s", d->era); break;
@@ -346,13 +367,25 @@ void story_lord(const World *w, const Domain *d, Named *out) {
     make_named(out->key, d->culture, out->name, sizeof out->name);
     static const char *const T[] = { "lord of %.36s", "keeper of %.34s", "who holds %.34s", "warden of %.34s" };
     snprintf(out->title, sizeof out->title, PICK(&r, T), d->name);
+    if (d->changed) {
+        /* the one who took it after the first fell (dead too if the domain is empty again) */
+        u64 lk2 = hash3(w->seed, d->gx, d->gy, d->gz, 0x10AE) | 1;
+        if (d->changed == 2 || story_deed_of(w, DK_LORD, lk2)) {
+            out->key = lk2;
+            make_named(lk2, d->culture, out->name, sizeof out->name);
+            snprintf(out->title, sizeof out->title, "who took %.36s", d->name);
+            out->hp_mult = 5.0f;
+            out->dmg_mult = 1.45f;
+            out->scale = 1.4f;
+        }
+    }
 }
 
 bool story_lord_here(const World *w, int cx, int cy, int cz, Named *out) {
     if (world_is_pocket(cx, cy, cz)) return false;
     Domain d;
     story_domain(w, cx, cy, cz, &d);
-    if (d.level < 2) return false; /* the first rooms behind the gate are quiet */
+    if (d.level < 2 || d.changed == 1) return false; /* quiet near the gate, and where no one rules */
     story_lord(w, &d, out);
     return out->cx == cx && out->cy == cy && out->cz == cz;
 }
@@ -451,6 +484,14 @@ static void chapter_identity(const World *w, int chapter, Named *out) {
         snprintf(out->name, sizeof out->name, "%s", h->actor[h->cast[chapter]].name);
         history_title(h, chapter, out->title, sizeof out->title);
         out->key = ((out->key >> 8) | 1) * UNIQUE_SLOTS + h->cast_legend[chapter];
+    } else if (h && chapter < H_CAST + H_SEQUEL) {
+        /* the arcs that come of what the players did */
+        HLedger l;
+        story_ledger(w, &l);
+        HSequel sq;
+        history_sequel(h, &l, chapter, &sq);
+        snprintf(out->name, sizeof out->name, "%s", sq.name);
+        snprintf(out->title, sizeof out->title, "%s", sq.title);
     }
 }
 
@@ -601,6 +642,14 @@ void story_chapter_hook(const World *w, int m, int chapter, const Personal *p, c
         history_hook(h, m % MOTIVE_COUNT, chapter, &hp, NULL, out, n);
         return;
     }
+    if (h && chapter < H_CAST + H_SEQUEL) {
+        HPersonal hp;
+        hpersonal(p, &hp);
+        HLedger l;
+        story_ledger(w, &l);
+        history_sequel_hook(h, &l, chapter, &hp, out, n);
+        return;
+    }
     Ctx c = { 0 };
     Named t, nx, pw, npw;
     StoryWorld sw;
@@ -639,7 +688,11 @@ void story_revelation(const World *w, int chapter, const Personal *p, char *out,
         hpersonal(p, &hp);
         Named nx;
         chapter_identity(w, chapter + 1, &nx);
-        history_reveal(h, chapter, &hp, nx.name, out, n);
+        if (chapter >= H_CAST && chapter < H_CAST + H_SEQUEL) {
+            HLedger l;
+            story_ledger(w, &l);
+            history_sequel_reveal(h, &l, chapter, &hp, nx.name, out, n);
+        } else history_reveal(h, chapter, &hp, nx.name, out, n);
         return;
     }
     Ctx c = { 0 };
@@ -837,6 +890,21 @@ void story_trace_text(const World *w, int cx, int cy, int cz, char *out, int n) 
             size_t len = strlen(out);
             if (len + 2 + strlen(extra) < (size_t)n) snprintf(out + len, (size_t)n - len, " %s", extra);
         }
+        const History *h = hist(w);
+        if (h && hash_unit(mix64(t.key ^ 0x9057)) < 0.55f) {
+            /* a newer poster beside it: on you, by the people of someone you killed */
+            int victim = -1;
+            for (int i = 0; i < w->ndeeds; i++)
+                if (w->deeds[i].kind == DK_CHAPTER && w->deeds[i].choice == CH_KILL && w->deeds[i].chapter < H_CAST) victim = w->deeds[i].chapter;
+            if (victim >= 0) {
+                char ep[64], poster[STORY_TEXT];
+                story_epithet(w, ep, sizeof ep);
+                snprintf(poster, sizeof poster, " Beside it, a newer poster: %.40s pay %d crowns for %.40s, who killed %.30s.",
+                         h->faction[h->actor[h->cast[victim]].faction].name, 150 + 50 * victim, ep, h->actor[h->cast[victim]].name);
+                size_t len = strlen(out);
+                if (len + strlen(poster) < (size_t)n) snprintf(out + len, (size_t)n - len, "%s", poster);
+            }
+        }
     }
 }
 
@@ -870,12 +938,147 @@ bool story_legend_lore(const World *w, int id, char *out, int n) {
 void story_orders(const World *w, int chapter, char *out, int n) {
     out[0] = 0;
     const History *h = hist(w);
-    if (!h || chapter >= H_CAST) return;
+    if (!h || chapter >= H_CAST + H_SEQUEL) return;
+    char ep[64];
+    story_epithet(w, ep, sizeof ep);
+    if (chapter >= H_CAST) {
+        HLedger l;
+        story_ledger(w, &l);
+        HSequel sq;
+        history_sequel(h, &l, chapter, &sq);
+        snprintf(out, (size_t)n, "The hunters carry orders from %.40s: 'Find %.40s. For %.40s.'", sq.power, ep[0] ? ep : "the stranger",
+                 sq.victim[0] ? sq.victim : "what was done");
+        return;
+    }
+    /* the sender's people remember whom you killed */
+    int f = h->actor[h->cast[chapter]].faction, victim = -1;
+    for (int i = 0; i < w->ndeeds; i++) {
+        const Deed *d = &w->deeds[i];
+        if (d->kind == DK_CHAPTER && d->choice == CH_KILL && d->chapter < H_CAST && h->actor[h->cast[d->chapter]].faction == f) victim = d->chapter;
+    }
+    if (victim >= 0) {
+        snprintf(out, (size_t)n, "The hunters carry orders from %.40s: '%.40s killed %.40s. Bring me their head.'", h->actor[h->cast[chapter]].name,
+                 ep[0] ? ep : "The stranger", h->actor[h->cast[victim]].name);
+        if (out[0] >= 'a' && out[0] <= 'z') out[0] = (char)(out[0] - 32);
+        return;
+    }
     Personal p0;
     story_personal(w->seed, 0, &p0);
     HPersonal hp;
     hpersonal(&p0, &hp);
     history_clue_text(h, h->orders[chapter], &hp, out, n);
+}
+
+/* ---------- what players did ---------- */
+
+void story_deed(World *w, int kind, int chapter, int choice, int by, u64 key, int gx, int gy, int gz) {
+    if (story_deed_of(w, kind, key)) return;
+    if (kind == DK_CHAPTER && story_chapter_deed(w, chapter)) return;
+    if (w->ndeeds >= MAX_DEEDS) {
+        /* full: the oldest lord gives way (chapter deeds are never dropped) */
+        int k = -1;
+        for (int i = 0; i < w->ndeeds && k < 0; i++)
+            if (w->deeds[i].kind == DK_LORD) k = i;
+        if (k < 0) return;
+        memmove(&w->deeds[k], &w->deeds[k + 1], sizeof(Deed) * (size_t)(w->ndeeds - k - 1));
+        w->ndeeds--;
+    }
+    Deed *d = &w->deeds[w->ndeeds++];
+    memset(d, 0, sizeof *d);
+    d->kind = (u8)kind;
+    d->chapter = (u8)chapter;
+    d->choice = (u8)choice;
+    d->by = (u8)by;
+    d->key = key;
+    d->gx = (i16)gx; d->gy = (i16)gy; d->gz = (i16)gz;
+}
+
+const Deed *story_deed_of(const World *w, int kind, u64 key) {
+    for (int i = 0; i < w->ndeeds; i++)
+        if (w->deeds[i].kind == kind && w->deeds[i].key == key) return &w->deeds[i];
+    return NULL;
+}
+
+const Deed *story_chapter_deed(const World *w, int chapter) {
+    for (int i = 0; i < w->ndeeds; i++)
+        if (w->deeds[i].kind == DK_CHAPTER && w->deeds[i].chapter == chapter) return &w->deeds[i];
+    return NULL;
+}
+
+Deed *story_chapter_deed_mut(World *w, int chapter) { return (Deed *)story_chapter_deed(w, chapter); }
+
+void story_ledger(const World *w, HLedger *l) {
+    memset(l, 0, sizeof *l);
+    for (int i = 0; i < w->ndeeds; i++) {
+        const Deed *d = &w->deeds[i];
+        if (d->kind != DK_CHAPTER || d->chapter >= H_CAST) continue;
+        l->done |= (u16)(1u << d->chapter);
+        l->choice[d->chapter] = d->choice;
+        if (d->flags & DF_RETURNED) l->returned |= (u8)(1u << d->chapter);
+    }
+}
+
+int story_chapter_of_key(const World *w, u64 key) {
+    int last = hist(w) ? H_CAST + H_SEQUEL : 0;
+    for (int c = 0; c < last; c++) {
+        Named t;
+        chapter_identity(w, c, &t);
+        if (t.key == key) return c;
+    }
+    return -1;
+}
+
+void story_epithet(const World *w, char *out, int n) {
+    int kill = 0, spare = 0, deal = 0, lords = 0;
+    for (int i = 0; i < w->ndeeds; i++) {
+        const Deed *d = &w->deeds[i];
+        if (d->kind == DK_LORD) lords++;
+        else if (d->choice == CH_KILL) kill++;
+        else if (d->choice == CH_SPARE) spare++;
+        else deal++;
+    }
+    StoryWorld sw;
+    story_world(w->seed, &sw);
+    out[0] = 0;
+    if (kill + spare + deal + lords == 0) return;
+    if (kill + lords >= 3 && kill + lords >= 2 * (spare + deal)) snprintf(out, (size_t)n, "the Butcher of %.30s", sw.fortress);
+    else if (spare >= 2 && spare > kill) snprintf(out, (size_t)n, "the Merciful");
+    else if (deal >= 2 && deal >= kill) snprintf(out, (size_t)n, "the Broker");
+    else snprintf(out, (size_t)n, "the stranger at the gate");
+}
+
+int story_hunter_mood(const World *w, int chapter) {
+    const History *h = hist(w);
+    if (!h) return 0;
+    if (chapter >= H_CAST) return chapter < H_CAST + H_SEQUEL ? 2 : 0;
+    HLedger l;
+    story_ledger(w, &l);
+    int s = history_standing(h, &l, h->actor[h->cast[chapter]].faction);
+    return s >= 3 ? 1 : s <= -4 ? 2 : 0;
+}
+
+int story_deed_lines(const World *w, const Personal *p, char lines[][STORY_TEXT], int max) {
+    const History *h = hist(w);
+    HLedger l;
+    if (h) story_ledger(w, &l);
+    HPersonal hp;
+    hpersonal(p, &hp);
+    int n = 0;
+    for (int i = w->ndeeds - 1; i >= 0 && n < max; i--) {
+        const Deed *d = &w->deeds[i];
+        if (d->kind == DK_CHAPTER && h && d->chapter < H_CAST) {
+            history_deed_line(h, &l, d->chapter, &hp, lines[n], STORY_TEXT);
+            if (lines[n][0]) n++;
+        } else if (d->kind == DK_LORD) {
+            Domain dm;
+            fill_domain(w, d->gx, d->gy, d->gz, &dm);
+            if (dm.changed == 2) snprintf(lines[n], STORY_TEXT, "You killed %.40s. %.40s took %.40s.", dm.fallen, dm.faction, dm.name);
+            else snprintf(lines[n], STORY_TEXT, "You killed %.40s. %.40s stands empty.", dm.fallen, dm.name);
+            lines[n][0] = 'Y';
+            n++;
+        }
+    }
+    return n;
 }
 
 /* ---------- directions ---------- */

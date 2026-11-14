@@ -186,6 +186,56 @@ static void story_dump(const World *w, int chapters, int radius) {
         }
 }
 
+/* What the choices make of a world's story (docs/STORY_CHOICES.md): the pleas and choices
+ * of the nine targets, the deeds as the STORY tab lists them, the three endings and the arcs
+ * that follow each. */
+static void choices_dump(World *w, int policy) {
+    const History *h = history_of(w->seed);
+    HPersonal hp = { "Aldmere", "sister" };
+    char buf[STORY_TEXT], desc[CH_COUNT][STORY_TEXT_H];
+    for (int c = 0; c < H_CAST; c++) {
+        Named t;
+        story_chapter_target(w, c, &t);
+        history_parley(h, c, &hp, buf, sizeof buf, desc);
+        printf("CHAPTER %d: %s, %s\n  %s\n", c + 1, t.name, t.title, buf);
+        for (int k = 0; k < CH_COUNT; k++) printf("    %s\n", desc[k]);
+    }
+    for (int fin = 0; fin < CH_COUNT; fin++) {
+        w->ndeeds = 0;
+        for (int c = 0; c < H_CAST; c++) {
+            Named t;
+            story_chapter_target(w, c, &t);
+            int ch = c == 8 ? fin : (policy + c) % CH_COUNT;
+            story_deed(w, DK_CHAPTER, c, ch, 0, t.key, 0, 0, 0);
+        }
+        HLedger l;
+        story_ledger(w, &l);
+        printf("\nENDING %d (%s), the others by policy %d\n", fin, fin == 0 ? "kill" : fin == 1 ? "spare" : "take the key", policy);
+        history_epilogue(h, fin, &hp, buf, sizeof buf);
+        printf("  epilogue: %s\n", buf);
+        char lines[12][STORY_TEXT];
+        Personal p;
+        story_personal(w->seed, 0, &p);
+        int n = story_deed_lines(w, &p, lines, 12);
+        for (int i = 0; i < n; i++) printf("  deed: %s\n", lines[i]);
+        char ep[64];
+        story_epithet(w, ep, sizeof ep);
+        printf("  they call you: %s\n", ep);
+        for (int f = 0; f < h->nfactions; f++) printf("  standing %s: %d\n", h->faction[f].name, history_standing(h, &l, f));
+        for (int c = H_CAST; c < H_CAST + H_SEQUEL; c++) {
+            Named t;
+            story_chapter_target(w, c, &t);
+            story_chapter_hook(w, MOTIVE_REVENGE, c, &p, buf, sizeof buf);
+            printf("  chapter %d: %s, %s\n    hook: %s\n", c + 1, t.name, t.title, buf);
+            story_revelation(w, c, &p, buf, sizeof buf);
+            printf("    revelation: %s\n", buf);
+        }
+        story_orders(w, 9, buf, sizeof buf);
+        printf("  hunters: %s\n", buf);
+    }
+    w->ndeeds = 0;
+}
+
 /* The variety of generated stories over n worlds (docs/STORY_GEN.md). */
 static void story_stats(int n) {
     static History h;
@@ -258,6 +308,7 @@ int main(int argc, char **argv) {
         history_dump(&h, stdout);
         if (h.problems[0]) printf("PROBLEMS: %s\n", h.problems);
     } else if (argc == 3 && strcmp(argv[1], "storystats") == 0) story_stats(atoi(argv[2]));
+    else if (argc >= 2 && strcmp(argv[1], "choices") == 0) choices_dump(&w, argc > 2 ? atoi(argv[2]) : 0);
     else if (argc == 3 && strcmp(argv[1], "structs") == 0) structs_dump(&w, atoi(argv[2]));
     else if (argc >= 3 && strcmp(argv[1], "mech") == 0) mech_dump(&w, atoi(argv[2]), argc > 3 ? atoi(argv[3]) : 0);
     else {

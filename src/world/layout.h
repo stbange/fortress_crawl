@@ -37,7 +37,25 @@ typedef struct World {
     /* the story generator this world was made with: 0 the first (one script, new names),
      * 1 a simulated history per world (docs/STORY_GEN.md); old saves keep 0 */
     u8 story_gen;
+    /* what players did that the stories answer (docs/STORY_CHOICES.md): saved */
+    int ndeeds;
+    struct DeedRec {
+        u8 kind;    /* DK_* */
+        u8 chapter; /* DK_CHAPTER: the chapter whose target it was */
+        u8 choice;  /* CH_* */
+        u8 by;      /* the player slot */
+        u8 flags;   /* DF_* */
+        i16 gx, gy, gz; /* DK_LORD: the domain cell */
+        u64 key;    /* the named enemy's story key */
+    } deeds[128];
 } World;
+#define MAX_DEEDS 128
+enum { DK_NONE, DK_CHAPTER, DK_LORD };
+/* what was done with a chapter target that yielded (and, at the end, with the opener) */
+enum { CH_KILL, CH_SPARE, CH_BARGAIN, CH_COUNT }; /* the finale: kill, spare, take the key */
+#define DF_RETURNED 1 /* a spared one who bears a grudge has come back with hunters */
+#define DF_WARNED 2   /* a grateful one has warned of hunters (once per sending, reset) */
+typedef struct DeedRec Deed;
 #define STORY_GEN_LATEST 1
 
 typedef struct Structure {

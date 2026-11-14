@@ -495,6 +495,12 @@ void game_event(Game *g, const SDL_Event *e) {
         ps->st.weapon = (ps->st.weapon + d) % WPN_COUNT;
     } else if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat) {
         SDL_Keycode k = e->key.key;
+        if (story_parley_open(ps)) {
+            if (k == SDLK_UP || k == SDLK_W) story_parley_nav(g, ps, NAV_UP);
+            else if (k == SDLK_DOWN || k == SDLK_S) story_parley_nav(g, ps, NAV_DOWN);
+            else if (k == SDLK_RETURN || k == SDLK_SPACE || k == SDLK_KP_ENTER) story_parley_nav(g, ps, NAV_BUY);
+            return;
+        }
         if (story_motive_pending(g, ps)) {
             if (k == SDLK_UP || k == SDLK_W) story_picker_nav(g, ps, NAV_UP);
             else if (k == SDLK_DOWN || k == SDLK_S) story_picker_nav(g, ps, NAV_DOWN);
@@ -608,6 +614,17 @@ static void read_pad(Game *g, PlayerSlot *ps, PlayerInput *in, float dt) {
     deadzone(&lx, &ly, 0.2f);
     deadzone(&rx, &ry, 0.15f);
 
+    if (story_parley_open(ps)) {
+        static float parley_cool[MAX_PLAYERS];
+        float *cool = &parley_cool[ps->index];
+        *cool -= dt;
+        if (PRESSED(SDL_GAMEPAD_BUTTON_DPAD_UP) || (ly < -0.6f && *cool <= 0)) { story_parley_nav(g, ps, NAV_UP); *cool = 0.25f; }
+        if (PRESSED(SDL_GAMEPAD_BUTTON_DPAD_DOWN) || (ly > 0.6f && *cool <= 0)) { story_parley_nav(g, ps, NAV_DOWN); *cool = 0.25f; }
+        if (fabsf(ly) < 0.3f) *cool = 0;
+        if (PRESSED(SDL_GAMEPAD_BUTTON_SOUTH)) story_parley_nav(g, ps, NAV_BUY);
+        ps->attack_held = ps->alt_held = ps->pad_attack = ps->pad_alt = ps->pad_spell = false;
+        return;
+    }
     if (story_motive_pending(g, ps)) {
         static float pick_cool[MAX_PLAYERS];
         float *cool = &pick_cool[ps->index];
@@ -797,7 +814,7 @@ void game_update(Game *g, const PlayerInput *kb, float dt) {
         if (ps->keyboard && kb) inputs[i] = *kb;
         if (ps->keyboard) touch_input(g, &inputs[i]);
         if (ps->pad) read_pad(g, ps, &inputs[i], dt);
-        bool modal = ps->show_skills || ps->show_map || story_motive_pending(g, ps);
+        bool modal = ps->show_skills || ps->show_map || story_motive_pending(g, ps) || story_parley_open(ps);
         if (modal) memset(&inputs[i], 0, sizeof inputs[i]);
         /* menus pause the game only when playing alone */
         if (g->nplayers == 1 && modal) paused = true;
@@ -1214,6 +1231,7 @@ static void render_view(Game *g, PlayerSlot *ps, int vx, int vy, int vw, int vh)
     renderer_end_world(&g->r);
 
     if (story_motive_pending(g, ps)) { story_draw_picker(g, ps, vw, vh); return; }
+    if (story_parley_open(ps)) { story_draw_parley(g, ps, vw, vh); return; }
     if (ps->show_map) explore_draw_map(g, ps, vw, vh);
     else if (ps->show_skills) draw_menu(g, ps, vw, vh);
     else {

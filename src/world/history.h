@@ -23,6 +23,7 @@
 #define H_CAST 9 /* chapters 0-8: the main mystery, three arcs */
 #define H_QUESTIONS 6
 #define H_NAME 48
+#define STORY_TEXT_H 320 /* = STORY_TEXT */
 #define UNIQUE_SLOTS 20 /* the world legendaries (UNIQUE_COUNT in the game) */
 
 enum { TONE_HORROR, TONE_HUMAN, TONE_TRAGEDY, TONE_COUNT };
@@ -207,6 +208,33 @@ bool history_validate(History *h);
 /* The arc's culture (story.c decides it from the seed: the arc's direction). */
 int story_arc_culture(u64 seed, int arc);
 
+/* ---------- what the player did (docs/STORY_CHOICES.md) ---------- */
+/* The chapter deeds as the history needs them (story.c fills it from the world's ledger). */
+typedef struct HLedger {
+    u16 done;          /* bit c: chapter c's target was dealt with */
+    u8 choice[H_CAST]; /* CH_* (layout.h): killed, spared, bargained with (the finale: taken the key) */
+    u8 returned;       /* bit c: the spared target of chapter c came back with hunters */
+} HLedger;
+#define H_SEQUEL 6 /* chapters 9-14: two arcs that come of what the player did */
+enum { SQ_AVENGE, SQ_BETRAYED, SQ_ENEMY, SQ_HEIR, SQ_HERALD, SQ_FREED, SQ_PURGE, SQ_KEY, SQ_COUNT };
+typedef struct HSequel {
+    char name[H_NAME], title[H_NAME];
+    char power[H_NAME];   /* the arc's Power */
+    char victim[H_NAME];  /* whose death or deed it answers */
+    char rel[16];         /* the Power's tie to the victim ("sister") */
+    char faction[H_NAME];
+    u8 culture, cause;    /* SQ_* */
+    u8 victim_ch;         /* the chapter of the victim, H_NONE */
+} HSequel;
+/* Chapters 9-14 of a world with generated stories, from the history and the deeds. */
+void history_sequel(const History *h, const HLedger *l, int chapter, HSequel *out);
+/* How a history faction stands toward the player: below 0 they hunt, 3 and above they let pass. */
+int history_standing(const History *h, const HLedger *l, int faction);
+/* The faction that opposes f in the mystery (the liars against the opener's side). */
+int history_enemy_faction(const History *h, int f);
+/* Does the target of chapter c bear a grudge for being spared (else it is grateful)? */
+bool history_spare_betrays(const History *h, int chapter);
+
 /* ---------- text (history_text.c) ---------- */
 /* Context for a player: their village and kin ("your sister"). NULL: generic. */
 typedef struct HPersonal { const char *village, *kin; } HPersonal;
@@ -217,6 +245,8 @@ void history_clue_text(const History *h, int clue, const HPersonal *p, char *out
 void history_clue_text_v(const History *h, int clue, const HPersonal *p, u64 variant, char *out, int n);
 /* What chapter c's target reveals when it falls; past the mystery, what no one else told. */
 void history_reveal(const History *h, int chapter, const HPersonal *p, const char *next, char *out, int n);
+/* The same truth from a target that lives: what it says as it goes. */
+void history_reveal_spoken(const History *h, int chapter, const HPersonal *p, char *out, int n);
 /* The clue a revelation carries (-1 past the mystery and its leftovers). */
 int history_reveal_clue(const History *h, int chapter);
 /* A fact in the STORY tab's neutral voice, with where it came from. */
@@ -235,6 +265,19 @@ void history_question(const History *h, int q, const HPersonal *p, char *out, in
 void history_answer(const History *h, int q, const HPersonal *p, char *out, int n);
 /* The fact a clue carries. */
 static inline int history_clue_fact(const History *h, int clue) { return clue >= 0 && clue < h->nclues ? h->clue[clue].fact : -1; }
+/* Choices: what a yielding target says, and what each choice means (desc[CH_COUNT]). */
+void history_parley(const History *h, int chapter, const HPersonal *p, char *plea, int n, char desc[][STORY_TEXT_H]);
+/* The line when a target is spared or bargained with (killing uses history_done). */
+void history_choice_done(const History *h, int chapter, int choice, const HPersonal *p, const char *next, char *out, int n);
+/* After the finale. */
+void history_epilogue(const History *h, int choice, const HPersonal *p, char *out, int n);
+/* A deed as the STORY tab lists it, with what came of it. */
+void history_deed_line(const History *h, const HLedger *l, int chapter, const HPersonal *p, char *out, int n);
+/* A grateful spared one in the Sanctum. */
+void history_resident_line(const History *h, int chapter, const HPersonal *p, char *out, int n);
+/* Sequel texts (chapters 9-14). */
+void history_sequel_hook(const History *h, const HLedger *l, int chapter, const HPersonal *p, char *out, int n);
+void history_sequel_reveal(const History *h, const HLedger *l, int chapter, const HPersonal *p, const char *next, char *out, int n);
 /* A readable account of the whole history (worldmap). */
 void history_dump(const History *h, FILE *f);
 

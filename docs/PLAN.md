@@ -440,6 +440,9 @@ Done:
 - Generated stories: a simulated history per world (eras, people, kin, drives, the fall and the
   lie told about it), plot shapes found in it, the first three arcs cast from its survivors,
   clues in every source, questions answered in the STORY tab: [`STORY_GEN.md`](STORY_GEN.md).
+- Choices with consequences: targets yield (kill, spare, bargain), faction standing drives the
+  hunters, killed lords change their domains, the spared return (grateful in the Sanctum, or at
+  the head of hunters), a finale decision, two arcs cast from the deeds: [`STORY_CHOICES.md`](STORY_CHOICES.md).
 - The balance pass from those notes ([`BALANCE_PLAN.md`](BALANCE_PLAN.md)): danger that keeps up,
   a costlier death, a shop for gold, melee across ledges, safer stairs, a nearer first chapter.
 - Screenshot and demo modes (`--shot`, `--demo combat|sword|death|skills|map|coop|menu|
