@@ -134,6 +134,25 @@ gained a kind for what residents tell. Older saves load with an empty ledger.
 - `--demo parley --cast N` (the choice at chapter N), `--demo residents` (the grateful in the
   Sanctum); `tools/screenshots.sh story_choice story_finale story_residents`.
 
+## In play
+
+Six bot runs of 75 minutes in six new worlds (three questers, an explorer, an archer, a
+caster; bots choose by policy). No crashes; every consequence turned up:
+
+- **Edhold (1337):** killed Tamumun after it yielded, spared Ishusut, bargained with the
+  Steward Tamusut, killed Ostiwyn. At minute 30, "A WARNING FROM ISHUSUT: HUNTERS ARE COMING.
+  FEWER THAN THEY MEANT TO SEND." Four domains changed hands or emptied behind it.
+- **Aldburg (8080):** bargained with Halewyn at minute 3; ten minutes later "CEDOWYN SENDS NO
+  HUNTERS: YOU STAND WITH THEIR PEOPLE". It killed Cedowyn when it finally found him.
+- **Gerhold (2025):** spared Morawyn, who told it what lies below on the spot; ten minutes later
+  "MORAWYN RETURNS WITH HUNTERS. YOU SHOULD NOT HAVE SPARED THEM."
+- **Ulwall (9001):** the same with Raket, at minute 40.
+- **Cedmark, Halmark (explorer, archer):** no chapters, but six domains taken or emptied after
+  their lords fell, one of them twice (taken, then emptied when the new lord died too).
+
+The bots still reach few chapters (one to four), so the finale and the arcs after it were
+checked with `worldmap choices` and the tests rather than in play.
+
 ## Not done
 
 - The other characters in co-op are not asked; whoever chooses first decides.
