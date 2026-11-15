@@ -707,7 +707,7 @@ static void demo_setup(Game *g) {
                 p1->thread.n, p1->thread.reached, (SDL_GetTicksNS() - t0) / 1e6, t.name, t.cx, t.cy, t.cz, p1->banner);
         return;
     }
-    if (!strcmp(g_demo_kind, "dig") || !strcmp(g_demo_kind, "blast") || !strcmp(g_demo_kind, "flood") || !strcmp(g_demo_kind, "burn") || !strcmp(g_demo_kind, "grow") || !strcmp(g_demo_kind, "lava") || !strcmp(g_demo_kind, "elements") || !strcmp(g_demo_kind, "away") || !strcmp(g_demo_kind, "thaw")) {
+    if (!strcmp(g_demo_kind, "dig") || !strcmp(g_demo_kind, "blast") || !strcmp(g_demo_kind, "flood") || !strcmp(g_demo_kind, "burn") || !strcmp(g_demo_kind, "grow") || !strcmp(g_demo_kind, "lava") || !strcmp(g_demo_kind, "elements") || !strcmp(g_demo_kind, "away") || !strcmp(g_demo_kind, "thaw") || !strcmp(g_demo_kind, "matter")) {
         /* the pickaxe out at a wall (docs/DESTRUCTION.md); the swings and the bomb come in
          * screenshot_step */
         for (int i = 0; i < MAX_MONSTERS; i++) g->mons[i].alive = false;
@@ -1178,6 +1178,65 @@ static void screenshot_step(App *a, float frame_dt) {
     if (g->opt.demo && a->demo_done && !strcmp(kind, "blast")) {
         static bool thrown;
         if (!thrown && a->shot_wait > 0.6f) { thrown = true; bomb_throw(g, p1); }
+    }
+    if (g->opt.demo && a->demo_done && !strcmp(kind, "matter")) {
+        /* the table of materials (docs/SIMULATION.md): oil thrown on a pool and lit, acid against a
+         * rock wall, lightning into iron bars with a crawler behind them, a growth tonic on bare
+         * earth, a fish dropped into the pool */
+        static int stage, bx, by, bz;
+        static float logged;
+        static Monster *behind;
+        if (stage == 0 && a->shot_wait > 0.4f) {
+            vec3 f = v3(cosf(p1->pl.yaw), 0, sinf(p1->pl.yaw));
+            bx = (int)floorf(p1->pl.pos.x + f.x * 6); by = (int)floorf(p1->pl.pos.y); bz = (int)floorf(p1->pl.pos.z + f.z * 6);
+            int n = 0;
+            for (int z = -1; z <= 1; z++)
+                for (int x = -1; x <= 1; x++) n += chunkmap_edit(&g->map, bx + x, by - 1, bz + z, B_WATER, 0, 8);       /* pool */
+            for (int y = 0; y < 3; y++) chunkmap_edit(&g->map, bx + 4, by + y, bz + 4, B_ROCK, 0, 0);                    /* rock */
+            chunkmap_edit(&g->map, bx + 3, by, bz + 4, B_ACID, 0, 8);                                                    /* acid */
+            for (int y = 0; y < 3; y++) chunkmap_edit(&g->map, bx - 4, by + y, bz + 4, B_BARS, 0, 0);                    /* bars */
+            for (int z = -2; z <= 2; z++)
+                for (int x = 3; x <= 5; x++) chunkmap_edit(&g->map, bx + x, by - 1, bz - 4 + z, B_DIRT, 0, 0);           /* bare earth */
+            if (n > 6) {
+                stage = 1;
+                behind = monster_spawn(g, MON_CRAWLER, v3(bx - 4.5f, (float)by, bz + 5.5f), 3, false, v3(1, 1, 1), 0xFA11);
+                pickup_spawn(g, PK_FOOD, v3(bx + 0.5f, (float)by - 0.9f, bz + 0.5f), FD_CAVE_FISH, NULL, 0, 0);
+                p1->st.flasks[0] = p1->st.flasks[2] = 3;
+                SDL_Log("matter: at %d %d %d", bx, by, bz);
+            }
+        }
+        if (stage == 1 && a->shot_wait > 1.0f) {
+            stage = 2;
+            /* oil onto the pool, a tonic onto the earth */
+            g->bombs[0] = (Bomb){ true, v3(bx + 0.5f, by + 1.5f, bz + 0.5f), v3(0, -2, 0), 5.0f, 0, 6, THROW_OIL };
+            g->bombs[1] = (Bomb){ true, v3(bx + 4.5f, by + 1.0f, bz - 3.5f), v3(0, -2, 0), 5.0f, 0, 6, THROW_TONIC };
+        }
+        if (stage == 2 && a->shot_wait > 3.0f) {
+            stage = 3;
+            sim_element_hit(g, v3(bx + 0.5f, by + 0.3f, bz + 0.5f), EL_FIRE, 0, 20.0f); /* light the oil */
+            if (behind && behind->alive) { behind->pos = v3(bx - 4.5f, (float)by, bz + 5.5f); behind->vel = v3(0, 0, 0); }
+            float hp = behind && behind->alive ? behind->hp : -1;
+            sim_element_hit(g, v3(bx - 3.5f, by + 1.5f, bz + 4.5f), EL_LIGHTNING, 0, 20.0f); /* into the bars */
+            SDL_Log("matter: lightning into the bars: crawler %.0f -> %.0f", hp, behind && behind->alive ? behind->hp : 0.0f);
+        }
+        if (stage && a->shot_wait > logged + 1.5f) {
+            logged = a->shot_wait;
+            int oil = 0, fire = 0, water = 0, acid = 0, grass = 0, flower = 0;
+            for (int y = -1; y < 3; y++)
+                for (int z = -6; z <= 6; z++)
+                    for (int x = -6; x <= 6; x++) {
+                        bool known;
+                        Block b = chunkmap_block(&g->map, bx + x, by + y, bz + z, &known);
+                        oil += b == B_OIL; fire += b == B_FIRE; water += b == B_WATER; acid += b == B_ACID; grass += b == B_GRASS; flower += b == B_FLOWER;
+                    }
+            u64 rock = 0;
+            for (int y = 0; y < 3; y++) rock += (u64)__builtin_popcountll(chunkmap_mask(&g->map, bx + 4, by + y, bz + 4)) * (chunkmap_block(&g->map, bx + 4, by + y, bz + 4, &(bool){ 0 }) == B_ROCK);
+            float fy = -1;
+            for (int i = 0; i < MAX_PICKUPS; i++)
+                if (g->pickups[i].alive && g->pickups[i].kind == PK_FOOD && fabsf(g->pickups[i].pos.x - bx - 0.5f) < 2 && fabsf(g->pickups[i].pos.z - bz - 0.5f) < 2) fy = g->pickups[i].pos.y;
+            SDL_Log("matter: t %.1f  oil %d fire %d water %d acid %d rock pieces %d grass %d flowers %d fish at %.2f", a->shot_wait, oil, fire, water,
+                    acid, (int)rock, grass, flower, fy);
+        }
     }
     if (g->opt.demo && a->demo_done && !strcmp(kind, "thaw")) {
         /* temperature (docs/SIMULATION.md): a ring of ice round a campfire, a pool beside a pit

@@ -412,7 +412,8 @@ last and shows what is saved; *New characters* (press twice) deletes the save of
 | WASD / mouse | move / look |
 | Left / right mouse button | attack / alternate attack (unlocked by skills) |
 | 1, 2, 3, 4 or mouse wheel | blade, bow, staff, pickaxe (left digs, right throws a bomb) |
-| X | throw a bomb (2.2 s fuse; breaks masonry; the shop sells 3 for 90 gold) |
+| X | throw a bomb (2.2 s fuse; breaks masonry; the shop sells 3 for 90 gold) or the flask chosen with C |
+| C | choose what X throws: bomb, oil flask, frost salt, growth tonic |
 | Q (or middle mouse button) | cast the selected spell (hold for breath spells) |
 | R / Shift+R | next / previous known spell |
 | H / J | drink a health / mana potion |

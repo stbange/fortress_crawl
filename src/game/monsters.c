@@ -589,6 +589,13 @@ void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int 
             particles_burst(g, c, m->glow, 30, 6.0f, 0.1f, true);
             if (!m->named_kind) sfx_at(g, SFX_NAMED_DEATH, c, 1.0f);
         }
+        if (m->type == MON_SLIME) {
+            /* what is left of a slime is a pool of acid (docs/SIMULATION.md) */
+            int ax = (int)floorf(m->pos.x), ay = (int)floorf(m->pos.y + 0.1f), az = (int)floorf(m->pos.z);
+            bool known;
+            if (chunkmap_block(&g->map, ax, ay, az, &known) == B_AIR && !dig_protected(g, ax, ay, az))
+                chunkmap_edit(&g->map, ax, ay, az, B_ACID, 0, m->scale > 0.75f ? 4 : 2);
+        }
         if (m->type == MON_SLIME && m->scale > 0.75f) {
             /* a big slime splits in two small ones */
             sfx_at(g, SFX_SLIME_SPLIT, c, 1.0f);

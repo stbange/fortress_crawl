@@ -362,6 +362,8 @@ void theme_info(int theme, ThemeInfo *t) {
     t->mat[B_HIVE] = (Col){ 190, 145, 70 };
     t->mat[B_ASH] = (Col){ 95, 92, 88 };
     t->mat[B_OBSIDIAN] = (Col){ 34, 24, 44 };
+    t->mat[B_OIL] = (Col){ 46, 34, 16 };
+    t->mat[B_ACID] = (Col){ 90, 180, 40 };
     t->mortar = col_transform(f->mortar, s);
     t->glass = f->glass;
     t->roof = col_transform(f->roof, s);

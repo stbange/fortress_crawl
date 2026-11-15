@@ -238,6 +238,10 @@ static int shop_items(Game *g, PlayerSlot *ps, ShopItem *out) {
     add(out, &n, SH_SUPPLY, 100, 90, s->bombs + 3 <= 30, "YOU CARRY ALL YOU CAN", "3 BOMBS: THEY BREAK MASONRY (YOU HAVE %d)", s->bombs);
     if (s->pick < 3)
         add(out, &n, SH_SUPPLY, 101, s->pick == 1 ? 400 : 1500, true, NULL, s->pick == 1 ? "A STEEL PICKAXE: DIGS FASTER" : "A MITHRIL PICKAXE: DIGS FASTEST");
+    /* flasks to throw (C chooses, X throws; docs/SIMULATION.md) */
+    add(out, &n, SH_SUPPLY, 104, 45, s->flasks[0] + 3 <= 30, "YOU CARRY ALL YOU CAN", "3 OIL FLASKS: A POOL THAT FLOATS ON WATER AND BURNS (YOU HAVE %d)", s->flasks[0]);
+    add(out, &n, SH_SUPPLY, 105, 60, s->flasks[1] + 3 <= 30, "YOU CARRY ALL YOU CAN", "3 FROST SALTS: FREEZE WATER, FOES AND FIRE WHERE THEY BREAK (YOU HAVE %d)", s->flasks[1]);
+    add(out, &n, SH_SUPPLY, 106, 90, s->flasks[2] + 2 <= 30, "YOU CARRY ALL YOU CAN", "2 GROWTH TONICS: PLANTS SPRING UP WHERE THE GROUND ALLOWS (YOU HAVE %d)", s->flasks[2]);
     /* against the cold (docs/SIMULATION.md) */
     if (!s->cloak) add(out, &n, SH_SUPPLY, 102, 350, true, NULL, "A FUR CLOAK: THE COLD REACHES YOU FOUR TIMES SLOWER");
     add(out, &n, SH_SUPPLY, 103, 60, s->warm_t < 600.0f, "YOU ARE WARM ENOUGH", "A WARMING DRAUGHT: AN HOUR OF WARMTH IN THE COLD");
@@ -435,6 +439,12 @@ static void buy(Game *g, PlayerSlot *ps, const ShopItem *it) {
         if (it->arg == 100) {
             ps->st.bombs += 3;
             snprintf(buf, sizeof buf, "3 BOMBS (%d) - X OR THE PICKAXE'S ALTERNATE ATTACK THROWS ONE", ps->st.bombs);
+            break;
+        }
+        if (it->arg >= 104 && it->arg <= 106) {
+            int k = it->arg - 104;
+            ps->st.flasks[k] = (u8)MINI(ps->st.flasks[k] + (k == 2 ? 2 : 3), 30);
+            snprintf(buf, sizeof buf, "%s (%d) - C CHOOSES WHAT X THROWS", throw_name(k + 1), ps->st.flasks[k]);
             break;
         }
         if (it->arg == 102) {

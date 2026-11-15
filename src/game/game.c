@@ -570,7 +570,8 @@ void game_event(Game *g, const SDL_Event *e) {
         case SDLK_2: ps->st.weapon = WPN_BOW; ps->pick_out = false; break;
         case SDLK_3: ps->st.weapon = WPN_STAFF; ps->pick_out = false; break;
         case SDLK_4: ps->pick_out = true; break;
-        case SDLK_X: bomb_throw(g, ps); break;
+        case SDLK_X: throw_selected(g, ps); break;
+        case SDLK_C: throw_cycle(ps); break;
         case SDLK_F1: g->hud = !g->hud; break;
         case SDLK_F9: sfx_toggle_mute(); game_banner(ps, sfx_muted() ? "SOUND OFF (F9)" : "SOUND ON (F9)"); break;
         case SDLK_F10: music_toggle(); game_banner(ps, music_on() ? "MUSIC ON (F10)" : "MUSIC OFF (F10)"); break;
@@ -1170,7 +1171,8 @@ static void draw_hud(Game *g, PlayerSlot *ps, int W, int H) {
         font_text(W - font_text_width(wn) - 5, H - 14, wn, 1.0f, 0.85f, 0.6f);
     } else {
         int x = W - 5;
-        snprintf(buf, sizeof buf, s->bombs ? "4 PICKAXE (%d BOMBS)" : "4 PICKAXE", s->bombs);
+        if (s->throw_sel == THROW_BOMB) snprintf(buf, sizeof buf, s->bombs ? "4 PICKAXE (%d BOMBS)" : "4 PICKAXE", s->bombs);
+        else snprintf(buf, sizeof buf, "4 PICKAXE (X: %d %s)", s->flasks[s->throw_sel - 1], throw_name(s->throw_sel));
         x -= font_text_width(buf) + 8;
         font_text(x + 8, H - 14, buf, ps->pick_out ? 1.0f : 0.45f, ps->pick_out ? 0.9f : 0.42f, ps->pick_out ? 0.7f : 0.38f);
         for (int w = WPN_COUNT - 1; w >= 0; w--) {

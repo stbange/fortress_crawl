@@ -31,7 +31,7 @@ static int light_at(Game *g, int x, int y, int z) {
     return MAXI(l[0], MAXI(l[1], l[2]));
 }
 
-static bool earth(Block b) { return b == B_DIRT || b == B_MOSS; }
+static bool earth(Block b) { return SUBSTANCES[b & BLOCK_MAT].nutrient && block_solid(b); } /* (the table in block.c) */
 static bool stone(Block b) { return b == B_ROCK || b == B_MOSS || b == B_DIRT || b == B_WOOD; }
 
 /* Water within r cells straight out from (x, y, z) in the four directions and below. */
@@ -104,12 +104,14 @@ int bio_grown(int b) { return b >= 0 && b < B_COUNT ? g_grown[b] : 0; }
 /* What temperature does (heat.c): ice melts, still water freezes or boils away, what burns
  * catches when hot enough, and frost kills what grew. True if the cell changed. */
 static bool heat_rules(Game *g, int x, int y, int z, Block b, float r) {
-    if (b != B_ICE && b != B_WATER && b != B_WOOD && b != B_GRASS && b != B_FLOWER && b != B_VINE && b != B_ROOTS && b != B_WEB &&
-        b != B_HIVE && b != B_FUNGUS)
-        return false;
+    const Substance *m = &SUBSTANCES[b];
+    if (b != B_WATER && !m->ignite && !m->melt && b != B_GRASS && b != B_FUNGUS) return false;
     float t = heat_cell(g, x, y, z);
-    if (b == B_ICE) {
-        if (t > 3.0f && r < 0.5f && !dig_protected(g, x, y, z)) { chunkmap_edit(&g->map, x, y, z, B_WATER, 0, 8); return true; }
+    if (m->melt) { /* (ice into water) */
+        if (t > (float)m->melt && r < 0.5f && !dig_protected(g, x, y, z)) {
+            chunkmap_edit(&g->map, x, y, z, m->melt_to, 0, m->melt_to == B_WATER ? 8 : 0);
+            return true;
+        }
         return false;
     }
     if (b == B_WATER) {
@@ -130,8 +132,7 @@ static bool heat_rules(Game *g, int x, int y, int z, Block b, float r) {
         return false;
     }
     /* catching fire from heat: wood smoulders longer than grass */
-    float ignite_at = b == B_WOOD ? 220.0f : 140.0f;
-    if (t > ignite_at && r < 0.4f) return sim_ignite(g, x, y, z);
+    if (m->ignite && t > (float)m->ignite && r < 0.4f) return sim_ignite(g, x, y, z);
     /* frost kills what grew (the world's own plants are hardier) */
     if (t < -2.0f && (b == B_GRASS || b == B_FLOWER || b == B_VINE) && r < 0.2f && grown_here(g, x, y, z)) {
         wither(g, x, y, z, B_AIR);
@@ -412,6 +413,27 @@ bool bio_catch_up_run(Game *g, int budget) {
         if (blk(g, ox + lx, oy + ly, oz + lz) != before) cu_add_around(lx, ly, lz, 1);
     }
     return false;
+}
+
+/* A growth tonic breaks at p: on earth in some light grass springs up, in the dark fungus, on
+ * damp stone moss; then everything round gets a few seasons' worth of looks at once. */
+void bio_tonic(Game *g, vec3 p, float r) {
+    int x0 = (int)floorf(p.x), y0 = (int)floorf(p.y), z0 = (int)floorf(p.z), ri = (int)ceilf(r);
+    for (int y = y0 - 2; y <= y0 + 2; y++)
+        for (int z = z0 - ri; z <= z0 + ri; z++)
+            for (int x = x0 - ri; x <= x0 + ri; x++) {
+                if ((x - x0) * (x - x0) + (z - z0) * (z - z0) > ri * ri || dig_protected(g, x, y, z)) continue;
+                Block b = blk(g, x, y, z), below = blk(g, x, y - 1, z);
+                u64 h = mix64((u64)(x * 73856093) ^ (u64)(y * 19349663) ^ (u64)(z * 83492791) ^ (u64)(g->time * 100));
+                if ((b == B_AIR || b == B_ASH) && (earth(below) || b == B_ASH) && light_at(g, x, y, z) >= 3 && (h & 1)) grow(g, x, y, z, B_GRASS);
+                else if (b == B_AIR && stone(below) && light_at(g, x, y, z) < 3 && (h & 3) == 0) grow(g, x, y, z, B_FUNGUS);
+                else if (b == B_ROCK && exposed(g, x, y, z) && damp(g, x, y, z) && (h & 1)) grow(g, x, y, z, B_MOSS);
+            }
+    for (int pass = 0; pass < 6; pass++)
+        for (int y = y0 - 2; y <= y0 + 3; y++)
+            for (int z = z0 - ri; z <= z0 + ri; z++)
+                for (int x = x0 - ri; x <= x0 + ri; x++)
+                    bio_cell(g, x, y, z, mix64((u64)(x * 977 + z * 131 + y * 7) ^ ((u64)pass << 40) ^ (u64)(g->time * 1000)));
 }
 
 void bio_reset(void) {

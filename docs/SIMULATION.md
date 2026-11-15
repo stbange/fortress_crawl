@@ -260,6 +260,38 @@ jolt, the half again for being wet, and the shock through the pool). The ice mel
 `--cast 1` in the far north (`--pos 8 6 -700 --fly`): you stand in -8 degrees and are COLD
 after about two minutes.
 
+## The table of materials
+
+Every block has a row in one table (`SUBSTANCES` in `src/world/block.c`) and the rules read it
+instead of keeping their own lists: what burns (the degrees it catches at and how long it
+burns), what melts and into what, what carries lightning, how heavy it is against water, what
+water seeps through when broken, what plants root in. A new block needs a row, not new code;
+`test_worldgen` checks the rows are sane (everything that burns has fuel, every liquid flows,
+oil is lighter than water, metal carries lightning).
+
+- **Oil** (new liquid): flows as water does, rises through water and floats on it, and burns
+  (catching at 180 degrees, for as long as the pool is deep): a burning slick on a pool.
+- **Acid** (new liquid): what is left of a slime when it dies (a pool of two to four eighths). It
+  flows, eats the stone round it a few pieces at a time (not metal, glass, obsidian or what is
+  protected), using itself up as it eats, burns whoever stands in it (3% of their health twice a
+  second; slimes are at home in it) and water dilutes it into water.
+- **Lightning through metal:** lightning that strikes iron (bars, chains, iron blocks, braziers,
+  lanterns) runs along all of it that is joined there (up to 200 cells, 12 m round) and hurts
+  whoever touches it, as it runs through water.
+- **Floating:** food, reagents, scrolls and formulae dropped in water float up to the surface;
+  weapons and gold sink, slowly.
+- **Flasks to throw:** C chooses what X throws: a bomb, an **oil flask** (a pool of oil where it
+  breaks, on top of water if it lands in it), **frost salt** (frost at five points round where it
+  breaks, cold, foes frozen) or a **growth tonic** (grass springs up on earth in some light,
+  fungus in the dark, moss on damp stone, then a few seasons of growth at once). They break on
+  the first thing they meet. The shop sells them (3 oil flasks 45 gold, 3 frost salts 60, 2
+  growth tonics 90); they are saved with the character (save version 19).
+
+`--demo matter`: oil thrown onto a pool and lit burns on the water; a pool of acid against a
+rock wall eats 10 of its pieces and spreads out thin; lightning into iron bars hurts the crawler
+behind them (28 health to 12); a growth tonic on bare earth leaves 12 tufts of grass and three
+flowers; a fish dropped into the pool floats at the surface.
+
 ## Time away
 
 The simulation runs only near the players, so the world would freeze wherever nobody is. It

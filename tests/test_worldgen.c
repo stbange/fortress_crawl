@@ -600,6 +600,22 @@ int main(int argc, char **argv) {
         printf("physics: broken blocks collide and cast rays by their 25 cm pieces\n");
     }
 
+    /* 6c. the table of substances (docs/SIMULATION.md): sane values for every block */
+    {
+        int burns = 0;
+        for (int b = 1; b < B_COUNT; b++) {
+            const Substance *m = &SUBSTANCES[b];
+            CHECK(m->density > 0, "%s has a density", BLOCKS[b].name);
+            if (m->ignite) { burns++; CHECK(m->fuel > 0, "%s burns and has fuel", BLOCKS[b].name); }
+            if (m->melt) CHECK(m->melt_to > B_AIR && m->melt_to < B_COUNT && m->melt_to != b, "%s melts into something else", BLOCKS[b].name);
+            if (BLOCKS[b].render == RENDER_LIQUID) CHECK(!block_solid(b), "the liquid %s is not solid", BLOCKS[b].name);
+            if (m->lightning) CHECK(m->density > 10, "%s carries lightning and sinks", BLOCKS[b].name);
+        }
+        CHECK(SUBSTANCES[B_OIL].density < SUBSTANCES[B_WATER].density, "oil floats on water");
+        CHECK(SUBSTANCES[B_ICE].melt_to == B_WATER, "ice melts into water");
+        printf("substances: %d blocks, %d of them burn; oil floats, ice melts, metal carries lightning\n", B_COUNT - 1, burns);
+    }
+
     /* 7. mechanisms */
     {
         g_bx0 = g_by0 = g_bz0 = -(1 << 30);

@@ -609,8 +609,17 @@ void pickups_update(Game *g, float dt) {
             p->vel = v3_scale(v3_norm(v3_sub(v3_add(feet, v3(0, 0.5f, 0)), p->pos)), 7.0f);
             p->pos = v3_add(p->pos, v3_scale(p->vel, dt));
         } else if (!p->key) {
-            /* dropped things fall and settle */
-            p->vel.y -= 18.0f * dt;
+            /* dropped things fall and settle; in water the light ones (food, reagents, scrolls,
+             * formulae: lighter than water, docs/SIMULATION.md) float up to the surface */
+            bool light = p->kind == PK_FOOD || p->kind == PK_REAGENT || p->kind == PK_SCROLL || p->kind == PK_FORMULA;
+            int wl = sim_fluid(g, (int)floorf(p->pos.x), (int)floorf(p->pos.y), (int)floorf(p->pos.z));
+            if (light && wl) {
+                float top = floorf(p->pos.y) + wl / 8.0f;
+                bool above = sim_fluid(g, (int)floorf(p->pos.x), (int)floorf(p->pos.y) + 1, (int)floorf(p->pos.z)) > 0;
+                p->vel.y = above || p->pos.y < top - 0.1f ? 1.5f : 0.0f;
+                p->vel.x *= 0.9f; p->vel.z *= 0.9f;
+            } else if (wl) p->vel.y = fmaxf(p->vel.y - 6.0f * dt, -2.0f); /* the heavy sink, slowly */
+            else p->vel.y -= 18.0f * dt;
             vec3 np = v3_add(p->pos, v3_scale(p->vel, dt));
             if (game_solid(g, (int)floorf(np.x), (int)floorf(np.y - 0.1f), (int)floorf(np.z)) != 0) {
                 p->vel = v3(0, 0, 0);

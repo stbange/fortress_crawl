@@ -202,7 +202,10 @@ typedef struct Bomb {
     vec3 pos, vel;
     float fuse;
     int owner, level;
+    u8 kind;      /* THROW_*: a bomb bounces and goes off; a flask breaks where it first hits */
 } Bomb;
+/* What X throws (C chooses): a bomb or one of the flasks (docs/SIMULATION.md) */
+enum { THROW_BOMB, THROW_OIL, THROW_FROST, THROW_TONIC, THROW_COUNT };
 
 typedef struct Stats {
     float hp, maxhp, mana, maxmana;
@@ -275,6 +278,8 @@ typedef struct Stats {
     float cold;      /* 0..1: how far the cold has got into you (COLD from 0.5, CHILLED at 1) */
     float warm_t;    /* warmed (by a fire or a warming draught): the cold does not touch you */
     float wet;       /* 0..1: soaked through (no catching fire; lightning twice as bad; frost freezes) */
+    u8 flasks[3];    /* oil, frost salt, growth tonic (THROW_OIL.. - 1) */
+    u8 throw_sel;    /* THROW_*: what X throws */
     u32 blueprints;
     u16 runes_t, runes_e;
     /* story (per character) */
@@ -873,6 +878,10 @@ bool dig_protected(Game *g, int x, int y, int z);
 int world_break_sphere(Game *g, PlayerSlot *ps, vec3 p, float r, int power);
 void world_explode(Game *g, vec3 p, float radius, int power, float dmg, int owner);
 void bomb_throw(Game *g, PlayerSlot *ps);
+void throw_selected(Game *g, PlayerSlot *ps);     /* X: the bomb or flask chosen with C */
+void throw_cycle(PlayerSlot *ps);                 /* C */
+const char *throw_name(int kind);
+void bio_tonic(Game *g, vec3 p, float r);         /* a growth tonic breaks: plants spring up */
 void bombs_update(Game *g, float dt);
 void bombs_draw(Game *g);
 void dig_swing(Game *g, PlayerSlot *ps);

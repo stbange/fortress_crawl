@@ -229,8 +229,47 @@ void world_explode(Game *g, vec3 p, float radius, int power, float dmg, int owne
 
 /* ---------- bombs ---------- */
 
-void bomb_throw(Game *g, PlayerSlot *ps) {
+static const char *const THROW_NAMES[THROW_COUNT] = { "BOMB", "OIL FLASK", "FROST SALT", "GROWTH TONIC" };
+const char *throw_name(int kind) { return THROW_NAMES[CLAMPI(kind, 0, THROW_COUNT - 1)]; }
+
+static int throw_count(const Stats *s, int kind) { return kind == THROW_BOMB ? s->bombs : s->flasks[kind - 1]; }
+
+void throw_cycle(PlayerSlot *ps) {
     Stats *s = &ps->st;
+    /* the next kind there is some of (else just the next) */
+    for (int k = 1; k <= THROW_COUNT; k++) {
+        int c = (s->throw_sel + k) % THROW_COUNT;
+        if (throw_count(s, c) > 0 || k == THROW_COUNT) { s->throw_sel = (u8)c; break; }
+    }
+    char buf[64];
+    snprintf(buf, sizeof buf, "X THROWS: %s (%d)", THROW_NAMES[s->throw_sel], throw_count(s, s->throw_sel));
+    game_banner(ps, buf);
+}
+
+static void throw_kind(Game *g, PlayerSlot *ps, int kind);
+void throw_selected(Game *g, PlayerSlot *ps) { throw_kind(g, ps, ps->st.throw_sel); }
+void bomb_throw(Game *g, PlayerSlot *ps) { throw_kind(g, ps, THROW_BOMB); }
+
+static void throw_kind(Game *g, PlayerSlot *ps, int kind) {
+    Stats *s = &ps->st;
+    if (kind != THROW_BOMB) {
+        if (s->flasks[kind - 1] == 0) {
+            if (ps->banner_time <= 0) game_banner(ps, "NONE LEFT - THE SHOP SELLS FLASKS (C CHOOSES WHAT TO THROW)");
+            return;
+        }
+        if (ps->bomb_cd > 0) return;
+        for (int i = 0; i < MAX_BOMBS; i++) {
+            Bomb *b = &g->bombs[i];
+            if (b->alive) continue;
+            vec3 look = dir_from_angles(ps->pl.yaw, ps->pl.pitch);
+            *b = (Bomb){ true, v3_add(player_eye(&ps->pl), v3_scale(look, 0.5f)), v3_add(v3_scale(look, 12.0f), v3(0, 2.5f, 0)), 5.0f, ps->index, s->level, (u8)kind };
+            s->flasks[kind - 1]--;
+            ps->bomb_cd = 0.5f;
+            sfx_player(g, ps, SFX_SWING_DAGGER, 0.7f);
+            return;
+        }
+        return;
+    }
     if (s->bombs <= 0) {
         if (ps->banner_time <= 0) game_banner(ps, "NO BOMBS - THE SMITH SELLS THEM");
         return;
@@ -246,6 +285,7 @@ void bomb_throw(Game *g, PlayerSlot *ps) {
         b->fuse = 2.2f;
         b->owner = ps->index;
         b->level = s->level;
+        b->kind = THROW_BOMB;
         s->bombs--;
         ps->bomb_cd = 0.6f;
         sfx_player(g, ps, SFX_SWING_DAGGER, 0.8f);
@@ -255,11 +295,59 @@ void bomb_throw(Game *g, PlayerSlot *ps) {
 
 static bool bomb_blocked(Game *g, vec3 p) { return !phys_box_free(v3_sub(p, v3(0, 0.1f, 0)), 0.1f, 0.2f, game_solid, g); }
 
+/* A flask breaks: what is in it acts on the world where it lands (docs/SIMULATION.md). */
+static void flask_break(Game *g, Bomb *b) {
+    b->alive = false;
+    vec3 p = b->pos;
+    int x = (int)floorf(p.x), y = (int)floorf(p.y), z = (int)floorf(p.z);
+    for (int k = 0; k < 4 && sim_fluid(g, x, y, z); k++) y++; /* on water: on top of it */
+    sfx_at(g, SFX_HIT_WALL, p, 0.6f);
+    switch (b->kind) {
+    case THROW_OIL: {
+        /* a pool of oil, spilling round where it broke */
+        particles_burst(g, p, v3(0.3f, 0.22f, 0.1f), 12, 2.5f, 0.05f, false);
+        for (int k = 0; k < 5; k++) {
+            int dx = k == 1 ? 1 : k == 2 ? -1 : 0, dz = k == 3 ? 1 : k == 4 ? -1 : 0;
+            bool known;
+            Block c = chunkmap_block(&g->map, x + dx, y, z + dz, &known);
+            if (known && (c == B_AIR || c == B_OIL) && !dig_protected(g, x + dx, y, z + dz)) chunkmap_edit(&g->map, x + dx, y, z + dz, B_OIL, 0, k ? 3 : 6);
+        }
+        break;
+    }
+    case THROW_FROST:
+        particles_burst(g, p, v3(0.85f, 0.95f, 1.0f), 24, 3.0f, 0.05f, true);
+        for (int k = 0; k < 5; k++) {
+            float a = k * 2.0f * PI_F / 5.0f;
+            sim_element_hit(g, k ? v3_add(p, v3(cosf(a) * 1.8f, 0, sinf(a) * 1.8f)) : p, EL_FROST, b->owner, 30.0f);
+        }
+        heat_add(g, p, -80.0f);
+        for (int k = 0; k < MAX_MONSTERS; k++)
+            if (g->mons[k].alive && v3_len(v3_sub(g->mons[k].pos, p)) < 3.0f) element_hit(g, &g->mons[k], EL_FROST, 15.0f, p, 0.0f, b->owner);
+        break;
+    case THROW_TONIC:
+        particles_burst(g, p, v3(0.4f, 0.9f, 0.35f), 24, 2.0f, 0.05f, true);
+        bio_tonic(g, p, 3.0f);
+        break;
+    default: break;
+    }
+}
+
 void bombs_update(Game *g, float dt) {
     for (int i = 0; i < MAX_BOMBS; i++) {
         Bomb *b = &g->bombs[i];
         if (!b->alive) continue;
         b->vel.y -= 20.0f * dt;
+        if (b->kind != THROW_BOMB) {
+            /* a flask breaks on the first thing it meets */
+            vec3 np = v3_add(b->pos, v3_scale(b->vel, dt));
+            bool hit = bomb_blocked(g, np) || (b->fuse -= dt) <= 0 ||
+                       sim_fluid(g, (int)floorf(np.x), (int)floorf(np.y), (int)floorf(np.z)) > 0; /* (or on water's surface) */
+            for (int k = 0; k < MAX_MONSTERS && !hit; k++)
+                hit = g->mons[k].alive && v3_len(v3_sub(v3_add(g->mons[k].pos, v3(0, 0.6f, 0)), np)) < 0.8f;
+            if (hit) flask_break(g, b);
+            else b->pos = np;
+            continue;
+        }
         for (int a = 0; a < 3; a++) {
             vec3 np = b->pos;
             float d = (a == 0 ? b->vel.x : a == 1 ? b->vel.y : b->vel.z) * dt;
@@ -282,6 +370,12 @@ void bombs_draw(Game *g) {
         Bomb *b = &g->bombs[i];
         if (!b->alive) continue;
         vec3 light = game_light_at(g, b->pos);
+        if (b->kind != THROW_BOMB) {
+            static const vec3 FC[4] = { { 0, 0, 0 }, { 0.45f, 0.32f, 0.12f }, { 0.85f, 0.92f, 1.0f }, { 0.35f, 0.85f, 0.3f } };
+            vec3 c = FC[b->kind];
+            batch3d_octa(b->pos, 0.09f, 0.13f, b->fuse * 6.0f, v3(c.x * light.x + 0.05f, c.y * light.y + 0.05f, c.z * light.z + 0.05f), false);
+            continue;
+        }
         batch3d_octa(b->pos, 0.14f, 0.14f, b->fuse * 3.0f, v3(0.16f * light.x + 0.04f, 0.15f * light.y + 0.04f, 0.15f * light.z + 0.04f), false);
         batch3d_box(v3_add(b->pos, v3(0, 0.16f, 0)), v3(0.02f, 0.05f, 0.02f), 0, v3(1.0f, 0.75f, 0.35f), true);
     }

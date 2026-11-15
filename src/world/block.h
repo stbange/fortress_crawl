@@ -49,6 +49,8 @@ enum {
     B_HIVE,      /* sprite: a wild beehive hanging from above */
     B_ASH,       /* sprite: what fire leaves; things grow well in it */
     B_OBSIDIAN,  /* cube: lava cooled by water */
+    B_OIL,       /* liquid: floats on water, burns hot */
+    B_ACID,      /* liquid: eats stone, hurts, water dilutes it */
     B_COUNT
 };
 
@@ -81,5 +83,19 @@ static inline bool block_opaque(Block b) { return !(b & BLOCK_CARVED) && BLOCKS[
  * pickaxe), 3 masonry (explosives), 4 metal (nothing the player has). */
 extern const u8 BLOCK_HARDNESS[B_COUNT];
 enum { HARD_NEVER, HARD_SOFT, HARD_ROCK, HARD_MASONRY, HARD_METAL };
+
+/* What a material is like, for the rules of the simulation (docs/SIMULATION.md): what reads
+ * this table needs no special cases for a new block. */
+typedef struct Substance {
+    i16 ignite;      /* degrees it catches fire at (0: does not burn) */
+    u8 fuel;         /* how long it burns, in fire's level (eighths of a long burn) */
+    i16 melt;        /* degrees it melts at (0: does not) ... */
+    u8 melt_to;      /* ... into this */
+    bool lightning;  /* carries lightning (metal) */
+    u8 density;      /* tenths of water's: below 10 floats */
+    bool porous;     /* water seeps through it when broken */
+    bool nutrient;   /* plants root in it */
+} Substance;
+extern const Substance SUBSTANCES[B_COUNT];
 
 #endif

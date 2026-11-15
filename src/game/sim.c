@@ -319,17 +319,16 @@ static void gas_draw_particles(Game *g, float dt) {
 
 /* ---------- fire ---------- */
 
-static bool flammable(Block b) { return b == B_WOOD || b == B_WEB || b == B_GRASS || b == B_ROOTS || b == B_VINE || b == B_FLOWER || b == B_HIVE; }
+static bool flammable(Block b) { return SUBSTANCES[b & BLOCK_MAT].ignite > 0; } /* (the table in block.c) */
 
 /* Sets (x, y, z) alight if it burns: what is there becomes fire with fuel by what it was. */
 static bool ignite(Game *g, int x, int y, int z) {
     bool known;
     Block raw = chunkmap_block_raw(&g->map, x, y, z, &known);
     if (!known || (raw & BLOCK_CARVED) || dig_protected(g, x, y, z)) return false;
-    int fuel = 0;
-    if (raw == B_WOOD) fuel = 8;
-    else if (raw == B_WEB || raw == B_GRASS || raw == B_ROOTS || raw == B_VINE || raw == B_FLOWER || raw == B_HIVE) fuel = 2;
-    else if (raw == B_AIR) {
+    int fuel = SUBSTANCES[raw].fuel;
+    if (raw == B_OIL) fuel = MAXI(2, chunkmap_level(&g->map, x, y, z)); /* a pool of oil burns as long as it is deep */
+    if (raw == B_AIR) {
         /* air beside something that burns catches from it */
         for (int k = 0; k < 6 && !fuel; k++) {
             Block nb = chunkmap_block_raw(&g->map, x + N6[k][0], y + N6[k][1], z + N6[k][2], &known);
@@ -454,6 +453,51 @@ static bool in_body(const Cell *body, int n, vec3 p) {
     return false;
 }
 
+/* Lightning that strikes metal (bars, chains, iron, braziers) runs along all of it joined
+ * there (up to 200 cells, 12 m round) and hurts whoever touches it. */
+static void metal_arc(Game *g, int x0, int y0, int z0, int owner, float dmg) {
+    static Cell net[200];
+    int n = 0;
+    bool known;
+    for (int k = 0; k < 7 && !n; k++) {
+        int x = x0 + (k ? N6[k - 1][0] : 0), y = y0 + (k ? N6[k - 1][1] : 0), z = z0 + (k ? N6[k - 1][2] : 0);
+        if (SUBSTANCES[chunkmap_block(&g->map, x, y, z, &known)].lightning) net[n++] = (Cell){ x, y, z };
+    }
+    for (int i = 0; i < n && n < 200; i++)
+        for (int k = 0; k < 6 && n < 200; k++) {
+            Cell c = { net[i].x + N6[k][0], net[i].y + N6[k][1], net[i].z + N6[k][2] };
+            if (abs(c.x - x0) > 12 || abs(c.y - y0) > 12 || abs(c.z - z0) > 12) continue;
+            if (!SUBSTANCES[chunkmap_block(&g->map, c.x, c.y, c.z, &known)].lightning) continue;
+            bool dup = false;
+            for (int j = 0; j < n && !dup; j++) dup = net[j].x == c.x && net[j].y == c.y && net[j].z == c.z;
+            if (!dup) net[n++] = c;
+        }
+    if (!n) return;
+    for (int i = 0; i < n; i += 2)
+        particles_burst(g, v3(net[i].x + 0.5f, net[i].y + 0.5f, net[i].z + 0.5f), v3(0.7f, 0.85f, 1.0f), 2, 2.0f, 0.04f, true);
+    /* touching: the body's cells, or the cells beside them */
+    for (int k = 0; k < MAX_MONSTERS; k++) {
+        Monster *m = &g->mons[k];
+        if (!m->alive) continue;
+        for (int i = 0; i < n; i++)
+            if (fabsf(net[i].x + 0.5f - m->pos.x) < 1.3f && fabsf(net[i].z + 0.5f - m->pos.z) < 1.3f && net[i].y + 1.0f > m->pos.y - 0.3f &&
+                net[i].y < m->pos.y + MONSTERS[m->type].h * m->scale + 0.3f) {
+                monster_damage(g, m, dmg * 0.8f, m->pos, 0.0f, owner);
+                break;
+            }
+    }
+    for (int k = 0; k < MAX_PLAYERS; k++) {
+        PlayerSlot *ps = &g->players[k];
+        if (!ps->active || ps->st.dead) continue;
+        for (int i = 0; i < n; i++)
+            if (fabsf(net[i].x + 0.5f - ps->pl.pos.x) < 1.2f && fabsf(net[i].z + 0.5f - ps->pl.pos.z) < 1.2f && net[i].y + 1.0f > ps->pl.pos.y - 0.3f &&
+                net[i].y < ps->pl.pos.y + 1.9f) {
+                game_hurt_player(g, ps, dmg * (k == owner ? 0.3f : 0.5f), v3(net[i].x + 0.5f, net[i].y + 0.5f, net[i].z + 0.5f));
+                break;
+            }
+    }
+}
+
 void sim_element_hit(Game *g, vec3 p, int el, int owner, float dmg) {
     int x0 = (int)floorf(p.x), y0 = (int)floorf(p.y), z0 = (int)floorf(p.z);
     /* fire and frost are heat and cold too */
@@ -500,7 +544,7 @@ void sim_element_hit(Game *g, vec3 p, int el, int owner, float dmg) {
             int dx = k == 0 ? 0 : N6[k - 1][0], dy = k == 0 ? 0 : N6[k - 1][1], dz = k == 0 ? 0 : N6[k - 1][2];
             n = water_body(g, x0 + dx, y0 + dy, z0 + dz, body, 400);
         }
-        if (n < 2) break;
+        if (n < 2) { metal_arc(g, x0, y0, z0, owner, dmg); break; }
         for (int i = 0; i < n; i += 3)
             if (chunkmap_block(&g->map, body[i].x, body[i].y + 1, body[i].z, &(bool){ 0 }) != B_WATER)
                 particles_burst(g, v3(body[i].x + 0.5f, body[i].y + 0.95f, body[i].z + 0.5f), v3(0.6f, 0.8f, 1.0f), 2, 2.5f, 0.04f, true);
@@ -546,7 +590,7 @@ static void seep(Game *g, Cell c, int l) {
         int bx = c.x + D[d][0], by = c.y + D[d][1], bz = c.z + D[d][2];
         bool known;
         Block raw = chunkmap_block_raw(&g->map, bx, by, bz, &known);
-        if (!known || !(raw & BLOCK_CARVED) || !porous(chunkmap_mask(&g->map, bx, by, bz), D[d][0], D[d][1], D[d][2])) continue;
+        if (!known || !(raw & BLOCK_CARVED) || !SUBSTANCES[raw & BLOCK_MAT].porous || !porous(chunkmap_mask(&g->map, bx, by, bz), D[d][0], D[d][1], D[d][2])) continue;
         int tx = bx + D[d][0], ty = by + D[d][1], tz = bz + D[d][2];
         Block tb;
         int tk = kind_of(g, tx, ty, tz, &tb);
@@ -656,6 +700,102 @@ static void lava_step(Game *g, Cell c, int l) {
     if (l <= 2) push(c.x, c.y, c.z); /* keeps cooling */
 }
 
+/* ---------- oil and acid ---------- */
+
+/* The level of a cell of liquid b (oil or acid), 0 if it holds none. */
+static int liq_level(Game *g, int x, int y, int z, Block b) {
+    bool known;
+    if (chunkmap_block_raw(&g->map, x, y, z, &known) != b) return 0;
+    int l = chunkmap_level(&g->map, x, y, z);
+    return l ? l : 8;
+}
+
+static bool set_liq(Game *g, int x, int y, int z, Block b, int level) {
+    if (level <= 0) return chunkmap_edit(&g->map, x, y, z, B_AIR, 0, 0);
+    return chunkmap_edit(&g->map, x, y, z, b, 0, MINI(level, 8));
+}
+
+/* Oil and acid flow as water does (falling, then evening out). Oil is lighter than water: it
+ * rises through it and floats on it, and burns. Acid eats the stone it touches, a few pieces at
+ * a time, and water dilutes it into water. */
+static void liquid_step(Game *g, Cell c, Block b, int l) {
+    if (!chunkmap_can_edit(&g->map, c.x, c.y, c.z)) { push(c.x, c.y, c.z); return; }
+    u64 h = mix64(cell_hash(c.x, c.y, c.z) * 0x9E3779B97F4A7C15ull + tick_no);
+    bool known;
+    /* oil under water rises: they change places */
+    if (b == B_OIL && chunkmap_block_raw(&g->map, c.x, c.y + 1, c.z, &known) == B_WATER && chunkmap_can_edit(&g->map, c.x, c.y + 1, c.z)) {
+        int wl = chunkmap_fluid(&g->map, c.x, c.y + 1, c.z);
+        set_water(g, c.x, c.y, c.z, wl);
+        set_liq(g, c.x, c.y + 1, c.z, B_OIL, l);
+        return;
+    }
+    if (b == B_ACID) {
+        /* water dilutes it: the acid turns to water */
+        for (int k = 0; k < 6; k++)
+            if (chunkmap_block_raw(&g->map, c.x + N6[k][0], c.y + N6[k][1], c.z + N6[k][2], &known) == B_WATER) {
+                set_water(g, c.x, c.y, c.z, l);
+                hiss(g, c.x, c.y, c.z, false);
+                return;
+            }
+        /* it eats the stone round it (not metal, glass, obsidian, nor what is protected) */
+        int k = (int)(h % 6);
+        int x = c.x + N6[k][0], y = c.y + N6[k][1], z = c.z + N6[k][2];
+        Block raw = chunkmap_block_raw(&g->map, x, y, z, &known);
+        Block m = raw & BLOCK_MAT;
+        if (known && block_solid(m) && SUBSTANCES[m].porous && BLOCK_HARDNESS[m] != HARD_NEVER && (h >> 8) % 3 == 0 && !dig_protected(g, x, y, z) &&
+            chunkmap_can_edit(&g->map, x, y, z)) {
+            u64 mask = (raw & BLOCK_CARVED) ? chunkmap_mask(&g->map, x, y, z) : CARVE_FULL;
+            for (int n = 0; n < 6 && mask; n++) mask &= ~(1ULL << ((h >> (12 + n * 6)) & 63));
+            if (__builtin_popcountll(mask) <= 6) mask = 0;
+            chunkmap_edit(&g->map, x, y, z, mask ? (Block)(m | BLOCK_CARVED) : B_AIR, mask, 0);
+            particles_burst(g, v3(x + 0.5f, y + 0.5f, z + 0.5f), v3(0.5f, 0.85f, 0.3f), 3, 0.8f, 0.04f, false);
+            if ((h >> 50) % 4 == 0) { l--; set_liq(g, c.x, c.y, c.z, b, l); if (l <= 0) return; }
+        }
+        push(c.x, c.y, c.z); /* it keeps eating */
+    }
+    /* falling */
+    Block tb;
+    int k = kind_of(g, c.x, c.y - 1, c.z, &tb);
+    int tl = liq_level(g, c.x, c.y - 1, c.z, b);
+    if ((k == 1 || tl) && tl < 8 && chunkmap_can_edit(&g->map, c.x, c.y - 1, c.z)) {
+        int n = MINI(l, 8 - tl);
+        l -= n;
+        set_liq(g, c.x, c.y, c.z, b, l);
+        set_liq(g, c.x, c.y - 1, c.z, b, tl + n);
+        if (l <= 0) return;
+    }
+    /* evening out sideways */
+    int best = -1, best_l = 99;
+    for (int s = 0; s < 4; s++) {
+        int d = (s + (int)(h >> 4)) & 3;
+        int nx = c.x + SIDE[d][0], nz = c.z + SIDE[d][1];
+        int nk = kind_of(g, nx, c.y, nz, &tb), nl = liq_level(g, nx, c.y, nz, b);
+        if (nk != 1 && !nl) continue;
+        if (nl < best_l) { best_l = nl; best = d; }
+    }
+    if (best >= 0 && l - best_l >= 2 && chunkmap_can_edit(&g->map, c.x + SIDE[best][0], c.y, c.z + SIDE[best][1])) {
+        set_liq(g, c.x, c.y, c.z, b, l - 1);
+        set_liq(g, c.x + SIDE[best][0], c.y, c.z + SIDE[best][1], b, best_l + 1);
+    }
+}
+
+/* Those standing in acid are burnt by it. */
+static void acid_touch(Game *g) {
+    for (int k = 0; k < MAX_PLAYERS; k++) {
+        PlayerSlot *ps = &g->players[k];
+        if (!ps->active || ps->st.dead || ps->pl.fly) continue;
+        bool known;
+        if (chunkmap_block(&g->map, (int)floorf(ps->pl.pos.x), (int)floorf(ps->pl.pos.y + 0.05f), (int)floorf(ps->pl.pos.z), &known) == B_ACID)
+            game_hurt_player(g, ps, ps->st.maxhp * 0.03f, v3_add(ps->pl.pos, v3(0, -1, 0)));
+    }
+    for (int k = 0; k < MAX_MONSTERS; k++) {
+        Monster *m = &g->mons[k];
+        bool known;
+        if (m->alive && m->type != MON_SLIME && chunkmap_block(&g->map, (int)floorf(m->pos.x), (int)floorf(m->pos.y + 0.05f), (int)floorf(m->pos.z), &known) == B_ACID)
+            monster_damage(g, m, m->maxhp * 0.03f, v3_add(m->pos, v3(0, -1, 0)), 0.0f, -1);
+    }
+}
+
 /* ---------- the tick ---------- */
 
 static void step_cell(Game *g, Cell c) {
@@ -668,6 +808,7 @@ static void step_cell(Game *g, Cell c) {
             int fuel = chunkmap_level(&g->map, c.x, c.y, c.z);
             if (fuel) fire_step(g, c, fuel);
         } else if (b == B_LAVA && !dig_protected(g, c.x, c.y, c.z)) lava_step(g, c, sim_lava(g, c.x, c.y, c.z));
+        else if (b == B_OIL || b == B_ACID) liquid_step(g, c, b, liq_level(g, c.x, c.y, c.z, b));
         return;
     }
     Block tb;
@@ -753,6 +894,7 @@ void sim_update(Game *g, float dt) {
     int n = MINI(n_now, SIM_BUDGET);
     for (int i = 0; i < n; i++) step_cell(g, q_now[i]);
     fire_touch(g);
+    if (tick_no % 4 == 0) acid_touch(g); /* twice a second */
     if (tick_no % 24 == 0) swamp_bubbles(g); /* every 3 s */
     /* what did not fit waits for the next tick */
     for (int i = n; i < n_now; i++) push(q_now[i].x, q_now[i].y, q_now[i].z);
