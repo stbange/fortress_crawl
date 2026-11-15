@@ -74,6 +74,7 @@ static void stats_init(PlayerSlot *ps) {
 
 void game_init(Game *g, vec3 start, float yaw) {
     phys_pieces = game_pieces; /* collisions see the pieces of broken blocks */
+    sim_init(g);
     g->start_pos = start;
     g->start_yaw = yaw;
     PlayerSlot *p1 = game_add_player(g);
@@ -89,6 +90,7 @@ PlayerSlot *game_add_player(Game *g) {
         memset(ps, 0, sizeof *ps);
         ps->active = true;
         ps->index = i;
+        ps->breath = BREATH_MAX;
         ps->color = PLAYER_COLORS[i];
         vec3 pos = g->start_pos;
         float yaw = g->start_yaw;
@@ -790,8 +792,27 @@ static void update_player(Game *g, PlayerSlot *ps, const PlayerInput *in, float 
     if (ground_known || ps->pl.fly) {
         bool was_ground = ps->pl.on_ground;
         utility_physics_player(ps);
+        ps->pl.water = ps->pl.fly ? 0.0f : sim_water_depth(g, ps->pl.pos);
         player_update(&ps->pl, &pin, dt, player_solid, g);
         utility_physics_player(NULL);
+        /* breath: under water it runs out, then you drown */
+        bool under = !ps->pl.fly && sim_water_depth(g, ps->pl.pos) > player_eye(&ps->pl).y - ps->pl.pos.y;
+        if (under) {
+            if (ps->breath > 0 && ps->breath - dt <= 0) game_banner(ps, "OUT OF BREATH - GET TO THE SURFACE");
+            ps->breath -= dt;
+            if (ps->breath <= 0) {
+                ps->breath = 0;
+                ps->drown_t -= dt;
+                if (ps->drown_t <= 0) {
+                    ps->drown_t = 1.0f;
+                    game_hurt_player(g, ps, 0.08f * s->maxhp, v3_add(ps->pl.pos, v3(0, 2, 0)));
+                }
+            }
+        } else {
+            if (ps->breath < BREATH_MAX * 0.3f && ps->breath + 4.0f * dt >= BREATH_MAX * 0.3f) sfx_player(g, ps, SFX_FISH_SPLASH, 0.5f);
+            ps->breath = fminf(BREATH_MAX, ps->breath + 4.0f * dt);
+            ps->drown_t = 0;
+        }
         /* a long fall hurts, unless something slows it */
         if (!ps->pl.on_ground) s->fall_speed = fmaxf(s->fall_speed, -ps->pl.vel.y);
         else if (!was_ground) {
@@ -1071,6 +1092,14 @@ static void draw_hud(Game *g, PlayerSlot *ps, int W, int H) {
                 font_text(sx, H - 35, ST[k].t, ST[k].c.x, ST[k].c.y, ST[k].c.z);
                 sx += font_text_width(ST[k].t) + 6;
             }
+        /* air left under water: a row of bubbles over the health bar */
+        if (ps->breath < BREATH_MAX - 0.05f) {
+            int nb = (int)ceilf(ps->breath / BREATH_MAX * 10.0f);
+            for (int k = 0; k < 10; k++) {
+                float a = k < nb ? 1.0f : 0.25f;
+                batch2d_rect(6.0f + k * 7.0f, (float)(touch ? H - 66 : H - 46), 5.0f, 5.0f, 0.55f * a, 0.8f * a, 1.0f * a, 1.0f);
+            }
+        }
     }
     if (touch) {
         /* the lower right belongs to the buttons */

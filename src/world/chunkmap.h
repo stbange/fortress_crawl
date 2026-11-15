@@ -58,6 +58,7 @@ typedef struct ChunkMap {
     ChunkStats stats;
     ChunkEdits *edits;
     int nedits, edits_cap, edits_total;
+    void (*on_edit)(int wx, int wy, int wz); /* told of every lasting change (sim.c wakes the cells around) */
 } ChunkMap;
 
 void chunkmap_init(ChunkMap *m, const World *w, Renderer *r, int rh, int rv);
@@ -83,6 +84,10 @@ bool chunkmap_set_block(ChunkMap *m, int wx, int wy, int wz, Block b);
 /* The raw block (with BLOCK_CARVED) and the pieces left of a cell (CARVE_FULL if whole). */
 Block chunkmap_block_raw(ChunkMap *m, int wx, int wy, int wz, bool *known);
 u64 chunkmap_mask(ChunkMap *m, int wx, int wy, int wz);
+/* The water level of a cell: 1..8 (8 full), 0 if it holds no water or is not known. */
+int chunkmap_fluid(ChunkMap *m, int wx, int wy, int wz);
+/* True if chunkmap_edit at the cell would succeed now. */
+bool chunkmap_can_edit(ChunkMap *m, int wx, int wy, int wz);
 /* A lasting change: sets a cell (raw block, and its pieces if carved; a fluid level 1..8 or 0)
  * and records it so it survives the chunk being unloaded and generated again. False if the
  * chunk is not loaded or busy (try again later). A carved mask of 0 leaves air. */

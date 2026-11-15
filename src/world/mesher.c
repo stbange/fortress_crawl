@@ -301,14 +301,21 @@ static void emit_pieces(VBuf *vb, const MeshInput *in, const MeshScratch *s, int
             }
 }
 
+/* The level 1..8 of a liquid cell (padded coordinates), 8 where nothing set one. */
+static int fluid_level(const MeshInput *in, int px, int py, int pz) {
+    int x = px - MESH_PAD, y = py - MESH_PAD, z = pz - MESH_PAD;
+    int cx = x < 0 ? -1 : (x >= CHUNK ? 1 : 0), cy = y < 0 ? -1 : (y >= CHUNK ? 1 : 0), cz = z < 0 ? -1 : (z >= CHUNK ? 1 : 0);
+    const u8 *fl = in->fluid[(cx + 1) + (cy + 1) * 3 + (cz + 1) * 9];
+    int level = fl ? fl[cidx(x - cx * CHUNK, y - cy * CHUNK, z - cz * CHUNK)] : 0;
+    return level ? level : 8;
+}
+
 /* How far a liquid's top sits below the top of its cell, in 1/8 m (sim.c's levels). */
 static int liquid_drop(const MeshInput *in, const MeshScratch *s, int x, int y, int z) {
-    const u8 *fl = in->fluid[13];
-    int level = fl ? fl[cidx(x, y, z)] : 0;
-    if (!level) level = 8;
     /* a liquid with liquid above it fills its cell */
     if (block_mat(s->blocks[pidx(x + MESH_PAD, y + MESH_PAD + 1, z + MESH_PAD)]) == block_mat(s->blocks[pidx(x + MESH_PAD, y + MESH_PAD, z + MESH_PAD)])) return 0;
-    return MAXI(1, 8 - level + (level == 8 ? 1 : 0));
+    int level = fluid_level(in, x + MESH_PAD, y + MESH_PAD, z + MESH_PAD);
+    return MAXI(1, MINI(7, 8 - level));
 }
 
 void mesh_build(const MeshInput *in, MeshScratch *s, MeshOutput *out) {
@@ -340,7 +347,14 @@ void mesh_build(const MeshInput *in, MeshScratch *s, MeshOutput *out) {
                 for (int f = 0; f < 6; f++) {
                     Block nb = s->blocks[pidx(px + FACE_N[f][0], py + FACE_N[f][1], pz + FACE_N[f][2])];
                     if (block_opaque(nb)) continue;
-                    if (liquid && (nb & BLOCK_MAT) == b) continue;
+                    if (liquid && nb == b) {
+                        /* between two cells of the same liquid only a step in the surface shows */
+                        if (f == 2 || f == 3 || FACE_N[f][1]) continue;
+                        int pn = pidx(px + FACE_N[f][0], py, pz + FACE_N[f][2]);
+                        if (s->blocks[pn + (pidx(0, 1, 0) - pidx(0, 0, 0))] == b) continue; /* we are below its surface */
+                        if (fluid_level(in, px + FACE_N[f][0], py, pz + FACE_N[f][2]) >= fluid_level(in, px, py, pz)) continue;
+                        if (block_mat(s->blocks[pidx(px, py + 1, pz)]) == b) continue;
+                    }
                     emit_face(&solid, s, x, y, z, f, b, tile, tint, liquid ? liquid_drop(in, s, x, y, z) : 0);
                 }
             }

@@ -192,6 +192,7 @@ typedef struct LoreEntry {
     char *text;  /* generated on first display (not saved) */
 } LoreEntry;
 
+#define BREATH_MAX 15.0f
 #define MAX_BOMBS 16
 typedef struct Bomb {
     bool alive;
@@ -418,6 +419,7 @@ typedef struct PlayerSlot {
     int parley, parley_sel; /* 1 + the monster that yielded to this player, the choice under the cursor */
     bool pick_out;          /* the pickaxe in hand (the fourth slot): attack digs, the alternate throws a bomb */
     float bomb_cd;
+    float breath, drown_t;  /* seconds of air left under water (BREATH_MAX), the next drowning hurt */
     int shop_sel;
     int food_sel;           /* the FOOD tab's row */
     u8 pot[4];              /* ingredients in the pot (food ids) */
@@ -870,6 +872,15 @@ void dig_update(Game *g, PlayerSlot *ps, bool attack, bool alt);
 const char *dig_pick_name(const Stats *s);
 /* The next or previous of the four slots: blade, bow, staff, pickaxe. */
 void game_cycle_weapon(PlayerSlot *ps, int dir);
+
+/* sim.c: water that flows (docs/SIMULATION.md) */
+void sim_init(Game *g);
+void sim_reset(void);
+void sim_wake(int x, int y, int z);
+void sim_update(Game *g, float dt);
+int sim_fluid(Game *g, int x, int y, int z);
+float sim_water_depth(Game *g, vec3 feet);
+int sim_pending(void);
 bool forge_start(Game *g, PlayerSlot *ps, bool reforge);
 void forge_strike(Game *g, PlayerSlot *ps);
 void forge_bellows(Game *g, PlayerSlot *ps);

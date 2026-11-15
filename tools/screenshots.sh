@@ -87,6 +87,7 @@ SHOT_TIME=4 shot story_residents --demo residents --look 90 -8
 # ---- digging and blasting ----
 SHOT_TIME=5 shot dig --demo dig
 SHOT_TIME=5 shot blast --demo blast --pos 8 7.5 0.5 --look 0 -12
+SHOT_TIME=0.75 shot flood --demo flood --pos 8 7.5 0.5 --look 0 -20
 
 # ---- the Sanctum: ruin, door, built, hall, decorations, shop, forge ----
 shot sanctum          --demo sanctum --cast 0

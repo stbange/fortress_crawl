@@ -383,14 +383,9 @@ void chunkmap_update(ChunkMap *m, const vec3 *centres, int ncentres) {
 
 static bool editable(Chunk *c) { return c && c->state == CH_READY && c->pins == 0 && !c->mesh_queued; }
 
-bool chunkmap_set_block(ChunkMap *m, int wx, int wy, int wz, Block b) {
-    int cx = floordiv(wx, CHUNK), cy = floordiv(wy, CHUNK), cz = floordiv(wz, CHUNK);
-    Chunk *c = chunkmap_get(m, cx, cy, cz);
-    if (!editable(c)) return false;
-    int lx = wx - cx * CHUNK, ly = wy - cy * CHUNK, lz = wz - cz * CHUNK;
-    /* neighbours whose mesh shows this cell must be free too */
-    Chunk *nb[27];
-    int nn = 0;
+/* The neighbours whose mesh shows the cell (lx, ly, lz) of chunk (cx, cy, cz): false if one is busy. */
+static bool touching(ChunkMap *m, int cx, int cy, int cz, int lx, int ly, int lz, Chunk **nb, int *nn) {
+    *nn = 0;
     for (int dz = -1; dz <= 1; dz++)
         for (int dy = -1; dy <= 1; dy++)
             for (int dx = -1; dx <= 1; dx++) {
@@ -401,8 +396,37 @@ bool chunkmap_set_block(ChunkMap *m, int wx, int wy, int wz, Block b) {
                 Chunk *n = chunkmap_get(m, cx + dx, cy + dy, cz + dz);
                 if (!n) continue;
                 if (n->state == CH_READY && (n->pins > 0 || n->mesh_queued)) return false;
-                nb[nn++] = n;
+                nb[(*nn)++] = n;
             }
+    return true;
+}
+
+bool chunkmap_can_edit(ChunkMap *m, int wx, int wy, int wz) {
+    int cx = floordiv(wx, CHUNK), cy = floordiv(wy, CHUNK), cz = floordiv(wz, CHUNK);
+    if (!editable(chunkmap_get(m, cx, cy, cz))) return false;
+    Chunk *nb[27];
+    int nn;
+    return touching(m, cx, cy, cz, wx - cx * CHUNK, wy - cy * CHUNK, wz - cz * CHUNK, nb, &nn);
+}
+
+int chunkmap_fluid(ChunkMap *m, int wx, int wy, int wz) {
+    Chunk *c = chunkmap_get(m, floordiv(wx, CHUNK), floordiv(wy, CHUNK), floordiv(wz, CHUNK));
+    if (!c || c->state != CH_READY) return 0;
+    int i = cidx(floormod(wx, CHUNK), floormod(wy, CHUNK), floormod(wz, CHUNK));
+    if (c->blocks[i] != B_WATER) return 0;
+    int l = c->fluid ? c->fluid[i] : 0;
+    return l ? l : 8;
+}
+
+bool chunkmap_set_block(ChunkMap *m, int wx, int wy, int wz, Block b) {
+    int cx = floordiv(wx, CHUNK), cy = floordiv(wy, CHUNK), cz = floordiv(wz, CHUNK);
+    Chunk *c = chunkmap_get(m, cx, cy, cz);
+    if (!editable(c)) return false;
+    int lx = wx - cx * CHUNK, ly = wy - cy * CHUNK, lz = wz - cz * CHUNK;
+    /* neighbours whose mesh shows this cell must be free too */
+    Chunk *nb[27];
+    int nn = 0;
+    if (!touching(m, cx, cy, cz, lx, ly, lz, nb, &nn)) return false;
     c->blocks[cidx(lx, ly, lz)] = b;
     if (!(b & BLOCK_CARVED)) carve_del(c->carve, cidx(lx, ly, lz)); /* (a temporary change keeps no pieces) */
     c->remesh = true;
@@ -436,6 +460,7 @@ bool chunkmap_edit(ChunkMap *m, int wx, int wy, int wz, Block raw, u64 mask, int
     BlockEdit e = { (u16)cidx(wx - cx * CHUNK, wy - cy * CHUNK, wz - cz * CHUNK), raw, (u8)CLAMPI(level, 0, 255), mask };
     apply_edit(c, &e);
     edits_record(m, cx, cy, cz, &e);
+    if (m->on_edit) m->on_edit(wx, wy, wz);
     return true;
 }
 

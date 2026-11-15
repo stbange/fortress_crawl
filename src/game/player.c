@@ -78,14 +78,22 @@ void player_update(Player *p, const PlayerInput *in, float dt, SolidFn solid, vo
     }
     float h = HEIGHTS[p->stance];
 
+    /* in water: wading slows you; deeper than the waist you swim */
+    bool swim = !lev && p->water > 0.9f;
     float speed = SPEEDS[p->stance] * p->speed_mult * (in->sprint && p->stance == STANCE_STAND ? 1.6f : 1.0f);
-    float accel = p->on_ground ? 14.0f : 3.0f;
+    if (swim) speed *= 0.55f;
+    else if (p->water > 0.3f) speed *= 0.75f;
+    float accel = swim ? 6.0f : p->on_ground ? 14.0f : 3.0f;
     p->vel.x += (wish.x * speed - p->vel.x) * fminf(1.0f, accel * dt);
     p->vel.z += (wish.z * speed - p->vel.z) * fminf(1.0f, accel * dt);
     if (lev) {
         /* levitate: no weight; jump rises, crouch sinks */
         float vy = in->jump ? 3.5f : in->crouch ? -3.5f : 0.0f;
         p->vel.y += (vy - p->vel.y) * fminf(1.0f, 5.0f * dt);
+    } else if (swim) {
+        /* buoyant: float with the eyes at the surface; jump swims up, crouch dives */
+        float vy = in->jump ? 3.2f : in->crouch ? -3.0f : p->water > 1.5f ? 0.9f : p->water < 1.3f ? -0.6f : 0.0f;
+        p->vel.y += (vy - p->vel.y) * fminf(1.0f, 4.0f * dt);
     } else {
         p->vel.y -= 25.0f * dt;
         if (p->vel.y < -p->max_fall) p->vel.y = -p->max_fall;
@@ -100,7 +108,7 @@ void player_update(Player *p, const PlayerInput *in, float dt, SolidFn solid, vo
         vec3 blocked = p->pos;
         p->pos = before;
         bool done = false;
-        if (p->on_ground) {
+        if (p->on_ground || swim) { /* (a swimmer climbs out at the edge) */
             vec3 up = v3_add(before, v3(0, 1.0f + EPS, 0));
             if (phys_box_free(up, HALF_W, h, solid, user)) {
                 Player tmp = *p;

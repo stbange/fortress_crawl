@@ -707,7 +707,7 @@ static void demo_setup(Game *g) {
                 p1->thread.n, p1->thread.reached, (SDL_GetTicksNS() - t0) / 1e6, t.name, t.cx, t.cy, t.cz, p1->banner);
         return;
     }
-    if (!strcmp(g_demo_kind, "dig") || !strcmp(g_demo_kind, "blast")) {
+    if (!strcmp(g_demo_kind, "dig") || !strcmp(g_demo_kind, "blast") || !strcmp(g_demo_kind, "flood")) {
         /* the pickaxe out at a wall (docs/DESTRUCTION.md); the swings and the bomb come in
          * screenshot_step */
         for (int i = 0; i < MAX_MONSTERS; i++) g->mons[i].alive = false;
@@ -1178,6 +1178,50 @@ static void screenshot_step(App *a, float frame_dt) {
     if (g->opt.demo && a->demo_done && !strcmp(kind, "blast")) {
         static bool thrown;
         if (!thrown && a->shot_wait > 0.6f) { thrown = true; bomb_throw(g, p1); }
+    }
+    if (g->opt.demo && a->demo_done && !strcmp(kind, "flood")) {
+        /* a block of water let loose in front of you (docs/SIMULATION.md) */
+        static int stage;
+        static float logged;
+        vec3 f = v3(cosf(p1->pl.yaw), 0, sinf(p1->pl.yaw));
+        int bx = (int)floorf(p1->pl.pos.x + f.x * 5), by = (int)floorf(p1->pl.pos.y) + 1, bz = (int)floorf(p1->pl.pos.z + f.z * 5);
+        if (stage == 0 && a->shot_wait > 0.4f) {
+            int n = 0;
+            /* --cast 2: a deep shaft of water closed by walls, with you in it */
+            int hy = g_demo_cast == 2 ? 6 : 3;
+            if (g_demo_cast == 2)
+                for (int y = 0; y < hy; y++)
+                    for (int z = -2; z <= 2; z++)
+                        for (int x = -2; x <= 2; x++)
+                            if (abs(x) == 2 || abs(z) == 2) chunkmap_edit(&g->map, bx + x, by + y - 1, bz + z, B_WALL, 0, 0);
+            for (int y = 0; y < hy; y++)
+                for (int z = -1; z <= 1; z++)
+                    for (int x = -1; x <= 1; x++) {
+                        bool known;
+                        if (chunkmap_block(&g->map, bx + x, by + y, bz + z, &known) == B_AIR && known)
+                            n += chunkmap_edit(&g->map, bx + x, by + y, bz + z, B_WATER, 0, 8);
+                    }
+            /* --cast 1: lava in the floor where it runs */
+            if (n && g_demo_cast == 1)
+                for (int z = -3; z <= 3; z++)
+                    for (int x = 2; x <= 3; x++) chunkmap_edit(&g->map, bx + x, by - 1, bz + z, B_LAVA, 0, 0);
+            if (n && g_demo_cast == 2) { p1->pl.pos = v3(bx + 0.5f, (float)by, bz + 0.5f); p1->pl.vel = v3(0, 0, 0); }
+            if (n) { stage = 1; SDL_Log("flood: %d cells of water at %d %d %d", n, bx, by, bz); }
+        }
+        if (stage && a->shot_wait > logged + 1.0f) {
+            logged = a->shot_wait;
+            int cells = 0, vol = 0, lava = 0;
+            for (int y = -3; y < 4; y++)
+                for (int z = -12; z <= 12; z++)
+                    for (int x = -12; x <= 12; x++) {
+                        int l = sim_fluid(g, bx + x, by + y, bz + z);
+                        if (l) { cells++; vol += l; }
+                        bool known;
+                        if (chunkmap_block(&g->map, bx + x, by + y, bz + z, &known) == B_LAVA) lava++;
+                    }
+            SDL_Log("flood: t %.1f  %d cells, %d eighths, %d waiting, %d lava; you: y %.2f water %.2f breath %.1f hp %.0f", a->shot_wait,
+                    cells, vol, sim_pending(), lava, p1->pl.pos.y, p1->pl.water, p1->breath, p1->st.hp);
+        }
     }
     bool fight = !strcmp(kind, "combat") || !strcmp(kind, "sword") || !strcmp(kind, "death") || !strcmp(kind, "coop") ||
                  !strcmp(kind, "impact");

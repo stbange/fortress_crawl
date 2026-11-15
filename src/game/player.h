@@ -28,6 +28,7 @@ typedef struct Player {
     float max_fall;   /* fastest fall (feather fall: slow) */
     float jump_mult;  /* a steed jumps higher */
     bool climbing;    /* spider climb: pushing into a wall climbs it */
+    float water;      /* how deep the water reaches above the feet, in m (set by the game) */
 } Player;
 
 void player_init(Player *p, vec3 pos, float yaw);

@@ -576,6 +576,10 @@ falls. Ore and plants drop what they hold. Vaults, shrines, the Sanctum, stairwe
 outside walls do not break. What you break stays broken, also after saving.
 See [docs/DESTRUCTION.md](docs/DESTRUCTION.md).
 
+Water flows: break a lake's wall and it drains into the halls around until it is level again,
+and it cools lava to rock and puts out fires on its way. In deep water you swim (jump swims up,
+crouch dives) and have 15 seconds of breath. See [docs/SIMULATION.md](docs/SIMULATION.md).
+
 ## Weapons
 
 Each of the 21 weapon types has its own model, the same in your hands, in other players'
