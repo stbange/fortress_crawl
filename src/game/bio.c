@@ -296,6 +296,77 @@ void bio_update(Game *g, float dt) {
     }
 }
 
+/* ---------- catching up (away.c) ---------- */
+
+/* A chunk that was out of reach catches up on growth: the cells where anything could happen
+ * (plants and what is beside them, bones, ash, damp rock by water) get as many looks as they
+ * would have had in the time away, compressed into a few frames. */
+#define CU_MAX 2000
+static struct {
+    bool on;
+    int cx, cy, cz, passes, pass, next;
+    int n;
+    int cell[CU_MAX];           /* chunk-local index */
+    u8 mark[CHUNK_VOL / 8];     /* in the list */
+} cu;
+
+static void cu_add(int lx, int ly, int lz) {
+    if (lx < 0 || ly < 0 || lz < 0 || lx >= CHUNK || ly >= CHUNK || lz >= CHUNK || cu.n >= CU_MAX) return;
+    int i = cidx(lx, ly, lz);
+    if (cu.mark[i >> 3] & (1 << (i & 7))) return;
+    cu.mark[i >> 3] |= (u8)(1 << (i & 7));
+    cu.cell[cu.n++] = i;
+}
+
+static void cu_add_around(int lx, int ly, int lz, int r) {
+    for (int dy = -r; dy <= r; dy++)
+        for (int dz = -r; dz <= r; dz++)
+            for (int dx = -r; dx <= r; dx++) cu_add(lx + dx, ly + dy, lz + dz);
+}
+
+void bio_catch_up_begin(Game *g, int cx, int cy, int cz, float dt) {
+    Chunk *c = chunkmap_get(&g->map, cx, cy, cz);
+    memset(&cu, 0, sizeof cu);
+    if (!c || c->state != CH_READY) return;
+    cu.cx = cx; cu.cy = cy; cu.cz = cz;
+    /* living things and what feeds them first, then damp stone by water */
+    for (int pass = 0; pass < 2; pass++)
+        for (int i = 0; i < CHUNK_VOL && cu.n < CU_MAX; i++) {
+            Block b = c->blocks[i] & BLOCK_MAT;
+            int lx = i % CHUNK, lz = (i / CHUNK) % CHUNK, ly = i / (CHUNK * CHUNK);
+            if (pass == 0 && (b == B_GRASS || b == B_FLOWER || b == B_MOSS || b == B_FUNGUS || b == B_VINE || b == B_BONES || b == B_ASH))
+                cu_add_around(lx, ly, lz, 1);
+            if (pass == 1 && b == B_WATER && ly + 1 < CHUNK && c->blocks[cidx(lx, ly + 1, lz)] == B_AIR) cu_add_around(lx, ly, lz, 2);
+        }
+    /* about one look per cell every 37 s in play (48 looks a tick, 8 ticks a second, over a box of
+     * 33 x 13 x 33 cells); at most 60000 looks for the whole catch-up */
+    cu.passes = (int)(dt * 0.027f);
+    if (cu.n) cu.passes = MINI(cu.passes, 60000 / cu.n);
+    cu.on = cu.n > 0 && cu.passes > 0;
+}
+
+/* Up to budget looks; true when the catch-up is done. */
+bool bio_catch_up_run(Game *g, int budget) {
+    if (!cu.on) return true;
+    /* a chunk busy being meshed takes no changes: wait for it */
+    if (!chunkmap_can_edit(&g->map, cu.cx * CHUNK + CHUNK / 2, cu.cy * CHUNK + CHUNK / 2, cu.cz * CHUNK + CHUNK / 2)) return false;
+    int ox = cu.cx * CHUNK, oy = cu.cy * CHUNK, oz = cu.cz * CHUNK;
+    while (budget-- > 0) {
+        if (cu.next >= cu.n) {
+            cu.next = 0;
+            if (++cu.pass >= cu.passes) { cu.on = false; return true; }
+        }
+        int i = cu.cell[cu.next++];
+        int lx = i % CHUNK, lz = (i / CHUNK) % CHUNK, ly = i / (CHUNK * CHUNK);
+        u64 h = mix64((u64)i * 0x9E3779B97F4A7C15ull + (u64)cu.pass * 0xBF58476D1CE4E5B9ull + (u64)ox);
+        Block before = blk(g, ox + lx, oy + ly, oz + lz);
+        bio_cell(g, ox + lx, oy + ly, oz + lz, h);
+        /* what grew opens new ground around it */
+        if (blk(g, ox + lx, oy + ly, oz + lz) != before) cu_add_around(lx, ly, lz, 1);
+    }
+    return false;
+}
+
 void bio_reset(void) {
     memset(swarms, 0, sizeof swarms);
     memset(g_grown, 0, sizeof g_grown);

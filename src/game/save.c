@@ -11,7 +11,7 @@
  * user's preference folder. The world itself never needs saving: the seed rebuilds it. */
 
 #define SAVE_MAGIC 0x56534346u /* "FCSV" */
-#define SAVE_VERSION 16 /* 16: the clouds of gas in the air; 15: what was broken in the world, the pickaxe and bombs; 14: the ledger of deeds (choices); 13: the story generator of the world; 12: the forge (materials, smithing, blueprints, runes); 11: the Sanctum's decorations, keystones bought; 10: meal variety, toxicity, torn formulae; 9: alchemy (reagents, elixirs, formulae, the elixir working); 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms;
+#define SAVE_VERSION 17 /* 17: when each chunk was last seen (the world goes on while you are away); 16: the clouds of gas in the air; 15: what was broken in the world, the pickaxe and bombs; 14: the ledger of deeds (choices); 13: the story generator of the world; 12: the forge (materials, smithing, blueprints, runes); 11: the Sanctum's decorations, keystones bought; 10: meal variety, toxicity, torn formulae; 9: alchemy (reagents, elixirs, formulae, the elixir working); 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms;
                           6: weapons with materials, powers, legendaries and memory; 7: the Sanctum per world (written by one
                           build still marked 6); 8: food (the larder, dishes, recipes, the meal) */
 #define EXPLORED_BUDGET (1200 * 1024)
@@ -289,6 +289,17 @@ bool game_save(Game *g) {
         int ng = sim_gas_list(gs, 96);
         w8(&b, (u8)ng);
         for (int i = 0; i < ng * 6; i++) wf(&b, gs[i]);
+    }
+    /* v17: when each chunk was last seen */
+    {
+        static int xyz[4096 * 3];
+        static float ts[4096];
+        int nr = away_list(xyz, ts, 4096);
+        w16(&b, (u16)nr);
+        for (int i = 0; i < nr; i++) {
+            w32(&b, (u32)xyz[i * 3]); w32(&b, (u32)xyz[i * 3 + 1]); w32(&b, (u32)xyz[i * 3 + 2]);
+            wf(&b, ts[i]);
+        }
     }
     char key[64];
     save_key(g->opt.seed, key, sizeof key);
@@ -571,6 +582,14 @@ bool game_load(Game *g) {
                 if (!r.bad) sim_gas_restore(gs);
             }
             if (ng) SDL_Log("%d clouds of gas in the air", ng);
+        }
+        if (r.ver >= 17) {
+            int nr = r16(&r);
+            for (int i = 0; i < nr && !r.bad; i++) {
+                int cx = (int)r32(&r), cy = (int)r32(&r), cz = (int)r32(&r);
+                float t = rf(&r);
+                if (!r.bad) away_restore(cx, cy, cz, t);
+            }
         }
         if (r.bad) { /* a broken tail: the Sanctum as a new world has it */
             u8 gen = r.ver >= 13 ? g->world.story_gen : 0;

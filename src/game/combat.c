@@ -813,6 +813,7 @@ void combat_update(Game *g, float dt) {
     bombs_update(g, dt);
     sim_update(g, dt);
     bio_update(g, dt);
+    away_update(g, dt);
     pickups_update(g, dt);
     update_projectiles(g, dt);
     update_particles(g, dt);

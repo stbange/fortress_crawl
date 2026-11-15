@@ -208,6 +208,29 @@ lava and fires that were moving when the game was saved, or when their chunk was
 move on as soon as their chunk is loaded again: a fire saved half-way burns on after loading
 and goes out by itself. Insect swarms are not saved; they gather again around what draws them.
 
+## Time away
+
+The simulation runs only near the players, so the world would freeze wherever nobody is. It
+does not: every chunk a player has been near remembers when it was last seen (the world's play
+time; time with the game closed does not count). Coming near it again after more than a minute,
+it catches up on what it missed, up to two hours (`src/game/away.c`):
+
+- Fires that were still burning spread once more to what burns beside them and have burnt out
+  since, to ash where they lay on something.
+- Growth and withering run for the time away, compressed: the cells where anything can happen
+  (plants and what is beside them, bones, ash, damp stone by water; at most 2000) get as many
+  looks as they would have had in play (one every 37 seconds or so), at most 60000 in all,
+  3000 a frame. What grows opens new ground around it for the next looks.
+- If it shows (a dozen cells or more grew next to you), the world says so: "THIS PLACE HAS
+  GROWN OVER SINCE YOU WERE HERE" (at most every ten minutes).
+- An area never visited needs nothing: it is as the world made it. The last 4096 chunks seen
+  are remembered (save version 17); beyond that the longest unseen are forgotten.
+
+`--demo away` (`--cast n`: n minutes): a bed of earth with two tufts of grass by a channel of
+water under a rock wall, a torch, bones and a burning wooden post; you walk 80 m off, an hour
+passes, you come back. Before: 1 tuft of grass, 5 fires. After: 31 grass, 20 flowers, 18 moss
+on the wall, the bones turned to fungus, the fire out.
+
 ## Cost
 
 The whole simulation (water, fire, gases, growth, insects) costs 0.003 ms a frame on average

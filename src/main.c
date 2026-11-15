@@ -707,7 +707,7 @@ static void demo_setup(Game *g) {
                 p1->thread.n, p1->thread.reached, (SDL_GetTicksNS() - t0) / 1e6, t.name, t.cx, t.cy, t.cz, p1->banner);
         return;
     }
-    if (!strcmp(g_demo_kind, "dig") || !strcmp(g_demo_kind, "blast") || !strcmp(g_demo_kind, "flood") || !strcmp(g_demo_kind, "burn") || !strcmp(g_demo_kind, "grow") || !strcmp(g_demo_kind, "lava") || !strcmp(g_demo_kind, "elements")) {
+    if (!strcmp(g_demo_kind, "dig") || !strcmp(g_demo_kind, "blast") || !strcmp(g_demo_kind, "flood") || !strcmp(g_demo_kind, "burn") || !strcmp(g_demo_kind, "grow") || !strcmp(g_demo_kind, "lava") || !strcmp(g_demo_kind, "elements") || !strcmp(g_demo_kind, "away")) {
         /* the pickaxe out at a wall (docs/DESTRUCTION.md); the swings and the bomb come in
          * screenshot_step */
         for (int i = 0; i < MAX_MONSTERS; i++) g->mons[i].alive = false;
@@ -1179,6 +1179,59 @@ static void screenshot_step(App *a, float frame_dt) {
         static bool thrown;
         if (!thrown && a->shot_wait > 0.6f) { thrown = true; bomb_throw(g, p1); }
     }
+    if (g->opt.demo && a->demo_done && !strcmp(kind, "away")) {
+        /* the world goes on while you are away (docs/SIMULATION.md): a garden bed with two tufts
+         * of grass by a channel of water and a torch, bones, a burning wooden post; you walk off
+         * 80 m, an hour passes (--cast n: n minutes), you come back */
+        static int stage, bx, by, bz;
+        static vec3 home;
+        if (stage == 0 && a->shot_wait > 0.4f) {
+            vec3 f = v3(cosf(p1->pl.yaw), 0, sinf(p1->pl.yaw));
+            bx = (int)floorf(p1->pl.pos.x + f.x * 7); by = (int)floorf(p1->pl.pos.y); bz = (int)floorf(p1->pl.pos.z + f.z * 7);
+            home = p1->pl.pos;
+            int n = 0;
+            for (int z = -4; z <= 4; z++)
+                for (int x = -3; x <= 3; x++) n += chunkmap_edit(&g->map, bx + x, by - 1, bz + z, x == 3 ? B_WATER : B_DIRT, 0, x == 3 ? 8 : 0);
+            for (int z = -4; z <= 4; z++)
+                for (int y = 0; y < 4; y++) chunkmap_edit(&g->map, bx + 4, by + y, bz + z, B_ROCK, 0, 0);
+            chunkmap_edit(&g->map, bx - 2, by, bz - 3, B_GRASS, 0, 0);
+            chunkmap_edit(&g->map, bx + 1, by, bz + 3, B_GRASS, 0, 0);
+            chunkmap_edit(&g->map, bx - 3, by, bz, B_TORCH, 0, 0);
+            chunkmap_edit(&g->map, bx + 2, by, bz - 2, B_BONES, 0, 0);
+            for (int y = 0; y < 3; y++) chunkmap_edit(&g->map, bx - 3, by + y, bz - 4, B_WOOD, 0, 0);
+            if (n > 40) {
+                stage = 1;
+                sim_element_hit(g, v3(bx - 2.5f, by + 1.5f, bz - 3.5f), EL_FIRE, 0, 20.0f);
+            }
+        }
+        if (stage >= 1) {
+            static float logged;
+            if (a->shot_wait > logged + 1.0f) {
+                logged = a->shot_wait;
+                int c[B_COUNT] = { 0 };
+                for (int y = -1; y < 4; y++)
+                    for (int z = -5; z <= 5; z++)
+                        for (int x = -4; x <= 5; x++) {
+                            bool known;
+                            c[chunkmap_block(&g->map, bx + x, by + y, bz + z, &known)]++;
+                        }
+                SDL_Log("away: t %.0f  grass %d flower %d moss %d fungus %d bones %d ash %d fire %d wood %d (jobs %d)", a->shot_wait, c[B_GRASS],
+                        c[B_FLOWER], c[B_MOSS], c[B_FUNGUS], c[B_BONES], c[B_ASH], c[B_FIRE], c[B_WOOD], away_pending());
+            }
+        }
+        if (stage == 1 && a->shot_wait > 1.5f) {
+            stage = 2;
+            p1->pl.pos = v3(home.x - 80.0f, home.y, home.z);
+            SDL_Log("away: you walk off");
+        }
+        if (stage == 2 && a->shot_wait > 3.5f) {
+            stage = 3;
+            float mins = g_demo_cast > 0 ? (float)g_demo_cast : 60.0f;
+            away_pretend(mins * 60.0f);
+            p1->pl.pos = home;
+            SDL_Log("away: %.0f minutes later you come back", mins);
+        }
+    }
     if (g->opt.demo && a->demo_done && !strcmp(kind, "elements")) {
         /* spells on the world (docs/SIMULATION.md): a meadow with a crawler in it, a wooden post,
          * a pool with a crawler wading; a fire meteor on the meadow, a fire bolt into the crawler
@@ -1485,6 +1538,7 @@ static void start_world(App *a) {
     chunkmap_init(&g->map, &g->world, &g->r, g->opt.radius, g->opt.vradius);
     sim_reset(); /* no clouds or swarms from another world */
     bio_reset();
+    away_reset();
     /* the saved characters of this world (screenshot and test runs start fresh) */
     if ((!g->opt.shot || g->opt.persist) && !g->opt.fresh) game_load(g);
     arms_story_lore(&g->world); /* the legendaries of a world with generated stories tell its history */

@@ -379,6 +379,39 @@ static void fire_touch(Game *g) {
     }
 }
 
+/* Catching up a chunk that was out of reach for dt seconds (away.c): the fires that were
+ * burning there spread once to what burns beside them and have burnt out since. False if the
+ * chunk is busy: try again. */
+bool sim_catch_up_fires(Game *g, int cx, int cy, int cz, float dt) {
+    if (dt < 20.0f) return true;
+    int n;
+    const BlockEdit *e = chunkmap_chunk_edits(&g->map, cx, cy, cz, &n);
+    Cell fires[256];
+    int nf = 0;
+    for (int i = 0; i < n && nf < 256; i++) {
+        if (e[i].raw != B_FIRE || !e[i].level) continue;
+        int lx = e[i].idx % CHUNK, lz = (e[i].idx / CHUNK) % CHUNK, ly = e[i].idx / (CHUNK * CHUNK);
+        fires[nf++] = (Cell){ cx * CHUNK + lx, cy * CHUNK + ly, cz * CHUNK + lz };
+    }
+    if (!nf) return true;
+    if (!chunkmap_can_edit(&g->map, cx * CHUNK + CHUNK / 2, cy * CHUNK + CHUNK / 2, cz * CHUNK + CHUNK / 2)) return false;
+    /* one more round of spreading, then everything that burned is ash (where it lay) or gone */
+    int first = nf;
+    for (int i = 0; i < first && nf < 256; i++)
+        for (int k = 0; k < 6 && nf < 256; k++) {
+            int x = fires[i].x + N6[k][0], y = fires[i].y + N6[k][1], z = fires[i].z + N6[k][2];
+            bool known;
+            Block b = chunkmap_block_raw(&g->map, x, y, z, &known);
+            if (known && flammable(b) && (mix64(cell_hash(x, y, z)) & 1) && ignite(g, x, y, z)) fires[nf++] = (Cell){ x, y, z };
+        }
+    for (int i = 0; i < nf; i++) {
+        bool known;
+        Block out = block_solid(chunkmap_block(&g->map, fires[i].x, fires[i].y - 1, fires[i].z, &known)) ? B_ASH : B_AIR;
+        chunkmap_edit(&g->map, fires[i].x, fires[i].y, fires[i].z, out, 0, 0);
+    }
+    return true;
+}
+
 /* ---------- elements ---------- */
 
 /* Water cells joined to (x, y, z), up to max: lightning runs through all of them. */

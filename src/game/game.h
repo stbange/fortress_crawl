@@ -902,6 +902,17 @@ void bio_on_death(Game *g, vec3 p, u64 h);   /* bones where something died */
 void bio_hive_broken(Game *g, vec3 p);       /* angry bees */
 int bio_grown(int block);                    /* cells grown since start (demo, tests) */
 int bio_withered(void);
+void bio_catch_up_begin(Game *g, int cx, int cy, int cz, float dt);
+bool bio_catch_up_run(Game *g, int budget);
+bool sim_catch_up_fires(Game *g, int cx, int cy, int cz, float dt);
+
+/* away.c: the world goes on while you are away (docs/SIMULATION.md) */
+void away_reset(void);
+void away_update(Game *g, float dt);
+int away_pending(void);
+int away_list(int *xyz, float *t, int max);
+void away_restore(int cx, int cy, int cz, float t);
+void away_pretend(float seconds);
 bool forge_start(Game *g, PlayerSlot *ps, bool reforge);
 void forge_strike(Game *g, PlayerSlot *ps);
 void forge_bellows(Game *g, PlayerSlot *ps);
