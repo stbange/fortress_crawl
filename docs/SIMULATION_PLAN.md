@@ -4,6 +4,17 @@ Status: **planned** (November 2026). Builds on the simulation that exists
 ([SIMULATION.md](SIMULATION.md), [DESTRUCTION.md](DESTRUCTION.md)): breakable blocks, water and
 lava with levels, fire with fuel, drifting gases, growth by need, insects, decay.
 
+Decisions (November 2026):
+1. **Catch-up reaches two hours** of game time; an area left longer looks two hours older.
+2. **Cold does not hurt** until there are remedies for it (warmth at fires and braziers, warm
+   meals, a fur cloak, a warming draught; see step 2). It slows and chills, nothing more. Heat
+   by lava hurts as it does now.
+3. **A collapse does heavy damage but never kills from full health** in one go, like falls.
+4. **Oil and acid** come as new fluids in step 3.
+5. **New sounds are generated** with `tools/gen_sfx.mjs` (ElevenLabs) in step 4.
+6. **Populations change hounds and bats too**: more where there is prey, fewer where it is
+   hunted out; the dungeon's other monsters keep their danger levels.
+
 The aim is no longer more rules but fewer, shared ones. Today water, fire and moss each have
 their own special cases ("fire melts ice", "moss needs water within three cells"). The next
 step gives the world a few common quantities that every rule reads (time, temperature,
@@ -93,6 +104,11 @@ is there in a few seconds).
   a while chills (slower), warmth near a fire clears it and gives "WARMED"; close to lava you
   take heat damage. Meals that resist fire or frost (`ME_FIRE_RES`, `ME_FROST_RES`, `ME_LAVA`)
   count.
+- **Remedies for cold** (decision 2): warmth at fires and braziers (and a campfire you light
+  yourself from wood), the frost-resisting meals that exist, a **fur cloak** (shop and forge:
+  keeps you from being chilled) and a **warming draught** (alchemy: an hour of warmth). Cold
+  never hurts in this step. Once the remedies are in and tested, whether long exposure should
+  start to hurt is your call; the code keeps it as one switch.
 - **On monsters:** fire-element monsters seek heat and avoid cold, frost ones the opposite;
   all of them avoid cells above 60 degrees, as they now avoid fire.
 
@@ -189,10 +205,11 @@ direction and plant age; a new vertex flag for flowing water (the shader slides 
 `sfx.c` new point loops (drips, fire by size) and one-shots.
 
 **New sounds** (drip, fire sizes, steam hiss, collapse creak and rumble, gurgle, ice cracking,
-bees from one side) would come from `tools/gen_sfx.mjs`, which uses the ElevenLabs sound API
-and its credits; it is only run with your go-ahead. Without it, existing sounds are reused
-(the salamander hiss for steam, the bees loop, the water step for drips), which is enough to
-build and test everything.
+bees from one side) come from `tools/gen_sfx.mjs` with the ElevenLabs sound API (decision 5):
+the new entries go into `tools/sfx_list.mjs`, the key is checked with `elevenlabs onboard
+check` (the key file itself is never opened), and only the missing files are generated. Until
+they exist the code falls back to existing sounds (the salamander hiss for steam, the bees
+loop, the water step for drips), so nothing waits on them.
 
 **Effort:** medium (3 sessions), plus the sound generation if wanted.
 
@@ -214,8 +231,9 @@ break, the cells within 8 m are checked for support:
   creak sounds for 1 to 2 seconds (a warning you can run from), then they drop as falling
   debris, an entity with the material's colour, and land as **rubble** (a new block: loose
   stone, soft, diggable, which spills sideways like coarse sand when piled higher than two).
-- Falling debris hurts what it lands on by its weight (a player caught under a ceiling takes
-  heavy damage but is not killed outright from full health: an open question below).
+- Falling debris hurts what it lands on by its weight. A player caught under a ceiling takes
+  heavy damage but is never killed from full health in one go (decision 3; as falls); monsters
+  have no such mercy.
 - Protected places never fall (the Sanctum, vaults, stairwells, the outside).
 - The check is bounded (8 m, at most 4000 cells) and spread over frames; the web build gets
   the same with a smaller radius if needed.
@@ -252,6 +270,9 @@ predator and prey rules, and only the animals near the players are real:
 - **Spawning reads the numbers:** `wildlife_spawn_chunk` spawns as many critters as the record
   says (today a fixed roll per chunk); killing them lowers it. Hounds and bats near critters hunt
   them (a monster's target can already be something other than a player).
+- **Hounds and bats follow their food** (decision 6): where prey is plentiful more of them are
+  spawned (up to half again as many), where it is hunted out fewer (down to half). Other
+  monsters keep the danger levels of their regions.
 - **Grazing writes the numbers back:** what critters crop and what they leave as bones.
 - The bot log and `worldmap` print the ecology of a region, so tuning can be checked.
 
@@ -294,15 +315,7 @@ cost measured, SIMULATION.md updated, commit and push.
 
 ## Open questions
 
-1. **How long does catch-up reach?** Proposed: up to 2 hours of game time. Longer means a
-   region you left at the start is a jungle when you return.
-2. **Cold and heat as hazards:** should standing in the cold hurt eventually, or only slow and
-   chill? Proposed: only slow and chill; heat near lava hurts as now.
-3. **Can a collapse kill?** Proposed: heavy damage, but not from full health in one go (as
-   falls today: a misstep is not death).
-4. **Oil and acid:** add them as new fluids in step 3? Proposed: yes, both.
-5. **New sounds through ElevenLabs** (`tools/gen_sfx.mjs`, uses credits): generate them in
-   step 4, or reuse existing sounds? Nothing is generated without your yes.
-6. **Should populations change the monsters too** (more hounds where there is prey, fewer
-   where it is hunted out)? Proposed: yes, for hounds and bats only; the dungeon's own monsters
-   keep their danger levels.
+None at the moment; the six questions of the first draft are decided above. Still to settle:
+when spells act on the world beyond what they do now (meteors, storms, runes, auras, hits on
+monsters, the utility fire and ice spells; see SIMULATION.md), before step 1 or as part of
+step 2.
