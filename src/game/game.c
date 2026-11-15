@@ -572,6 +572,7 @@ void game_event(Game *g, const SDL_Event *e) {
         case SDLK_4: ps->pick_out = true; break;
         case SDLK_X: throw_selected(g, ps); break;
         case SDLK_C: throw_cycle(ps); break;
+        case SDLK_P: camp_light(g, ps); break;
         case SDLK_F1: g->hud = !g->hud; break;
         case SDLK_F9: sfx_toggle_mute(); game_banner(ps, sfx_muted() ? "SOUND OFF (F9)" : "SOUND ON (F9)"); break;
         case SDLK_F10: music_toggle(); game_banner(ps, music_on() ? "MUSIC ON (F10)" : "MUSIC OFF (F10)"); break;
@@ -695,7 +696,7 @@ static void read_pad(Game *g, PlayerSlot *ps, PlayerInput *in, float dt) {
     if (PRESSED(SDL_GAMEPAD_BUTTON_DPAD_RIGHT)) { if (ps->pick_out) throw_cycle(ps); else spell_next(ps, 1); }
     if (PRESSED(SDL_GAMEPAD_BUTTON_DPAD_LEFT)) { if (ps->pick_out) throw_cycle(ps); else spell_next(ps, -1); }
     if (PRESSED(SDL_GAMEPAD_BUTTON_DPAD_UP)) drink_potion(g, ps, false);
-    if (PRESSED(SDL_GAMEPAD_BUTTON_DPAD_DOWN)) drink_potion(g, ps, true);
+    if (PRESSED(SDL_GAMEPAD_BUTTON_DPAD_DOWN)) { if (ps->pick_out) camp_light(g, ps); else drink_potion(g, ps, true); } /* (the pickaxe out: a campfire) */
     ps->pad_spell = HELD(SDL_GAMEPAD_BUTTON_WEST) != 0;
     if (PRESSED(SDL_GAMEPAD_BUTTON_BACK)) { ps->show_map = true; ps->show_skills = false; }
     if (PRESSED(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER)) game_cycle_weapon(ps, 1);

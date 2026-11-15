@@ -281,6 +281,7 @@ typedef struct Stats {
     float wet;       /* 0..1: soaked through (no catching fire; lightning twice as bad; frost freezes) */
     u8 flasks[3];    /* oil, frost salt, growth tonic (THROW_OIL.. - 1) */
     u8 throw_sel;    /* THROW_*: what X throws */
+    u8 firewood;     /* bundles: P lights a campfire (docs/SIMULATION.md) */
     u32 blueprints;
     u16 runes_t, runes_e;
     /* story (per character) */
@@ -883,6 +884,7 @@ void world_explode(Game *g, vec3 p, float radius, int power, float dmg, int owne
 void bomb_throw(Game *g, PlayerSlot *ps);
 void throw_selected(Game *g, PlayerSlot *ps);     /* X: the bomb or flask chosen with C */
 void throw_cycle(PlayerSlot *ps);                 /* C */
+bool camp_light(Game *g, PlayerSlot *ps);         /* P: a campfire from firewood, in front of you */
 const char *throw_name(int kind);
 void bio_tonic(Game *g, vec3 p, float r);         /* a growth tonic breaks: plants spring up */
 void bombs_update(Game *g, float dt);

@@ -80,9 +80,38 @@ static void drop_for(Game *g, PlayerSlot *ps, Block b, int x, int y, int z, u64 
         break;
     case B_ROOTS:
         if ((h & 7) == 0) pickup_spawn(g, PK_FOOD, at, FD_TUBER, NULL, 0, 0);
+        if (ps && ps->st.firewood < 20 && (h & 1)) ps->st.firewood++;
+        break;
+    case B_WOOD: /* firewood (P lights a campfire) */
+        if (ps && ps->st.firewood < 20) ps->st.firewood = (u8)MINI(20, ps->st.firewood + 2);
         break;
     default: break;
     }
+}
+
+/* A campfire from a bundle of firewood, on the ground in front of you: it burns two minutes or
+ * so (its fuel in the level byte), warms (heat.c), cooks (food.c) and spreads to what burns
+ * beside it like any fire. */
+bool camp_light(Game *g, PlayerSlot *ps) {
+    Stats *s = &ps->st;
+    if (!s->firewood) { if (ps->banner_time <= 0) game_banner(ps, "NO FIREWOOD - CHOP WOOD OR ROOTS, OR THE SHOP SELLS IT"); return false; }
+    vec3 f = dir_from_angles(ps->pl.yaw, 0.0f);
+    int x = (int)floorf(ps->pl.pos.x + f.x * 1.4f), z = (int)floorf(ps->pl.pos.z + f.z * 1.4f), y = (int)floorf(ps->pl.pos.y + 0.1f);
+    bool known;
+    for (int k = 0; k < 2 && chunkmap_block(&g->map, x, y - 1, z, &known) == B_AIR; k++) y--; /* down a step to the ground */
+    if (chunkmap_block(&g->map, x, y, z, &known) != B_AIR || !block_solid(chunkmap_block(&g->map, x, y - 1, z, &known)) ||
+        chunkmap_fluid(&g->map, x, y, z) || dig_protected(g, x, y, z)) {
+        if (ps->banner_time <= 0) game_banner(ps, "NO PLACE FOR A FIRE HERE");
+        return false;
+    }
+    if (!chunkmap_edit(&g->map, x, y, z, B_FIRE, 0, 120)) return false;
+    s->firewood--;
+    particles_burst(g, v3(x + 0.5f, y + 0.3f, z + 0.5f), v3(1.0f, 0.6f, 0.2f), 10, 1.5f, 0.05f, true);
+    sfx_at(g, SFX_OIL_IGNITE, v3(x + 0.5f, y + 0.5f, z + 0.5f), 0.4f);
+    char buf[64];
+    snprintf(buf, sizeof buf, "A CAMPFIRE (%d FIREWOOD LEFT)", s->firewood);
+    game_banner(ps, buf);
+    return true;
 }
 
 /* Sprites resting on a cell that is gone fall with it (grass, bones, fungus). */

@@ -81,6 +81,11 @@ typedef struct Bot {
     float next_home; /* a trip home to spend gold, not before this */
     Critter *prey;   /* an animal it hunts, until hunt_until */
     float hunt_until, next_hunt, next_cook, next_brew;
+    /* the living world (docs/SIMULATION.md): warming up, harvesting, throwing flasks */
+    float next_warm, next_harvest, harvest_until, next_throw;
+    vec3 warm_at, harvest_at;
+    bool warming, harvesting;
+    int warmed, harvests, throws;
     u64 prey_key, skip_prey[8];  /* animals it gave up on */
     float skip_until[8];
     int nskip;
@@ -590,6 +595,8 @@ static Monster *pick_enemy(PlayerSlot *ps) {
 
 static void fight(Game *g, PlayerSlot *ps, Monster *m, PlayerInput *in, float dt) {
     Stats *s = &ps->st;
+    ps->pick_out = false; /* (not the pickaxe it harvests with) */
+    B.harvesting = B.warming = false;
     vec3 c = mon_centre(m), eye = player_eye(&ps->pl);
     float d = v3_len(v3_sub(c, eye));
     float hd = sqrtf((c.x - eye.x) * (c.x - eye.x) + (c.z - eye.z) * (c.z - eye.z));
@@ -630,6 +637,21 @@ static void fight(Game *g, PlayerSlot *ps, Monster *m, PlayerInput *in, float dt
         }
     }
     if (m->grade == GRADE_BOSS && s->ward <= 0) cast_util(g, ps, SU_WARD);
+    /* flasks: frost salt into a crowd; oil under foes, then fire into it */
+    if (B.t >= B.next_throw && ps->bomb_cd <= 0 && d > 3.5f && d < 11.0f && facing(ps, c, 0.15f)) {
+        int kind = -1;
+        if (near >= 3 && s->flasks[THROW_FROST - 1]) kind = THROW_FROST;
+        else if (near >= 2 && s->flasks[THROW_OIL - 1] && sp >= 0 && spell_element(sp) == EL_FIRE) kind = THROW_OIL;
+        if (kind > 0) {
+            u8 keep = s->throw_sel;
+            s->throw_sel = (u8)kind;
+            throw_selected(g, ps);
+            s->throw_sel = keep;
+            B.throws++;
+            B.next_throw = B.t + 6.0f;
+            logf_("%7.1f THROW %s at %d foes\n", B.t, throw_name(kind), near);
+        }
+    }
 }
 
 static void survive(Game *g, PlayerSlot *ps, bool in_fight) {
@@ -691,6 +713,101 @@ static bool best_pot(PlayerSlot *ps, int place, u8 *out, int *nout) {
         }
     }
     return best >= 0;
+}
+
+/* Cold: to the nearest fire or brazier in sight, and stand by it until warm. */
+static bool bot_warm(Game *g, PlayerSlot *ps, PlayerInput *in, float dt) {
+    Stats *s = &ps->st;
+    if (B.warming && s->cold < 0.15f) {
+        B.warming = false;
+        B.warmed++;
+        logf_("%7.1f WARM again\n", B.t);
+    }
+    if (!B.warming && s->cold >= 0.5f && B.t >= B.next_warm) {
+        B.next_warm = B.t + 4.0f;
+        vec3 eye = player_eye(&ps->pl);
+        int px = (int)floorf(ps->pl.pos.x), py = (int)floorf(ps->pl.pos.y), pz = (int)floorf(ps->pl.pos.z);
+        float bd = 1e9f;
+        for (int y = py - 2; y <= py + 3; y++)
+            for (int z = pz - 14; z <= pz + 14; z++)
+                for (int x = px - 14; x <= px + 14; x++) {
+                    bool known;
+                    Block b = chunkmap_block(&g->map, x, y, z, &known);
+                    if (b != B_FIRE && b != B_BRAZIER) continue;
+                    vec3 c = v3(x + 0.5f, y + 0.5f, z + 0.5f);
+                    float d = v3_len(v3_sub(c, eye));
+                    if (d < bd && phys_line_of_sight(eye, c, game_solid, g)) { bd = d; B.warm_at = c; }
+                }
+        if (bd < 1e8f) { B.warming = true; logf_("%7.1f COLD - to a fire %.0f m off\n", B.t, bd); }
+        else if (s->firewood && camp_light(g, ps)) {
+            /* none near: it makes one */
+            vec3 f = dir_from_angles(ps->pl.yaw, 0.0f);
+            B.warm_at = v3_add(ps->pl.pos, v3_scale(f, 1.4f));
+            B.warming = true;
+            logf_("%7.1f COLD - lights a campfire (%d firewood left)\n", B.t, s->firewood);
+        }
+    }
+    if (!B.warming) return false;
+    face(ps, B.warm_at, 8.0f, dt);
+    float hd = sqrtf((B.warm_at.x - ps->pl.pos.x) * (B.warm_at.x - ps->pl.pos.x) + (B.warm_at.z - ps->pl.pos.z) * (B.warm_at.z - ps->pl.pos.z));
+    if (hd > 2.2f) in->move_z = 1.0f;
+    /* no closer after a while (the way is blocked): it makes its own fire where it stands */
+    static float best_hd, best_t;
+    if (hd < best_hd - 0.3f || B.t < best_t) { best_hd = hd; best_t = B.t; }
+    if (hd > 2.2f && B.t > best_t + 8.0f) {
+        best_hd = 1e9f;
+        best_t = B.t;
+        if (s->firewood && camp_light(g, ps)) {
+            vec3 f = dir_from_angles(ps->pl.yaw, 0.0f);
+            B.warm_at = v3_add(ps->pl.pos, v3_scale(f, 1.4f));
+            logf_("%7.1f COLD - cannot reach the fire: lights a campfire (%d firewood left)\n", B.t, s->firewood);
+        } else {
+            B.warming = false;
+            ps->pl.yaw += 1.6f; /* (next time, another way: the fire is looked for in front first) */
+        }
+    }
+    if (B.t > B.next_warm + 60.0f) B.warming = false; /* it does not get warmer: give up */
+    return true;
+}
+
+/* Something to harvest close by (flowers, vines, fungus, moss): the pickaxe takes it. */
+static bool bot_harvest(Game *g, PlayerSlot *ps, PlayerInput *in, float dt) {
+    if (B.harvesting && B.t > B.harvest_until) { B.harvesting = false; ps->pick_out = false; }
+    if (!B.harvesting && B.t >= B.next_harvest) {
+        B.next_harvest = B.t + 5.0f;
+        vec3 eye = player_eye(&ps->pl);
+        int px = (int)floorf(ps->pl.pos.x), py = (int)floorf(ps->pl.pos.y), pz = (int)floorf(ps->pl.pos.z);
+        float bd = 1e9f;
+        for (int y = py - 1; y <= py + 2; y++)
+            for (int z = pz - 6; z <= pz + 6; z++)
+                for (int x = px - 6; x <= px + 6; x++) {
+                    bool known;
+                    Block b = chunkmap_block(&g->map, x, y, z, &known);
+                    if (b != B_FLOWER && b != B_VINE && b != B_FUNGUS && b != B_MOSS) continue;
+                    if (dig_protected(g, x, y, z)) continue;
+                    vec3 c = v3(x + 0.5f, y + 0.5f, z + 0.5f);
+                    float d = v3_len(v3_sub(c, eye));
+                    if (d < bd && phys_line_of_sight(eye, c, game_solid, g)) { bd = d; B.harvest_at = c; }
+                }
+        if (bd < 1e8f) { B.harvesting = true; B.harvest_until = B.t + 6.0f; }
+    }
+    if (!B.harvesting) return false;
+    bool known;
+    Block b = chunkmap_block(&g->map, (int)floorf(B.harvest_at.x), (int)floorf(B.harvest_at.y), (int)floorf(B.harvest_at.z), &known);
+    if (b != B_FLOWER && b != B_VINE && b != B_FUNGUS && b != B_MOSS) {
+        B.harvesting = false;
+        B.harvests++;
+        ps->pick_out = false;
+        logf_("%7.1f HARVEST done\n", B.t);
+        return false;
+    }
+    face(ps, B.harvest_at, 10.0f, dt);
+    vec3 eye = player_eye(&ps->pl);
+    float d = v3_len(v3_sub(B.harvest_at, eye));
+    ps->pick_out = true;
+    if (d > 2.0f) in->move_z = 1.0f;
+    else if (ps->st.cooldown <= 0 && facing(ps, B.harvest_at, 0.3f)) dig_swing(g, ps);
+    return true;
 }
 
 static bool bot_food(Game *g, PlayerSlot *ps, PlayerInput *in, float dt) {
@@ -909,13 +1026,13 @@ static void summary(PlayerSlot *ps) {
     Stats *s = &ps->st;
     logf_("SUMMARY style=%s minutes=%.1f level=%d kills=%d deaths=%d gold=%d max_gate_dist=%.0f max_tier=%d max_depth=%.0f max_height=%.0f "
           "cells=%d stuck=%d hard_stuck=%d realm_trips=%d realm_failed=%d keystones=%d builds=%d chapter=%d missions=%d lore=%d fights=%d avg_fight=%.1f fight_share=%.0f%% "
-          "replans=%d no_goal=%d stalemates=%d close_calls=%d food=%d hunted=%d harvested=%d cooked=%d eaten=%d recipes=%d reagents=%d brewed=%d elixirs=%d formulae=%d forge_mats=%d forged=%d masterworks=%d smithing=%d digs=%d blasts=%d changed=%d\n",
+          "replans=%d no_goal=%d stalemates=%d close_calls=%d food=%d hunted=%d harvested=%d cooked=%d eaten=%d recipes=%d reagents=%d brewed=%d elixirs=%d formulae=%d forge_mats=%d forged=%d masterworks=%d smithing=%d digs=%d blasts=%d changed=%d warmed=%d harvests=%d throws=%d cloak=%d\n",
           STYLE_NAMES[B.style], B.t / 60.0f, s->level, s->kills, B.deaths, s->gold, B.max_dist, B.max_tier, B.max_depth, B.max_height,
           nvisited, B.stuck_total, B.hard_stuck, B.realm_trips, B.realm_failed, G->sanctum.keystones, B.builds, s->chapter + 1, s->nmissions, G->nlore, B.fights,
           B.fights ? B.fight_time_total / B.fights : 0.0f, 100.0f * B.time_in_fight / fmaxf(1.0f, B.t), B.replans, B.no_goal, B.stalemates, B.close_calls,
           g_tele.food, g_tele.hunted, g_tele.harvested, g_tele.cooked, g_tele.eaten, __builtin_popcount(s->recipes),
           g_tele.reagents, g_tele.brewed, g_tele.elixirs, __builtin_popcount(s->formulae), g_tele.forge_mats, g_tele.forged, g_tele.masterworks,
-          smith_level(s->smith_xp), B.digs, B.blasts, G->map.edits_total);
+          smith_level(s->smith_xp), B.digs, B.blasts, G->map.edits_total, B.warmed, B.harvests, B.throws, s->cloak);
     float total = 0;
     for (int i = 0; i < HS_COUNT; i++) total += g_tele.taken[i];
     logf_("DAMAGE_TAKEN total=%.0f", total);
@@ -1060,6 +1177,13 @@ bool bot_step(Game *g, PlayerInput *in, float dt) {
             B.shopped_realm = true;
         }
         while (healing_held(s) < POTION_HP_MAX && shop_buy_kind(g, ps, SH_POTION_HP)) bought++;
+        /* against the cold, and flasks to throw */
+        float here = heat_at(g, player_eye(&ps->pl));
+        if (here < 2.0f && s->firewood < 3 && s->gold > 60 && shop_buy_arg(g, ps, SH_SUPPLY, 107)) bought++;
+        if ((here < 2.0f || s->cold > 0.3f) && s->warm_t < 600.0f && s->gold > 150 && shop_buy_arg(g, ps, SH_SUPPLY, 103)) { bought++; logf_("%7.1f BUY warming draught\n", B.t); }
+        if (!s->cloak && s->gold > (here < 2.0f ? 500 : 1500) && shop_buy_arg(g, ps, SH_SUPPLY, 102)) { bought++; logf_("%7.1f BUY fur cloak\n", B.t); }
+        if (s->flasks[1] < 3 && s->gold > 400 && shop_buy_arg(g, ps, SH_SUPPLY, 105)) bought++;
+        if (s->flasks[0] < 3 && s->gold > 600 && shop_buy_arg(g, ps, SH_SUPPLY, 104)) bought++;
         if (s->gold > 2500 && shop_buy_kind(g, ps, SH_SEALED)) { bought++; logf_("%7.1f SEALED weapon bought\n", B.t); }
         int sp = best_attack_spell(s);
         if (sp >= 0) {
@@ -1151,6 +1275,8 @@ bool bot_step(Game *g, PlayerInput *in, float dt) {
     }
     if (B.goal_kind == 2) B.npath = 0;
     if (bot_food(g, ps, in, dt)) return true;
+    if (bot_warm(g, ps, in, dt)) return true;
+    if (bot_harvest(g, ps, in, dt)) return true;
 
     /* stuck: dig (or blast) a way toward the goal for a moment */
     if (B.t < B.dig_until) {

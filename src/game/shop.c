@@ -243,6 +243,7 @@ static int shop_items(Game *g, PlayerSlot *ps, ShopItem *out) {
     add(out, &n, SH_SUPPLY, 105, 60, s->flasks[1] + 3 <= 30, "YOU CARRY ALL YOU CAN", "3 FROST SALTS: FREEZE WATER, FOES AND FIRE WHERE THEY BREAK (YOU HAVE %d)", s->flasks[1]);
     add(out, &n, SH_SUPPLY, 106, 90, s->flasks[2] + 2 <= 30, "YOU CARRY ALL YOU CAN", "2 GROWTH TONICS: PLANTS SPRING UP WHERE THE GROUND ALLOWS (YOU HAVE %d)", s->flasks[2]);
     /* against the cold (docs/SIMULATION.md) */
+    add(out, &n, SH_SUPPLY, 107, 20, s->firewood + 3 <= 20, "YOU CARRY ALL YOU CAN", "3 BUNDLES OF FIREWOOD: P LIGHTS A CAMPFIRE (YOU HAVE %d)", s->firewood);
     if (!s->cloak) add(out, &n, SH_SUPPLY, 102, 350, true, NULL, "A FUR CLOAK: THE COLD REACHES YOU FOUR TIMES SLOWER");
     add(out, &n, SH_SUPPLY, 103, 60, s->warm_t < 600.0f, "YOU ARE WARM ENOUGH", "A WARMING DRAUGHT: AN HOUR OF WARMTH IN THE COLD");
     /* the smith (with the forge): the supplies that are only bought, and two metals */
@@ -439,6 +440,11 @@ static void buy(Game *g, PlayerSlot *ps, const ShopItem *it) {
         if (it->arg == 100) {
             ps->st.bombs += 3;
             snprintf(buf, sizeof buf, "3 BOMBS (%d) - X OR THE PICKAXE'S ALTERNATE ATTACK THROWS ONE", ps->st.bombs);
+            break;
+        }
+        if (it->arg == 107) {
+            ps->st.firewood = (u8)MINI(ps->st.firewood + 3, 20);
+            snprintf(buf, sizeof buf, "FIREWOOD (%d) - P LIGHTS A CAMPFIRE", ps->st.firewood);
             break;
         }
         if (it->arg >= 104 && it->arg <= 106) {

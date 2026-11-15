@@ -12,7 +12,7 @@
  * user's preference folder. The world itself never needs saving: the seed rebuilds it. */
 
 #define SAVE_MAGIC 0x56534346u /* "FCSV" */
-#define SAVE_VERSION 22 /* 22: insect swarms; 21: the numbers of animals and plants per chunk; 20: the marks on cells (wet, soot, scorch, plants' age); 19: flasks to throw; 18: the fur cloak, warmth and cold of each character; 17: when each chunk was last seen (the world goes on while you are away); 16: the clouds of gas in the air; 15: what was broken in the world, the pickaxe and bombs; 14: the ledger of deeds (choices); 13: the story generator of the world; 12: the forge (materials, smithing, blueprints, runes); 11: the Sanctum's decorations, keystones bought; 10: meal variety, toxicity, torn formulae; 9: alchemy (reagents, elixirs, formulae, the elixir working); 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms;
+#define SAVE_VERSION 23 /* 23: firewood; 22: insect swarms; 21: the numbers of animals and plants per chunk; 20: the marks on cells (wet, soot, scorch, plants' age); 19: flasks to throw; 18: the fur cloak, warmth and cold of each character; 17: when each chunk was last seen (the world goes on while you are away); 16: the clouds of gas in the air; 15: what was broken in the world, the pickaxe and bombs; 14: the ledger of deeds (choices); 13: the story generator of the world; 12: the forge (materials, smithing, blueprints, runes); 11: the Sanctum's decorations, keystones bought; 10: meal variety, toxicity, torn formulae; 9: alchemy (reagents, elixirs, formulae, the elixir working); 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms;
                           6: weapons with materials, powers, legendaries and memory; 7: the Sanctum per world (written by one
                           build still marked 6); 8: food (the larder, dishes, recipes, the meal) */
 #define EXPLORED_BUDGET (1200 * 1024)
@@ -187,6 +187,7 @@ static void write_player(Buf *b, const Stats *s, const Player *pl) {
     w8(b, s->pick); w16(b, (u16)s->bombs);
     w8(b, s->cloak); wf(b, s->warm_t); wf(b, s->cold); /* v18 */
     w8(b, s->flasks[0]); w8(b, s->flasks[1]); w8(b, s->flasks[2]); w8(b, s->throw_sel); /* v19 */
+    w8(b, s->firewood); /* v23 */
 }
 
 /* Explored cells: per chunk a 512-byte mask of the non-zero bytes, then those bytes. */
@@ -466,6 +467,7 @@ static void read_player(Rd *r, SavedPlayer *sp) {
         for (int k = 0; k < 3; k++) s->flasks[k] = (u8)MINI(r8(r), 30);
         s->throw_sel = (u8)(r8(r) % THROW_COUNT);
     }
+    if (r->ver >= 23) s->firewood = (u8)MINI(r8(r), 20);
     if (!s->blueprints) s->blueprints = (1u << WB_DAGGER) | (1u << WB_SWORD) | (1u << WB_SHORTBOW) | (1u << WB_STAFF);
     /* sanity: a save from a broken build must not crash the game */
     if (s->level < 1 || s->level > 999) s->level = 1;
