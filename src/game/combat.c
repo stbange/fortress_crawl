@@ -812,6 +812,7 @@ void combat_update(Game *g, float dt) {
     }
     spells_update(g, dt);
     bombs_update(g, dt);
+    collapse_update(g, dt);
     sim_update(g, dt);
     bio_update(g, dt);
     away_update(g, dt);
@@ -825,6 +826,7 @@ void combat_update(Game *g, float dt) {
 
 void combat_draw_world(Game *g, vec3 eye) {
     bombs_draw(g);
+    collapse_draw(g);
     for (int i = 0; i < MAX_PROJECTILES; i++) {
         Projectile *p = &g->proj[i];
         if (!p->alive) continue;

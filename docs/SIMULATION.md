@@ -322,6 +322,36 @@ burning cells on; a **stream** loop where water is moving near you (not only whe
 **gurgle** when you drown, oil **catching fire**, acid **sizzling** on stone, **flasks
 shattering**, and the **creak** and **rumble** of a collapse (step 5).
 
+## Weight and collapse
+
+Blocks bear weight (`src/world/support.c`). A block is held if it rests on a held block, or
+reaches one sideways or hangs from one above within its material's **span** (in the table of
+materials): earth 1, glass and ice 3, wood 4, masonry and obsidian 5, rock and ore 6, metal 8.
+Resting on something held is always held; each step sideways or down costs one.
+
+- After a break (a pickaxe, a blast, a burning beam, acid), the box round it (up to 8 m each
+  way) is checked twice: as it was and as it is. **Only what was held before and is not now
+  falls**, so the world as it was made stands even where it spans further than these rules
+  allow (wide halls do not fall from ordinary fighting), and only what relied on what was broken
+  comes down. A broken block with half its pieces or more still bears load. Protected places
+  never fall.
+- What loses its support **creaks** and trickles dust for one to two seconds (a moment to run),
+  the lowest first, then drops as **falling debris** that lands as **rubble** (stone; wood and
+  metal break up). The **rumble** of the landing carries.
+- Debris hurts what it lands on: monsters by its speed, players for 30% of their health a
+  block; a player at nine-tenths of their health or more is never killed by one collapse
+  (decided).
+- **Rubble** (new block) is loose: it falls into what is empty below and slides off a pile onto
+  a lower side, like coarse sand. It breaks easily.
+- `test_worldgen` checks the rules on built structures: a masonry beam cut at one end loses the
+  three cells beyond its span, a wooden one four; a 5 x 5 slab on four corner pillars stands,
+  loses the one cell beyond masonry's reach with the pillars of one side cut, and falls whole
+  with all four cut.
+
+`--demo collapse`: a 5 x 5 slab of stone on four pillars, bombs at the pillars one at a time: the
+two on the east side cut, one cell of the slab falls; the third, five more; the last, the other
+19, which land as a mound of rubble.
+
 ## Time away
 
 The simulation runs only near the players, so the world would freeze wherever nobody is. It

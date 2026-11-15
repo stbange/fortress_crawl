@@ -680,6 +680,7 @@ void texgen_theme(int theme, u8 *out) {
             case B_ASH: spr_ash(p, seed, base); break;
             case B_OBSIDIAN: tex_obsidian(p, seed, base); break;
             case B_OIL: case B_ACID: tex_water(p, seed, base); break;
+            case B_RUBBLE: tex_dirt(p, seed, base); cracks(p, seed, 6, 0.5f); break;
             default: fill_noise(p, seed, base, 0.2f); break;
             }
         }

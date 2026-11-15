@@ -56,8 +56,9 @@ sites are not protected.
 ## Falling and dropping
 
 - A block left with six pieces or fewer crumbles.
-- After every break, the pieces around are flood-filled: an island of up to 48 cells that no
-  longer touches anything anchored falls apart (dust and a thud). Bigger structures hold.
+- After every break what it held is checked for weight: blocks that lose their support creak,
+  trickle dust and come down in stages as falling debris that lands as rubble (see
+  [SIMULATION.md](SIMULATION.md), "Weight and collapse").
 - Ore drops what mining at the forge would give (`forge_mine`); fungus, roots and grass drop
   herbs, mushrooms, glowcaps or tubers.
 - Plants and props on top of a broken block fall with it.

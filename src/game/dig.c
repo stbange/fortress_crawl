@@ -1,5 +1,6 @@
 #include "game/game.h"
 #include "render/batch.h"
+#include "world/support.h"
 
 /* Breaking the world (docs/DESTRUCTION.md). Blocks stay on their 1 m grid; one that is hit
  * breaks into 4x4x4 pieces of 25 cm (world/carve.h) and loses the pieces the blow reaches.
@@ -93,6 +94,143 @@ static void loose_above(Game *g, int x, int y, int z) {
     chunkmap_edit(&g->map, x, y + 1, z, B_AIR, 0, 0);
 }
 
+/* ---------- weight and collapse (support.c) ---------- */
+
+/* Cells that stopped bearing load since the last check (what was broken, burnt or eaten). */
+static SupportCell cl_removed[256];
+static u8 cl_mat[256];
+static int cl_n;
+
+void collapse_note(int x, int y, int z, int mat) {
+    if (cl_n < 256) { cl_removed[cl_n] = (SupportCell){ x, y, z }; cl_mat[cl_n++] = (u8)mat; }
+}
+
+/* What a cell is for the support check: its material if it bears load (a broken block with half
+ * its pieces or more), else air; -1 if not known. */
+static int support_block(void *user, int x, int y, int z) {
+    Game *g = user;
+    bool known;
+    Block raw = chunkmap_block_raw(&g->map, x, y, z, &known);
+    if (!known) return -1;
+    if ((raw & BLOCK_CARVED) && __builtin_popcountll(chunkmap_mask(&g->map, x, y, z)) < 32) return B_AIR;
+    return raw & BLOCK_MAT;
+}
+
+static bool support_fixed(void *user, int x, int y, int z) { return dig_protected((Game *)user, x, y, z); }
+
+/* Cells about to fall: they creak and trickle dust first (a moment to run), then drop. */
+typedef struct { int x, y, z; float t; } Pending;
+#define MAX_PENDING 400
+static Pending pend[MAX_PENDING];
+static int npend;
+typedef struct { vec3 pos, vel; u8 mat; bool alive; float t; } Debris;
+#define MAX_DEBRIS 256
+static Debris debris[MAX_DEBRIS];
+static float rumble_t;
+
+void collapse_reset(void) { npend = 0; cl_n = 0; memset(debris, 0, sizeof debris); }
+
+void collapse_check(Game *g, int x, int y, int z, int r) {
+    if (!cl_n) return;
+    static SupportCell out[300];
+    int n = support_falls(support_block, support_fixed, g, x, y, z, r, cl_removed, cl_mat, cl_n, out, 300);
+    cl_n = 0;
+    if (!n) return;
+    u64 h = mix64((u64)(x * 73856093) ^ (u64)(z * 19349663) ^ (u64)(g->time * 1000));
+    for (int i = 0; i < n && npend < MAX_PENDING; i++) {
+        bool dup = false;
+        for (int k = 0; k < npend && !dup; k++) dup = pend[k].x == out[i].x && pend[k].y == out[i].y && pend[k].z == out[i].z;
+        if (dup) continue;
+        /* the lowest go first, the rest a little after: it comes down in stages */
+        float stage = 1.2f + 0.6f * hash_unit(h + (u64)i) + 0.08f * (float)(out[i].y - y);
+        pend[npend++] = (Pending){ out[i].x, out[i].y, out[i].z, fmaxf(0.8f, stage) };
+    }
+    sfx_at(g, SFX_COLLAPSE_CREAK, v3(x + 0.5f, y + 1.5f, z + 0.5f), 1.0f);
+    SDL_Log("collapse: %d cells lose their support at %d %d %d", n, x, y, z);
+}
+
+int collapse_pending(void) {
+    int n = npend;
+    for (int i = 0; i < MAX_DEBRIS; i++) n += debris[i].alive;
+    return n;
+}
+
+/* A player caught under it: heavy damage, but never killed from (nearly) full health by one collapse. */
+static void crush_player(Game *g, PlayerSlot *ps, float dmg, vec3 from) {
+    Stats *s = &ps->st;
+    if (ps->crush_t <= 0) { ps->crush_t = 4.0f; ps->crush_guard = s->hp >= s->maxhp * 0.9f; }
+    if (ps->crush_guard) dmg = fminf(dmg, s->hp - 1.0f);
+    if (dmg > 0) game_hurt_player(g, ps, dmg, from);
+}
+
+void collapse_update(Game *g, float dt) {
+    for (int k = 0; k < MAX_PLAYERS; k++)
+        if (g->players[k].crush_t > 0) g->players[k].crush_t -= dt;
+    rumble_t -= dt;
+    for (int i = 0; i < npend;) {
+        Pending *p = &pend[i];
+        p->t -= dt;
+        vec3 c = v3(p->x + 0.5f, (float)p->y, p->z + 0.5f);
+        if (fmodf(p->t, 0.3f) < dt && game_nearest_player(g, c, 30.0f)) particles_burst(g, c, v3(0.5f, 0.47f, 0.42f), 1, 0.4f, 0.04f, false);
+        if (p->t > 0) { i++; continue; }
+        bool known;
+        Block raw = chunkmap_block_raw(&g->map, p->x, p->y, p->z, &known);
+        Block m = raw & BLOCK_MAT;
+        if (known && block_solid(m) && !dig_protected(g, p->x, p->y, p->z) && chunkmap_edit(&g->map, p->x, p->y, p->z, B_AIR, 0, 0)) {
+            for (int k = 0; k < MAX_DEBRIS; k++)
+                if (!debris[k].alive) { debris[k] = (Debris){ v3(p->x + 0.5f, p->y + 0.5f, p->z + 0.5f), v3(0, -1, 0), (u8)m, true, 0 }; break; }
+            loose_above(g, p->x, p->y, p->z);
+        } else if (known && block_solid(m) && !dig_protected(g, p->x, p->y, p->z)) { i++; continue; } /* busy: next frame */
+        pend[i] = pend[--npend];
+    }
+    for (int i = 0; i < MAX_DEBRIS; i++) {
+        Debris *d = &debris[i];
+        if (!d->alive) continue;
+        d->t += dt;
+        d->vel.y -= 22.0f * dt;
+        vec3 np = v3_add(d->pos, v3_scale(d->vel, dt));
+        /* what it falls on is hurt by its weight */
+        for (int k = 0; k < MAX_MONSTERS; k++) {
+            Monster *mo = &g->mons[k];
+            if (mo->alive && fabsf(mo->pos.x - np.x) < 0.8f && fabsf(mo->pos.z - np.z) < 0.8f && np.y > mo->pos.y && np.y < mo->pos.y + MONSTERS[mo->type].h * mo->scale + 0.4f && d->vel.y < -3.0f) {
+                monster_damage(g, mo, 25.0f + 2.0f * fabsf(d->vel.y), d->pos, 2.0f, -1);
+                d->vel.y = -1.0f;
+            }
+        }
+        for (int k = 0; k < MAX_PLAYERS; k++) {
+            PlayerSlot *ps = &g->players[k];
+            if (ps->active && !ps->st.dead && fabsf(ps->pl.pos.x - np.x) < 0.7f && fabsf(ps->pl.pos.z - np.z) < 0.7f && np.y > ps->pl.pos.y && np.y < ps->pl.pos.y + 2.0f && d->vel.y < -3.0f) {
+                crush_player(g, ps, ps->st.maxhp * 0.3f, d->pos);
+                d->vel.y = -1.0f;
+            }
+        }
+        int fx = (int)floorf(np.x), fy = (int)floorf(np.y - 0.5f), fz = (int)floorf(np.z);
+        if (game_solid(g, fx, fy, fz) != 0 || d->t > 6.0f) {
+            /* it lands: stone as rubble, wood and metal as wreckage that is gone */
+            int lx = fx, ly = fy + 1, lz = fz;
+            bool known;
+            Block at = chunkmap_block(&g->map, lx, ly, lz, &known);
+            bool stone = SUBSTANCES[d->mat].porous && d->mat != B_WOOD;
+            if (stone && known && (at == B_AIR || BLOCKS[at].render == RENDER_CROSS) && !dig_protected(g, lx, ly, lz) && !cell_occupied(g, lx, ly, lz))
+                chunkmap_edit(&g->map, lx, ly, lz, B_RUBBLE, 0, 0);
+            particles_burst(g, v3(np.x, (float)ly, np.z), mat_color(d->mat), 10, 3.0f, 0.07f, false);
+            if (rumble_t <= 0) { sfx_at(g, SFX_COLLAPSE_RUMBLE, np, 1.0f); rumble_t = 1.5f; }
+            d->alive = false;
+            continue;
+        }
+        d->pos = np;
+    }
+}
+
+void collapse_draw(Game *g) {
+    for (int i = 0; i < MAX_DEBRIS; i++) {
+        Debris *d = &debris[i];
+        if (!d->alive) continue;
+        vec3 l = game_light_at(g, d->pos), c = mat_color(d->mat);
+        batch3d_box(d->pos, v3(0.45f, 0.45f, 0.45f), d->t * 2.0f, v3(c.x * l.x, c.y * l.y, c.z * l.z), false);
+    }
+}
+
 /* Removes the pieces of the cell (x, y, z) that lie within r of p, if the material yields to
  * power. Returns the number of pieces removed. */
 static int break_cell(Game *g, PlayerSlot *ps, int x, int y, int z, vec3 p, float r, int power) {
@@ -132,7 +270,9 @@ static int break_cell(Game *g, PlayerSlot *ps, int x, int y, int z, vec3 p, floa
     if (!removed) return 0;
     /* a few pieces left are no block any more: they crumble */
     if (__builtin_popcountll(keep) <= 6) keep = 0;
+    bool bore = __builtin_popcountll(mask) >= 32; /* (bearing load: half its pieces or more) */
     if (!chunkmap_edit(&g->map, x, y, z, keep ? (Block)(b | BLOCK_CARVED) : B_AIR, keep, 0)) return 0;
+    if (bore && __builtin_popcountll(keep) < 32) collapse_note(x, y, z, b);
     vec3 at = v3_add(p, v3((x + 0.5f - p.x) * 0.3f, (y + 0.5f - p.y) * 0.3f, (z + 0.5f - p.z) * 0.3f));
     particles_burst(g, at, mat_color(b), MINI(4 + removed, 14), 2.5f, 0.05f, false);
     if (!keep) {
@@ -142,46 +282,6 @@ static int break_cell(Game *g, PlayerSlot *ps, int x, int y, int z, vec3 p, floa
     return removed;
 }
 
-/* Pieces with nothing to hold them: a small island of blocks no longer connected to the
- * rest crumbles (floating rock left by a blast, a pillar cut at both ends). */
-#define ISLAND_MAX 48
-static void crumble_islands(Game *g, PlayerSlot *ps, int x0, int y0, int z0, int rad) {
-    static const int N6[6][3] = { { 1, 0, 0 }, { -1, 0, 0 }, { 0, 1, 0 }, { 0, -1, 0 }, { 0, 0, 1 }, { 0, 0, -1 } };
-    for (int dy = -rad; dy <= rad; dy++)
-        for (int dz = -rad; dz <= rad; dz++)
-            for (int dx = -rad; dx <= rad; dx++) {
-                int sx = x0 + dx, sy = y0 + dy, sz = z0 + dz;
-                bool known;
-                Block b = chunkmap_block(&g->map, sx, sy, sz, &known);
-                if (!known || !block_solid(b)) continue;
-                /* flood the solid blocks connected to it, a few dozen at most */
-                int q[ISLAND_MAX][3], n = 0;
-                q[n][0] = sx; q[n][1] = sy; q[n][2] = sz; n++;
-                bool anchored = false;
-                for (int h = 0; h < n && !anchored; h++)
-                    for (int d = 0; d < 6 && !anchored; d++) {
-                        int nx = q[h][0] + N6[d][0], ny = q[h][1] + N6[d][1], nz = q[h][2] + N6[d][2];
-                        Block nb = chunkmap_block(&g->map, nx, ny, nz, &known);
-                        if (!known) { anchored = true; break; }
-                        if (!block_solid(nb)) continue;
-                        if (BLOCK_HARDNESS[nb] == HARD_NEVER || BLOCK_HARDNESS[nb] >= HARD_METAL || dig_protected(g, nx, ny, nz)) { anchored = true; break; }
-                        bool seen = false;
-                        for (int k = 0; k < n && !seen; k++) seen = q[k][0] == nx && q[k][1] == ny && q[k][2] == nz;
-                        if (seen) continue;
-                        if (n == ISLAND_MAX) { anchored = true; break; }
-                        q[n][0] = nx; q[n][1] = ny; q[n][2] = nz; n++;
-                    }
-                if (anchored) continue;
-                for (int k = 0; k < n; k++) {
-                    Block cb = chunkmap_block(&g->map, q[k][0], q[k][1], q[k][2], &known);
-                    if (!chunkmap_edit(&g->map, q[k][0], q[k][1], q[k][2], B_AIR, 0, 0)) continue;
-                    particles_burst(g, v3(q[k][0] + 0.5f, q[k][1] + 0.5f, q[k][2] + 0.5f), mat_color(cb), 10, 3.0f, 0.07f, false);
-                    drop_for(g, ps, cb, q[k][0], q[k][1], q[k][2], mix64((u64)k ^ (u64)(u32)q[k][0] << 20));
-                }
-                if (n) sfx_at(g, SFX_AMB_ROCKS, v3(sx + 0.5f, sy + 0.5f, sz + 0.5f), 1.0f);
-            }
-}
-
 int world_break_sphere(Game *g, PlayerSlot *ps, vec3 p, float r, int power) {
     int removed = 0;
     int x0 = (int)floorf(p.x - r), x1 = (int)floorf(p.x + r), y0 = (int)floorf(p.y - r), y1 = (int)floorf(p.y + r), z0 = (int)floorf(p.z - r),
@@ -189,7 +289,7 @@ int world_break_sphere(Game *g, PlayerSlot *ps, vec3 p, float r, int power) {
     for (int y = y1; y >= y0; y--) /* top first, so what rests on a cell goes with it */
         for (int z = z0; z <= z1; z++)
             for (int x = x0; x <= x1; x++) removed += break_cell(g, ps, x, y, z, p, r, power);
-    if (removed && r >= 0.9f) crumble_islands(g, ps, (int)floorf(p.x), (int)floorf(p.y), (int)floorf(p.z), (int)ceilf(r) + 1);
+    if (removed) collapse_check(g, (int)floorf(p.x), (int)floorf(p.y), (int)floorf(p.z), MINI(SUPPORT_MAX_R, (int)ceilf(r) + 5));
     return removed;
 }
 

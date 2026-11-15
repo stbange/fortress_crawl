@@ -378,6 +378,8 @@ static bool ignite(Game *g, int x, int y, int z) {
     if (!fuel) return false;
     if (!chunkmap_edit(&g->map, x, y, z, B_FIRE, 0, fuel)) return false;
     if (raw == B_OIL) sim_sound(g, SFX_OIL_IGNITE, v3(x + 0.5f, y + 0.5f, z + 0.5f), 1.0f, 0.8f);
+    /* a burning beam bears no load: what rested on it may come down */
+    if (BLOCKS[raw].solid) { collapse_note(x, y, z, raw); collapse_check(g, x, y, z, 6); }
     particles_burst(g, v3(x + 0.5f, y + 0.4f, z + 0.5f), v3(1.0f, 0.55f, 0.15f), 6, 1.5f, 0.05f, true);
     return true;
 }
@@ -800,9 +802,11 @@ static void liquid_step(Game *g, Cell c, Block b, int l) {
         if (known && block_solid(m) && SUBSTANCES[m].porous && BLOCK_HARDNESS[m] != HARD_NEVER && (h >> 8) % 3 == 0 && !dig_protected(g, x, y, z) &&
             chunkmap_can_edit(&g->map, x, y, z)) {
             u64 mask = (raw & BLOCK_CARVED) ? chunkmap_mask(&g->map, x, y, z) : CARVE_FULL;
+            bool bore = __builtin_popcountll(mask) >= 32;
             for (int n = 0; n < 6 && mask; n++) mask &= ~(1ULL << ((h >> (12 + n * 6)) & 63));
             if (__builtin_popcountll(mask) <= 6) mask = 0;
             chunkmap_edit(&g->map, x, y, z, mask ? (Block)(m | BLOCK_CARVED) : B_AIR, mask, 0);
+            if (bore && __builtin_popcountll(mask) < 32) { collapse_note(x, y, z, m); collapse_check(g, x, y, z, 6); }
             particles_burst(g, v3(x + 0.5f, y + 0.5f, z + 0.5f), v3(0.5f, 0.85f, 0.3f), 3, 0.8f, 0.04f, false);
             sim_sound(g, SFX_ACID_SIZZLE, v3(x + 0.5f, y + 0.5f, z + 0.5f), 0.6f, 1.2f);
             if ((h >> 50) % 4 == 0) { l--; set_liq(g, c.x, c.y, c.z, b, l); if (l <= 0) return; }
@@ -852,6 +856,30 @@ static void acid_touch(Game *g) {
     }
 }
 
+/* ---------- rubble ---------- */
+
+/* Rubble is loose: it falls into what is empty below it and slides off a pile onto a lower side
+ * (where both the side and the cell below it are open). */
+static void rubble_step(Game *g, Cell c) {
+    Block tb;
+    if (!chunkmap_can_edit(&g->map, c.x, c.y, c.z)) { push(c.x, c.y, c.z); return; }
+    if (kind_of(g, c.x, c.y - 1, c.z, &tb) == 1 && !cell_occupied(g, c.x, c.y - 1, c.z) && chunkmap_can_edit(&g->map, c.x, c.y - 1, c.z)) {
+        chunkmap_edit(&g->map, c.x, c.y, c.z, B_AIR, 0, 0);
+        chunkmap_edit(&g->map, c.x, c.y - 1, c.z, B_RUBBLE, 0, 0);
+        return;
+    }
+    int r = (int)(cell_hash(c.x, c.y, c.z) ^ tick_no) & 3;
+    for (int s = 0; s < 4; s++) {
+        int d = (s + r) & 3, nx = c.x + SIDE[d][0], nz = c.z + SIDE[d][1];
+        Block a, b;
+        if (kind_of(g, nx, c.y, nz, &a) != 1 || kind_of(g, nx, c.y - 1, nz, &b) != 1) continue;
+        if (cell_occupied(g, nx, c.y, nz) || !chunkmap_can_edit(&g->map, nx, c.y, nz)) continue;
+        chunkmap_edit(&g->map, c.x, c.y, c.z, B_AIR, 0, 0);
+        chunkmap_edit(&g->map, nx, c.y, nz, B_RUBBLE, 0, 0);
+        return;
+    }
+}
+
 /* ---------- the tick ---------- */
 
 static void step_cell(Game *g, Cell c) {
@@ -865,6 +893,7 @@ static void step_cell(Game *g, Cell c) {
             if (fuel) fire_step(g, c, fuel);
         } else if (b == B_LAVA && !dig_protected(g, c.x, c.y, c.z)) lava_step(g, c, sim_lava(g, c.x, c.y, c.z));
         else if (b == B_OIL || b == B_ACID) liquid_step(g, c, b, liq_level(g, c.x, c.y, c.z, b));
+        else if (b == B_RUBBLE && !dig_protected(g, c.x, c.y, c.z)) rubble_step(g, c);
         return;
     }
     Block tb;

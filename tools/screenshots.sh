@@ -88,6 +88,7 @@ SHOT_TIME=4 shot story_residents --demo residents --look 90 -8
 SHOT_TIME=5 shot dig --demo dig
 SHOT_TIME=5 shot blast --demo blast --pos 8 7.5 0.5 --look 0 -12
 SHOT_TIME=0.75 shot flood --demo flood --pos 8 7.5 0.5 --look 0 -20
+SHOT_TIME=7.9 shot collapse --demo collapse --pos 8 6 0.5 --look 0 5
 SHOT_TIME=3.4 shot matter --demo matter --pos 8 6 0.5 --look 0 -20
 SHOT_TIME=9 shot away --demo away --pos 8 6 0.5 --look 0 -12
 SHOT_TIME=3 shot elements --demo elements --pos 8 6 0.5 --look 0 -15

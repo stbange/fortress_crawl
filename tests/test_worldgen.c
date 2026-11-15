@@ -15,6 +15,7 @@
 #include "world/history.h"
 #include "world/carve.h"
 #include "game/physics.h"
+#include "world/support.h"
 #include "world/mech.h"
 #include "world/mesher.h"
 #include "world/texgen.h"
@@ -114,6 +115,14 @@ static int broken_solid(void *u, int x, int y, int z) {
     return 0;
 }
 static u64 test_pieces(void *u, int x, int y, int z) { (void)u; (void)x; (void)y; (void)z; return g_test_mask; }
+
+/* a world for the collapse tests: [y][z][x], 40 cells a side */
+static int test_grid_block(void *user, int x, int y, int z) {
+    const u8 (*grid)[40][40] = user;
+    if (y < 0) return B_ROCK; /* the ground goes on down */
+    if (x < 0 || z < 0 || x >= 40 || y >= 40 || z >= 40) return B_AIR;
+    return grid[y][z][x];
+}
 
 int main(int argc, char **argv) {
     u64 seed = argc > 1 ? strtoull(argv[1], NULL, 10) : 1337;
@@ -598,6 +607,55 @@ int main(int argc, char **argv) {
         CHECK(phys_box_free(v3(5.5f, 1.0f, 5.5f), 0.3f, 1.8f, broken_solid, NULL), "a block with no pieces left blocks");
         phys_pieces = NULL;
         printf("physics: broken blocks collide and cast rays by their 25 cm pieces\n");
+    }
+
+    /* 6d. weight and collapse (support.c): beams and a pillared slab */
+    {
+        static u8 grid[40][40][40]; /* [y][z][x] */
+        #define GSET(x, y, z, b) (grid[y][z][x] = (u8)(b))
+        int ok = 0;
+        for (int pass = 0; pass < 2; pass++) {
+            /* a beam between two pillars on a floor; the pillar at x = 24 is cut */
+            Block beam = pass ? B_WOOD : B_WALL;
+            memset(grid, 0, sizeof grid);
+            for (int z = 0; z < 40; z++) for (int x = 0; x < 40; x++) for (int y = 0; y <= 2; y++) GSET(x, y, z, B_ROCK);
+            for (int y = 3; y <= 6; y++) { GSET(16, y, 20, B_WALL); GSET(24, y, 20, B_WALL); }
+            for (int x = 16; x <= 24; x++) GSET(x, 7, 20, beam);
+            SupportCell removed[4];
+            u8 mat[4];
+            for (int y = 3; y <= 6; y++) { removed[y - 3] = (SupportCell){ 24, y, 20 }; mat[y - 3] = B_WALL; GSET(24, y, 20, B_AIR); }
+            SupportCell out[64];
+            int n = support_falls(test_grid_block, NULL, grid, 20, 7, 20, 8, removed, mat, 4, out, 64);
+            int expect = pass ? 4 : 3; /* wood reaches 4 from its pillar, masonry 5: the rest of the 9 falls */
+            CHECK(n == expect, "a %s beam cut at one end: %d of it falls (expected %d)", BLOCKS[beam].name, n, expect);
+            for (int i = 0; i < n; i++) CHECK(out[i].y == 7 && out[i].x > 16 + SUBSTANCES[beam].span, "only the far end of the beam falls");
+            ok += n == expect;
+        }
+        /* a 5 x 5 slab of masonry on four corner pillars */
+        int falls[3];
+        for (int cut = 0; cut < 3; cut++) {
+            memset(grid, 0, sizeof grid);
+            for (int z = 0; z < 40; z++) for (int x = 0; x < 40; x++) for (int y = 0; y <= 2; y++) GSET(x, y, z, B_ROCK);
+            int px[4] = { 16, 20, 16, 20 }, pz[4] = { 16, 16, 20, 20 };
+            for (int k = 0; k < 4; k++) for (int y = 3; y <= 6; y++) GSET(px[k], y, pz[k], B_PILLAR);
+            for (int z = 16; z <= 20; z++) for (int x = 16; x <= 20; x++) GSET(x, 7, z, B_WALL);
+            int ncut = cut == 0 ? 0 : cut == 1 ? 2 : 4; /* none, the two at x = 20, all four */
+            SupportCell removed[16];
+            u8 mat[16];
+            int nr = 0;
+            for (int k = 0; k < 4; k++) {
+                if (!(ncut == 4 || (ncut == 2 && px[k] == 20))) continue;
+                for (int y = 3; y <= 6; y++) { removed[nr] = (SupportCell){ px[k], y, pz[k] }; mat[nr++] = B_PILLAR; GSET(px[k], y, pz[k], B_AIR); }
+            }
+            SupportCell out[64];
+            falls[cut] = support_falls(test_grid_block, NULL, grid, 18, 7, 18, 8, removed, mat, nr, out, 64);
+        }
+        CHECK(falls[0] == 0, "a slab on its pillars stands (%d fall)", falls[0]);
+        CHECK(falls[1] > 0 && falls[1] < 25, "half the pillars cut: part of the slab falls (%d of 25)", falls[1]);
+        CHECK(falls[2] == 25, "every pillar cut: the whole slab falls (%d of 25)", falls[2]);
+        printf("collapse: beams fall beyond their span (masonry 5, wood 4); a slab with half its pillars cut loses %d of 25 cells, with all of them all 25\n",
+               falls[1]);
+        #undef GSET
     }
 
     /* 6c. the table of substances (docs/SIMULATION.md): sane values for every block */

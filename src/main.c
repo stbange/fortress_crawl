@@ -707,7 +707,7 @@ static void demo_setup(Game *g) {
                 p1->thread.n, p1->thread.reached, (SDL_GetTicksNS() - t0) / 1e6, t.name, t.cx, t.cy, t.cz, p1->banner);
         return;
     }
-    if (!strcmp(g_demo_kind, "dig") || !strcmp(g_demo_kind, "blast") || !strcmp(g_demo_kind, "flood") || !strcmp(g_demo_kind, "burn") || !strcmp(g_demo_kind, "grow") || !strcmp(g_demo_kind, "lava") || !strcmp(g_demo_kind, "elements") || !strcmp(g_demo_kind, "away") || !strcmp(g_demo_kind, "thaw") || !strcmp(g_demo_kind, "matter")) {
+    if (!strcmp(g_demo_kind, "dig") || !strcmp(g_demo_kind, "blast") || !strcmp(g_demo_kind, "flood") || !strcmp(g_demo_kind, "burn") || !strcmp(g_demo_kind, "grow") || !strcmp(g_demo_kind, "lava") || !strcmp(g_demo_kind, "elements") || !strcmp(g_demo_kind, "away") || !strcmp(g_demo_kind, "thaw") || !strcmp(g_demo_kind, "matter") || !strcmp(g_demo_kind, "collapse")) {
         /* the pickaxe out at a wall (docs/DESTRUCTION.md); the swings and the bomb come in
          * screenshot_step */
         for (int i = 0; i < MAX_MONSTERS; i++) g->mons[i].alive = false;
@@ -1188,6 +1188,50 @@ static void screenshot_step(App *a, float frame_dt) {
             SDL_Log("blast: %d cells scorched", scorch);
         }
     }
+    if (g->opt.demo && a->demo_done && !strcmp(kind, "collapse")) {
+        /* weight and collapse (docs/SIMULATION.md): a slab of stone on four pillars, a crawler
+         * under it; bombs at the two pillars on one side, then at the other two */
+        static int stage, bx, by, bz;
+        static float logged;
+        if (stage == 0 && a->shot_wait > 0.4f) {
+            vec3 f = v3(cosf(p1->pl.yaw), 0, sinf(p1->pl.yaw));
+            bx = (int)floorf(p1->pl.pos.x + f.x * 9); by = (int)floorf(p1->pl.pos.y); bz = (int)floorf(p1->pl.pos.z + f.z * 9);
+            int n = 0;
+            for (int y = 0; y < 4; y++)
+                for (int k = 0; k < 4; k++) n += chunkmap_edit(&g->map, bx + (k & 1 ? 2 : -2), by + y, bz + (k & 2 ? 2 : -2), B_PILLAR, 0, 0);
+            for (int z = -2; z <= 2; z++)
+                for (int x = -2; x <= 2; x++) n += chunkmap_edit(&g->map, bx + x, by + 4, bz + z, B_WALL, 0, 0);
+            if (n > 35) {
+                stage = 1;
+                monster_spawn(g, MON_CRAWLER, v3(bx + 0.5f, (float)by, bz + 0.5f), 3, false, v3(1, 1, 1), 0xC011);
+                SDL_Log("collapse: a slab on four pillars at %d %d %d", bx, by, bz);
+            }
+        }
+        /* (a bomb at a time, as in play) */
+        static const float WHEN[4] = { 1.5f, 1.8f, 6.0f, 6.3f };
+        if (stage >= 1 && stage <= 4 && a->shot_wait > WHEN[stage - 1]) {
+            int k = stage - 1;
+            world_explode(g, v3(bx + (k < 2 ? 2.5f : -1.5f), by + 1.5f, bz + (k & 1 ? 3.5f : -1.5f)), 2.6f, HARD_MASONRY, 0.0f, -1);
+            stage++;
+        }
+        if (stage && a->shot_wait > logged + 1.0f) {
+            logged = a->shot_wait;
+            int slab = 0, rubble = 0, pillar = 0;
+            for (int z = -3; z <= 3; z++)
+                for (int x = -3; x <= 3; x++) {
+                    bool known;
+                    slab += chunkmap_block(&g->map, bx + x, by + 4, bz + z, &known) == B_WALL;
+                    for (int y = 0; y < 4; y++) {
+                        Block b = chunkmap_block(&g->map, bx + x, by + y, bz + z, &known);
+                        rubble += b == B_RUBBLE; pillar += b == B_PILLAR;
+                    }
+                }
+            int crawler = 0;
+            for (int i = 0; i < MAX_MONSTERS; i++) crawler += g->mons[i].alive && g->mons[i].chunk_key == 0xC011;
+            SDL_Log("collapse: t %.0f  your hp %.0f burn %.1f  slab %d of 25, pillar cells %d, rubble %d, falling %d, crawler %s", a->shot_wait, p1->st.hp, p1->st.burn_t, slab, pillar, rubble,
+                    collapse_pending(), crawler ? "alive" : "dead");
+        }
+    }
     if (g->opt.demo && a->demo_done && !strcmp(kind, "matter")) {
         /* the table of materials (docs/SIMULATION.md): oil thrown on a pool and lit, acid against a
          * rock wall, lightning into iron bars with a crawler behind them, a growth tonic on bare
@@ -1660,6 +1704,7 @@ static void start_world(App *a) {
     bio_reset();
     away_reset();
     heat_reset();
+    collapse_reset();
     /* the saved characters of this world (screenshot and test runs start fresh) */
     if ((!g->opt.shot || g->opt.persist) && !g->opt.fresh) game_load(g);
     arms_story_lore(&g->world); /* the legendaries of a world with generated stories tell its history */

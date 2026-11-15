@@ -51,6 +51,7 @@ enum {
     B_OBSIDIAN,  /* cube: lava cooled by water */
     B_OIL,       /* liquid: floats on water, burns hot */
     B_ACID,      /* liquid: eats stone, hurts, water dilutes it */
+    B_RUBBLE,    /* cube: what a collapse leaves; loose, it slides off a pile */
     B_COUNT
 };
 
@@ -102,6 +103,7 @@ typedef struct Substance {
     u8 density;      /* tenths of water's: below 10 floats */
     bool porous;     /* water seeps through it when broken */
     bool nutrient;   /* plants root in it */
+    u8 span;         /* how far it reaches without support (support.h); 0: bears no load */
 } Substance;
 extern const Substance SUBSTANCES[B_COUNT];
 

@@ -364,6 +364,7 @@ void theme_info(int theme, ThemeInfo *t) {
     t->mat[B_OBSIDIAN] = (Col){ 34, 24, 44 };
     t->mat[B_OIL] = (Col){ 46, 34, 16 };
     t->mat[B_ACID] = (Col){ 90, 180, 40 };
+    t->mat[B_RUBBLE] = col_lerp(t->mat[B_ROCK], t->mat[B_WALL], 0.4f);
     t->mortar = col_transform(f->mortar, s);
     t->glass = f->glass;
     t->roof = col_transform(f->roof, s);

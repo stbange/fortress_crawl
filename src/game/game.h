@@ -432,7 +432,8 @@ typedef struct PlayerSlot {
     int parley, parley_sel; /* 1 + the monster that yielded to this player, the choice under the cursor */
     bool pick_out;          /* the pickaxe in hand (the fourth slot): attack digs, the alternate throws a bomb */
     float bomb_cd;
-    float breath, drown_t;  /* seconds of air left under water (BREATH_MAX), the next drowning hurt */
+    float breath, drown_t;
+    float crush_t; bool crush_guard; /* a collapse: the window of one, and whether it may not kill */  /* seconds of air left under water (BREATH_MAX), the next drowning hurt */
     int shop_sel;
     int food_sel;           /* the FOOD tab's row */
     u8 pot[4];              /* ingredients in the pot (food ids) */
@@ -884,6 +885,13 @@ const char *throw_name(int kind);
 void bio_tonic(Game *g, vec3 p, float r);         /* a growth tonic breaks: plants spring up */
 void bombs_update(Game *g, float dt);
 void bombs_draw(Game *g);
+/* weight and collapse (dig.c, support.c): cells that stopped bearing load are noted, then checked */
+void collapse_note(int x, int y, int z, int mat);
+void collapse_check(Game *g, int x, int y, int z, int r);
+void collapse_update(Game *g, float dt);
+void collapse_draw(Game *g);
+void collapse_reset(void);
+int collapse_pending(void);
 void dig_swing(Game *g, PlayerSlot *ps);
 void dig_update(Game *g, PlayerSlot *ps, bool attack, bool alt);
 const char *dig_pick_name(const Stats *s);

@@ -56,6 +56,7 @@ add_library(fcworld STATIC
   src/world/gen_exterior.c
   src/world/gen_pocket.c
   src/world/mesher.c
+  src/world/support.c
   src/world/story.c
   src/world/history.c
   src/world/history_text.c)
