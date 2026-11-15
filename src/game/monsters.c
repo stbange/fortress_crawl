@@ -609,6 +609,7 @@ void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int 
                 }
             }
         }
+        bio_on_death(g, m->pos, mix64((u64)(m - g->mons) * 0x9E37 + (u64)(g->time * 1000)));
         /* the killer gets the full XP, everyone else nearby half of it */
         int killer = m->last_hitter;
         for (int i = 0; i < MAX_PLAYERS; i++) {

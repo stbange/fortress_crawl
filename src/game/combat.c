@@ -807,6 +807,7 @@ void combat_update(Game *g, float dt) {
     spells_update(g, dt);
     bombs_update(g, dt);
     sim_update(g, dt);
+    bio_update(g, dt);
     pickups_update(g, dt);
     update_projectiles(g, dt);
     update_particles(g, dt);

@@ -82,6 +82,7 @@ add_executable(fortress_crawl
   src/game/forge.c
   src/game/dig.c
   src/game/sim.c
+  src/game/bio.c
   src/game/wildlife.c
   src/game/monster_draw.c
   src/game/combat.c

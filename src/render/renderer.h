@@ -5,7 +5,7 @@
 #include "engine/gl.h"
 #include "world/theme.h"
 
-#define ATLAS_SIZE 1024
+#define ATLAS_SIZE 2048 /* 32 themes x 48 blocks x 4 variants of 16 px */
 #define ATLAS_TILES_PER_ROW (ATLAS_SIZE / 16)
 #define THEME_SLOTS 32
 #define MAX_QUADS_PER_DRAW 250000

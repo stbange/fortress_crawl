@@ -793,6 +793,11 @@ static void update_player(Game *g, PlayerSlot *ps, const PlayerInput *in, float 
         bool was_ground = ps->pl.on_ground;
         utility_physics_player(ps);
         ps->pl.water = ps->pl.fly ? 0.0f : sim_water_depth(g, ps->pl.pos);
+        {
+            bool known;
+            int vx = (int)floorf(ps->pl.pos.x), vy = (int)floorf(ps->pl.pos.y + 0.2f), vz = (int)floorf(ps->pl.pos.z);
+            ps->pl.on_vine = chunkmap_block(&g->map, vx, vy, vz, &known) == B_VINE || chunkmap_block(&g->map, vx, vy + 1, vz, &known) == B_VINE;
+        }
         player_update(&ps->pl, &pin, dt, player_solid, g);
         utility_physics_player(NULL);
         /* breath: under water it runs out, then you drown */

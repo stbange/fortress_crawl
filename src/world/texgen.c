@@ -454,6 +454,86 @@ static void spr_grass(u8 *p, u64 seed, RGB base) {
     }
 }
 
+/* Stone grown over: rock below, patches of moss that spill over the top edge. */
+static void tex_moss(u8 *p, u64 seed, RGB rock, RGB moss, int v) {
+    fill_noise(p, seed, rock, 0.25f);
+    for (int y = 0; y < N; y++)
+        for (int x = 0; x < N; x++) {
+            float n = tnoise(seed + 5, x, y, 4) * 0.7f + 0.3f * pn(seed, x, y) + (v & 1 ? 0.0f : 0.25f * (1.0f - y / (float)N));
+            if (n > 0.55f) put(p, x, y, rgb_scale(moss, band(0.75f + 0.5f * tnoise(seed + 6, x, y, 8), 5)), 1);
+        }
+}
+
+static void spr_vine(u8 *p, u64 seed, RGB leaf) {
+    clear(p);
+    for (int i = 0; i < 3; i++) {
+        float x = 2.0f + i * 5.0f + hash3f(seed, i, 0, 0, 61) * 2.0f;
+        for (int y = 0; y < N; y++) {
+            x += (hash3f(seed, i, y, 0, 62) - 0.5f) * 0.9f;
+            int xi = CLAMPI((int)x, 0, N - 1);
+            put(p, xi, y, rgb_scale(leaf, 0.7f), 1);
+            if (hash3f(seed, i, y, 1, 63) < 0.35f) {
+                int lx = CLAMPI(xi + (hash3f(seed, i, y, 2, 64) < 0.5f ? -1 : 1), 0, N - 1);
+                put(p, lx, y, rgb_scale(leaf, 1.1f + 0.2f * pn(seed, lx, y)), 1);
+            }
+        }
+    }
+}
+
+static void spr_flower(u8 *p, u64 seed, RGB stem, int v) {
+    static const RGB PETAL[4] = { { 220, 60, 70 }, { 240, 210, 70 }, { 160, 90, 220 }, { 235, 235, 240 } };
+    clear(p);
+    for (int i = 0; i < 4; i++) {
+        int x = 2 + i * 4 + (int)(hash3f(seed, i, 0, 0, 51) * 2), h = 5 + (int)(hash3f(seed, i, 1, 0, 51) * 6);
+        for (int k = 0; k < h; k++) put(p, x, N - 1 - k, stem, 1);
+        RGB c = PETAL[(v + i) & 3];
+        int top = N - 1 - h;
+        put(p, x, top, rgb_scale(c, 0.8f), 1);
+        if (x > 0) put(p, x - 1, top, c, 1);
+        if (x < N - 1) put(p, x + 1, top, c, 1);
+        put(p, x, top - 1, c, 1);
+        put(p, x, top, (RGB){ 250, 220, 80 }, 1);
+    }
+}
+
+static void spr_hive(u8 *p, u64 seed, RGB comb) {
+    clear(p);
+    for (int y = 0; y < 3; y++) put(p, 8, y, (RGB){ 90, 70, 40 }, 1);
+    for (int y = 3; y < 14; y++) {
+        float dy = (y - 8.5f) / 5.5f;
+        float w = 5.5f * sqrtf(fmaxf(0.0f, 1.0f - dy * dy));
+        for (int x = 0; x < N; x++) {
+            if (fabsf(x + 0.5f - 8.0f) > w) continue;
+            float band_k = (y % 3 == 0) ? 0.7f : 1.0f;
+            put(p, x, y, rgb_scale(comb, band_k * (0.85f + 0.3f * pn(seed, x, y))), 1);
+        }
+    }
+    put(p, 8, 10, (RGB){ 30, 20, 10 }, 1);
+    put(p, 7, 10, (RGB){ 30, 20, 10 }, 1);
+}
+
+static void spr_ash(u8 *p, u64 seed, RGB ash) {
+    clear(p);
+    for (int x = 0; x < N; x++) {
+        float h = 2.0f + 3.0f * tnoise(seed, x, 0, 4);
+        for (int y = 0; y < (int)h; y++) {
+            RGB c = rgb_scale(ash, 0.75f + 0.45f * pn(seed, x, y));
+            if (pn(seed + 3, x, y) > 0.93f) c = (RGB){ 230, 110, 40 }; /* an ember */
+            put(p, x, N - 1 - y, c, 1);
+        }
+    }
+}
+
+static void tex_obsidian(u8 *p, u64 seed, RGB base) {
+    for (int y = 0; y < N; y++)
+        for (int x = 0; x < N; x++) {
+            float n = tnoise(seed, x + y * 0.5f, y, 4);
+            RGB c = rgb_scale(base, band(0.8f + 0.5f * n, 5));
+            if (fabsf(tnoise(seed + 2, x, y, 4) - 0.5f) < 0.04f) c = rgb_scale(base, 2.6f); /* glassy edges */
+            put(p, x, y, c, 1);
+        }
+}
+
 /* Basalt columns: tall narrow stones, joints staggered. */
 static void tex_basalt(u8 *p, u64 seed, RGB base, RGB mortar) {
     for (int x = 0; x < N; x++) {
@@ -593,6 +673,12 @@ void texgen_theme(int theme, u8 *out) {
             }
             case B_BONES: spr_bones(p, seed); break;
             case B_GRASS: spr_grass(p, seed, rgb_scale(rgb(t.mat[B_DIRT]), 1.2f)); break;
+            case B_MOSS: tex_moss(p, seed, rgb(t.mat[B_ROCK]), base, v); break;
+            case B_VINE: spr_vine(p, seed, base); break;
+            case B_FLOWER: spr_flower(p, seed, base, v); break;
+            case B_HIVE: spr_hive(p, seed, base); break;
+            case B_ASH: spr_ash(p, seed, base); break;
+            case B_OBSIDIAN: tex_obsidian(p, seed, base); break;
             default: fill_noise(p, seed, base, 0.2f); break;
             }
         }

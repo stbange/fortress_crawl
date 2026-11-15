@@ -888,6 +888,13 @@ void sim_gas_fire(Game *g, vec3 p, float r); /* fire reaches p: swamp gas there 
 /* An element strikes the world at p: fire lights and melts, frost freezes water, lightning runs
  * through water, poison leaves a cloud. */
 void sim_element_hit(Game *g, vec3 p, int el, int owner, float dmg);
+
+/* bio.c: living things (docs/SIMULATION.md) */
+void bio_update(Game *g, float dt);
+void bio_reset(void);
+void bio_on_death(Game *g, vec3 p, u64 h);   /* bones where something died */
+void bio_hive_broken(Game *g, vec3 p);       /* angry bees */
+int bio_grown(int block);                    /* cells grown since start (demo, tests) */
 bool forge_start(Game *g, PlayerSlot *ps, bool reforge);
 void forge_strike(Game *g, PlayerSlot *ps);
 void forge_bellows(Game *g, PlayerSlot *ps);

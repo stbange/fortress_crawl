@@ -59,7 +59,7 @@ static const char *WORLD_FS =
     "out vec4 frag;\n"
     "const vec3 N[7] = vec3[](vec3(1,0,0), vec3(-1,0,0), vec3(0,1,0), vec3(0,-1,0), vec3(0,0,1), vec3(0,0,-1), vec3(0,1,0));\n"
     "void main() {\n"
-    "  ivec2 tile = ivec2(int(v_tile % 64u), int(v_tile / 64u));\n"
+    "  ivec2 tile = ivec2(int(v_tile % 128u), int(v_tile / 128u));\n"
     "  ivec2 t = ivec2(clamp(floor(v_uv), vec2(0.0), vec2(15.0)));\n"
     "  vec4 tex = texelFetch(u_atlas, tile * 16 + t, 0);\n"
     "  if (tex.a < 0.5) discard;\n"

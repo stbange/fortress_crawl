@@ -42,10 +42,17 @@ enum {
     B_LANTERN,
     B_BONES,
     B_GRASS,
+    /* living things and what the simulation leaves (docs/SIMULATION.md) */
+    B_MOSS,      /* cube: stone grown over with moss */
+    B_VINE,      /* sprite: hangs, grows down, can be climbed */
+    B_FLOWER,    /* sprite: grows where there is light, feeds bees */
+    B_HIVE,      /* sprite: a wild beehive hanging from above */
+    B_ASH,       /* sprite: what fire leaves; things grow well in it */
+    B_OBSIDIAN,  /* cube: lava cooled by water */
     B_COUNT
 };
 
-#define BLOCK_TEX_SLOTS 32 /* texture slots per theme (>= B_COUNT) */
+#define BLOCK_TEX_SLOTS 48 /* texture slots per theme (>= B_COUNT; the atlas holds 32 themes of them) */
 
 enum { RENDER_NONE, RENDER_CUBE, RENDER_LIQUID, RENDER_CROSS };
 

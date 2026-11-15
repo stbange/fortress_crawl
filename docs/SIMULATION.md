@@ -7,9 +7,9 @@ below, water poured on lava leaves rock to walk on. It is built in stages:
 1. **Breakable blocks** ([DESTRUCTION.md](DESTRUCTION.md)): 25 cm pieces, pickaxe, bombs. Built.
 2. **Water**: flowing, swimming, drowning, lava and fire. Built (this page).
 3. **Fire, heat and gases**, and the elements acting on the world. Built (this page).
-4. **Living things** (plants, moss, fungus, insects, decay): planned.
+4. **Living things**: plants, moss, fungus, vines, hives, insects, decay, grazing. Built.
 
-Code: `src/game/sim.c`, `Chunk.fluid` and `chunkmap_edit` in `src/world/chunkmap.c`, the
+Code: `src/game/sim.c` (water, fire, gases, elements), `src/game/bio.c` (living things), `Chunk.fluid` and `chunkmap_edit` in `src/world/chunkmap.c`, the
 surfaces in `src/world/mesher.c`, swimming in `src/game/player.c`, breath in `src/game/game.c`.
 
 ## Only what changed moves
@@ -88,6 +88,51 @@ and lightning stop at water's surface and act on it):
 - **Poison** leaves a cloud.
 - **Bombs** set what burns alight, set off swamp gas around them and leave smoke.
 
+## Living things
+
+Six new blocks: **moss** (stone grown over), **vines**, **flowers**, **beehives**, **ash** and
+**obsidian**. The block atlas grew to 2048 px to hold 48 block types per theme.
+
+Growth looks at random cells around each player (48 per player, 8 times a second, within 16 m
+and 6 m up and down), and each cell grows by what it needs:
+
+| Grows | Needs | Spreads |
+|-------|-------|---------|
+| grass | earth below (or ash), light 6 or more (ash: 4) | from grass beside it; ash is taken over first |
+| flowers | grass in bright light (9 or more), few flowers beside it | on grass |
+| moss | bare rock, damp (water within 2 to 3 cells), shade (light 8 or less) | from moss beside it |
+| fungus | the dark (light 4 or less), stone, earth or ash below | from fungus or bones beside it; bones turn to fungus |
+| vines | a mossy ceiling, or a ceiling over damp ground, some light | grow down, up to six long |
+| beehives | a ceiling, three or more flowers below, no hive within five cells | rare |
+
+- **Fire** leaves ash where it burned on something (half the time); grass takes ash over first.
+  Vines, flowers and hives burn.
+- **Lava** cooled by water turns to obsidian (black glass, masonry-hard).
+- **The dead:** a monster that dies leaves bones a third of the time, where it fell. Flies find
+  them; fungus eats them in time.
+- **Grazing:** goats, rams and hares crop the grass and flowers they stand in.
+- **Harvest:** flowers and vines give herbs, the first pickaxe blow on moss scrapes it off as
+  moss for the pot, and a hive gives honey (sometimes royal jelly). Breaking a hive sets its
+  bees on you: they follow and sting until you dive into water, stand in smoke or outrun them.
+- **Climbing:** a vine can be climbed: jump climbs, crouch slides down, otherwise you hold on.
+- **Insects** are swarms of motes near what draws them, looked for among cells near you: flies
+  over bones and ash, bees at flowers and hives, moths at torches and lanterns, glowworms
+  under dark moss.
+- Growth is a lasting change like any other (saved; it grows back after you cut it, slowly).
+  Nothing grows in protected places (the Sanctum has its own garden, vaults, stairwells, the
+  outside).
+
+Growth is slow on purpose: a patch of grass by a torch spreads about a metre a minute. With
+`--demo grow` it runs 300 times as fast over a small garden (a bed of earth with two tufts of
+grass, a channel of water along a rock wall under an overhang, bones and two torches): in ten
+seconds, about twenty minutes of growth, 48 grass, 17 flowers, 38 moss, 28 vines and 2 hives.
+
+## Cost
+
+The whole simulation (water, fire, gases, growth, insects) costs 0.003 ms a frame on average
+and 0.12 ms at most in a four-minute explorer run on the desktop build; what it changes costs
+the remeshing of the chunks it touches, as any other edit.
+
 ## Tests and tools
 
 - `--demo flood`: a block of water let loose in the vestibule; the log follows its cells,
@@ -97,11 +142,14 @@ and lightning stop at water's surface and act on it):
 - `--demo burn`: a wooden wall with grass in front, set alight; the log counts wood, fire and
   smoke. `--cast 1` hangs a cloud of swamp gas beside it, which explodes when the fire reaches
   it ("swamp gas explodes at ...").
+- `--demo grow` (`--cast n`: n growth ticks a frame, default 40): the garden above; the log
+  counts what grew.
 
 ## Not done yet
 
 - Lava does not flow; it stays as generated.
 - Monsters and critters do not swim or drown, and bots do not yet avoid deep water.
 - Water does not seep through the gaps in broken blocks.
-- Burnt wood leaves nothing behind (ash comes with part 4). Gases are not saved.
+- Gases and swarms are not saved.
+- Plants do not die back in the dark or for want of water; nothing withers.
 - Smoke does not hide anything yet, and monsters do not avoid fire or clouds.

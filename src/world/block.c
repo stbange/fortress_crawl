@@ -30,6 +30,12 @@ const BlockDef BLOCKS[B_COUNT] = {
     [B_LANTERN] = { "lantern", RENDER_CROSS, false, false, true, 13, LIGHT_TORCH, true },
     [B_BONES]   = { "bones", RENDER_CROSS, false, false, false, 0, 0, false },
     [B_GRASS]   = { "grass", RENDER_CROSS, false, false, false, 0, 0, false },
+    [B_MOSS]    = { "moss", RENDER_CUBE, true, true, false, 0, 0, false },
+    [B_VINE]    = { "vine", RENDER_CROSS, false, false, false, 0, 0, false },
+    [B_FLOWER]  = { "flower", RENDER_CROSS, false, false, false, 0, 0, false },
+    [B_HIVE]    = { "hive", RENDER_CROSS, false, false, false, 0, 0, false },
+    [B_ASH]     = { "ash", RENDER_CROSS, false, false, false, 0, 0, false },
+    [B_OBSIDIAN] = { "obsidian", RENDER_CUBE, true, true, false, 0, 0, false },
 };
 
 const u8 BLOCK_HARDNESS[B_COUNT] = {
@@ -40,5 +46,6 @@ const u8 BLOCK_HARDNESS[B_COUNT] = {
     [B_ROOF] = HARD_MASONRY,   [B_ORE] = HARD_ROCK,      [B_SHRINE] = HARD_NEVER,  [B_TORCH] = HARD_SOFT,
     [B_FIRE] = HARD_NEVER,     [B_WEB] = HARD_SOFT,      [B_CHAIN] = HARD_METAL,   [B_BARS] = HARD_METAL,
     [B_ROOTS] = HARD_SOFT,     [B_FUNGUS] = HARD_SOFT,   [B_LANTERN] = HARD_SOFT,  [B_BONES] = HARD_SOFT,
-    [B_GRASS] = HARD_SOFT,
+    [B_GRASS] = HARD_SOFT,     [B_MOSS] = HARD_ROCK,     [B_VINE] = HARD_SOFT,     [B_FLOWER] = HARD_SOFT,
+    [B_HIVE] = HARD_SOFT,      [B_ASH] = HARD_SOFT,      [B_OBSIDIAN] = HARD_MASONRY,
 };

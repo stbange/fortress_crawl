@@ -64,6 +64,7 @@ static void sim_on_edit(int x, int y, int z) {
 void sim_init(Game *g) {
     g_sim = g;
     sim_reset();
+    bio_reset();
     g->map.on_edit = sim_on_edit;
 }
 
@@ -83,14 +84,14 @@ float sim_water_depth(Game *g, vec3 p) {
     return top > p.y ? top - p.y : 0.0f;
 }
 
-/* What water can flow into: 1 empty (or a flame it puts out), 2 water, 3 lava, 0 nothing. */
+/* What water can flow into: 1 empty (or a flame it puts out, or ash it washes away), 2 water, 3 lava, 0 nothing. */
 static int kind_of(Game *g, int x, int y, int z, Block *out) {
     bool known;
     Block raw = chunkmap_block_raw(&g->map, x, y, z, &known);
     *out = raw;
     if (!known || (raw & BLOCK_CARVED)) return 0;
     switch (raw) {
-    case B_AIR: case B_FIRE: case B_TORCH: return 1;
+    case B_AIR: case B_FIRE: case B_TORCH: case B_ASH: return 1;
     case B_WATER: return 2;
     case B_LAVA: return 3;
     default: return 0;
@@ -115,7 +116,7 @@ static bool flow(Game *g, int x, int y, int z, int *l, int tx, int ty, int tz, i
     if (tk == 3) {
         /* water on lava: the lava cools to rock, the water boils off */
         if (dig_protected(g, tx, ty, tz)) return false;
-        chunkmap_edit(&g->map, tx, ty, tz, B_ROCK, 0, 0);
+        chunkmap_edit(&g->map, tx, ty, tz, B_OBSIDIAN, 0, 0);
         *l = MAXI(0, *l - 3);
         set_water(g, x, y, z, *l);
         hiss(g, tx, ty, tz, true);
@@ -268,7 +269,7 @@ static void gas_draw_particles(Game *g, float dt) {
 
 /* ---------- fire ---------- */
 
-static bool flammable(Block b) { return b == B_WOOD || b == B_WEB || b == B_GRASS || b == B_ROOTS; }
+static bool flammable(Block b) { return b == B_WOOD || b == B_WEB || b == B_GRASS || b == B_ROOTS || b == B_VINE || b == B_FLOWER || b == B_HIVE; }
 
 /* Sets (x, y, z) alight if it burns: what is there becomes fire with fuel by what it was. */
 static bool ignite(Game *g, int x, int y, int z) {
@@ -277,7 +278,7 @@ static bool ignite(Game *g, int x, int y, int z) {
     if (!known || (raw & BLOCK_CARVED) || dig_protected(g, x, y, z)) return false;
     int fuel = 0;
     if (raw == B_WOOD) fuel = 8;
-    else if (raw == B_WEB || raw == B_GRASS || raw == B_ROOTS) fuel = 2;
+    else if (raw == B_WEB || raw == B_GRASS || raw == B_ROOTS || raw == B_VINE || raw == B_FLOWER || raw == B_HIVE) fuel = 2;
     else if (raw == B_AIR) {
         /* air beside something that burns catches from it */
         for (int k = 0; k < 6 && !fuel; k++) {
@@ -310,7 +311,13 @@ static void fire_step(Game *g, Cell c, int fuel) {
     if ((h >> 50 & 15) == 0) sim_gas(g, GAS_SMOKE, v3(c.x + 0.5f, c.y + 1.2f, c.z + 0.5f), 0.25f);
     if ((h >> 56 & 7) == 0) {
         fuel--;
-        if (!chunkmap_edit(&g->map, c.x, c.y, c.z, fuel > 0 ? B_FIRE : B_AIR, 0, fuel)) { push(c.x, c.y, c.z); return; }
+        /* burnt out: ash where it lay on something, nothing where it hung */
+        Block out = fuel > 0 ? B_FIRE : B_AIR;
+        if (fuel <= 0 && (h >> 60 & 1) == 0) {
+            bool known;
+            if (block_solid(chunkmap_block(&g->map, c.x, c.y - 1, c.z, &known))) out = B_ASH;
+        }
+        if (!chunkmap_edit(&g->map, c.x, c.y, c.z, out, 0, fuel)) { push(c.x, c.y, c.z); return; }
         if (fuel <= 0) return;
     }
     push(c.x, c.y, c.z); /* still burning */

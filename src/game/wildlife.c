@@ -356,6 +356,15 @@ void wildlife_update(Game *g, float dt) {
             }
             continue;
         }
+        /* grazers crop the grass and flowers they stand in */
+        if ((c->kind == CR_GOAT || c->kind == CR_RAM || c->kind == CR_HARE) && c->on_ground && c->state != CS_FLEE &&
+            frand(&g_wrng) < 0.08f * dt) {
+            int gx = (int)floorf(c->pos.x), gy = (int)floorf(c->pos.y + 0.1f), gz = (int)floorf(c->pos.z);
+            bool known;
+            Block b = chunkmap_block(&g->map, gx, gy, gz, &known);
+            if ((b == B_GRASS || b == B_FLOWER) && !dig_protected(g, gx, gy, gz) && chunkmap_edit(&g->map, gx, gy, gz, B_AIR, 0, 0))
+                particles_burst(g, v3(gx + 0.5f, gy + 0.3f, gz + 0.5f), v3(0.35f, 0.5f, 0.25f), 3, 1.0f, 0.03f, false);
+        }
         if (c->kind == CR_HEN || c->kind == CR_QUAIL) {
             if (c->ready_t <= 0 && c->state != CS_FLEE && c->on_ground) {
                 lay_egg(g, c);

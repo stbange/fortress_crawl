@@ -43,6 +43,11 @@ static vec3 mat_color(Block b) {
     case B_GRASS: case B_ROOTS: return v3(0.35f, 0.5f, 0.25f);
     case B_FUNGUS: return v3(0.5f, 0.75f, 0.6f);
     case B_WEB: case B_BONES: return v3(0.85f, 0.83f, 0.78f);
+    case B_MOSS: case B_VINE: return v3(0.3f, 0.5f, 0.22f);
+    case B_FLOWER: return v3(0.85f, 0.5f, 0.6f);
+    case B_HIVE: return v3(0.8f, 0.62f, 0.3f);
+    case B_ASH: return v3(0.4f, 0.39f, 0.37f);
+    case B_OBSIDIAN: return v3(0.15f, 0.1f, 0.2f);
     default: return v3(0.5f, 0.48f, 0.45f);
     }
 }
@@ -60,6 +65,17 @@ static void drop_for(Game *g, PlayerSlot *ps, Block b, int x, int y, int z, u64 
         break;
     case B_GRASS:
         if ((h & 3) == 0) pickup_spawn(g, PK_FOOD, at, FD_HERB, NULL, 0, 0);
+        break;
+    case B_FLOWER:
+        if ((h & 1) == 0) pickup_spawn(g, PK_FOOD, at, FD_HERB, NULL, 0, 0);
+        break;
+    case B_VINE:
+        if ((h & 3) == 0) pickup_spawn(g, PK_FOOD, at, FD_HERB, NULL, 0, 0);
+        break;
+    case B_HIVE:
+        pickup_spawn(g, PK_FOOD, at, FD_HONEY, NULL, 0, 0);
+        if (h % 6 == 0) pickup_spawn(g, PK_FOOD, at, FD_ROYAL_JELLY, NULL, 0, 0);
+        bio_hive_broken(g, at);
         break;
     case B_ROOTS:
         if ((h & 7) == 0) pickup_spawn(g, PK_FOOD, at, FD_TUBER, NULL, 0, 0);
@@ -92,6 +108,13 @@ static int break_cell(Game *g, PlayerSlot *ps, int x, int y, int z, vec3 p, floa
         if (!chunkmap_edit(&g->map, x, y, z, B_AIR, 0, 0)) return 0;
         particles_burst(g, v3(x + 0.5f, y + 0.4f, z + 0.5f), mat_color(b), 5, 1.5f, 0.04f, false);
         drop_for(g, ps, b, x, y, z, mix64(((u64)(u32)x << 32) ^ (u64)(u32)z ^ (u64)(u32)y * 0x9E37));
+        return 1;
+    }
+    if (raw == B_MOSS && v3_len(v3_sub(v3(x + 0.5f, y + 0.5f, z + 0.5f), p)) < r + 0.8f) {
+        /* the first blow scrapes the moss off the stone */
+        if (!chunkmap_edit(&g->map, x, y, z, B_ROCK, 0, 0)) return 0;
+        particles_burst(g, v3(x + 0.5f, y + 0.5f, z + 0.5f), mat_color(b), 8, 1.5f, 0.05f, false);
+        pickup_spawn(g, PK_FOOD, v3(x + 0.5f, y + 1.1f, z + 0.5f), FD_MOSS, NULL, 0, 0);
         return 1;
     }
     u64 mask = (raw & BLOCK_CARVED) ? chunkmap_mask(&g->map, x, y, z) : CARVE_FULL, keep = mask;

@@ -356,6 +356,12 @@ void theme_info(int theme, ThemeInfo *t) {
     t->mat[B_ICE] = (Col){ 150, 200, 235 };
     t->mat[B_BRAZIER] = col_transform(f->metal, s);
     t->mat[B_GLASS] = f->glass;
+    t->mat[B_MOSS] = col_lerp(t->mat[B_ROCK], (Col){ 70, 120, 50 }, 0.55f);
+    t->mat[B_VINE] = col_lerp((Col){ 60, 120, 45 }, t->mat[B_DIRT], 0.2f);
+    t->mat[B_FLOWER] = (Col){ 70, 130, 55 };
+    t->mat[B_HIVE] = (Col){ 190, 145, 70 };
+    t->mat[B_ASH] = (Col){ 95, 92, 88 };
+    t->mat[B_OBSIDIAN] = (Col){ 34, 24, 44 };
     t->mortar = col_transform(f->mortar, s);
     t->glass = f->glass;
     t->roof = col_transform(f->roof, s);

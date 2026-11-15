@@ -707,7 +707,7 @@ static void demo_setup(Game *g) {
                 p1->thread.n, p1->thread.reached, (SDL_GetTicksNS() - t0) / 1e6, t.name, t.cx, t.cy, t.cz, p1->banner);
         return;
     }
-    if (!strcmp(g_demo_kind, "dig") || !strcmp(g_demo_kind, "blast") || !strcmp(g_demo_kind, "flood") || !strcmp(g_demo_kind, "burn")) {
+    if (!strcmp(g_demo_kind, "dig") || !strcmp(g_demo_kind, "blast") || !strcmp(g_demo_kind, "flood") || !strcmp(g_demo_kind, "burn") || !strcmp(g_demo_kind, "grow")) {
         /* the pickaxe out at a wall (docs/DESTRUCTION.md); the swings and the bomb come in
          * screenshot_step */
         for (int i = 0; i < MAX_MONSTERS; i++) g->mons[i].alive = false;
@@ -1178,6 +1178,41 @@ static void screenshot_step(App *a, float frame_dt) {
     if (g->opt.demo && a->demo_done && !strcmp(kind, "blast")) {
         static bool thrown;
         if (!thrown && a->shot_wait > 0.6f) { thrown = true; bomb_throw(g, p1); }
+    }
+    if (g->opt.demo && a->demo_done && !strcmp(kind, "grow")) {
+        /* a bed of earth with a little grass, a pool, a rock wall, bones and a torch, then
+         * growth sped up (docs/SIMULATION.md): --cast n runs n ticks a frame (default 40) */
+        static int stage;
+        static float logged;
+        vec3 f = v3(cosf(p1->pl.yaw), 0, sinf(p1->pl.yaw));
+        int bx = (int)floorf(p1->pl.pos.x + f.x * 7), by = (int)floorf(p1->pl.pos.y), bz = (int)floorf(p1->pl.pos.z + f.z * 7);
+        if (stage == 0 && a->shot_wait > 0.4f) {
+            int n = 0;
+            for (int z = -4; z <= 4; z++)
+                for (int x = -3; x <= 3; x++) {
+                    n += chunkmap_edit(&g->map, bx + x, by - 1, bz + z, B_DIRT, 0, 0);
+                    if (x == 3) chunkmap_edit(&g->map, bx + x, by - 1, bz + z, B_WATER, 0, 8); /* a channel along the wall */
+                }
+            for (int z = -4; z <= 4; z++)
+                for (int y = 0; y < 4; y++) chunkmap_edit(&g->map, bx + 4, by + y, bz + z, B_ROCK, 0, 0);
+            for (int z = -4; z <= 4; z++)
+                for (int x = 2; x <= 3; x++) chunkmap_edit(&g->map, bx + x, by + 3, bz + z, B_ROCK, 0, 0); /* an overhang */
+            chunkmap_edit(&g->map, bx - 2, by, bz - 3, B_GRASS, 0, 0);
+            chunkmap_edit(&g->map, bx + 2, by, bz + 3, B_GRASS, 0, 0);
+            chunkmap_edit(&g->map, bx + 3, by, bz - 3, B_BONES, 0, 0);
+            chunkmap_edit(&g->map, bx - 3, by, bz + 4, B_TORCH, 0, 0);
+            chunkmap_edit(&g->map, bx + 2, by, bz - 1, B_TORCH, 0, 0);
+            if (n > 40) { stage = 1; SDL_Log("grow: a garden at %d %d %d", bx, by, bz); }
+        }
+        if (stage == 1) {
+            int ticks = g_demo_cast > 0 ? g_demo_cast : 40;
+            for (int k = 0; k < ticks; k++) bio_update(g, 0.125f);
+        }
+        if (stage && a->shot_wait > logged + 2.0f) {
+            logged = a->shot_wait;
+            SDL_Log("grow: t %.0f  grass %d flower %d moss %d fungus %d vine %d hive %d", a->shot_wait, bio_grown(B_GRASS),
+                    bio_grown(B_FLOWER), bio_grown(B_MOSS), bio_grown(B_FUNGUS), bio_grown(B_VINE), bio_grown(B_HIVE));
+        }
     }
     if (g->opt.demo && a->demo_done && !strcmp(kind, "burn")) {
         /* a wooden wall with grass in front, set alight (docs/SIMULATION.md); --cast 1: a cloud

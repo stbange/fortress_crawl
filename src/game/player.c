@@ -90,6 +90,12 @@ void player_update(Player *p, const PlayerInput *in, float dt, SolidFn solid, vo
         /* levitate: no weight; jump rises, crouch sinks */
         float vy = in->jump ? 3.5f : in->crouch ? -3.5f : 0.0f;
         p->vel.y += (vy - p->vel.y) * fminf(1.0f, 5.0f * dt);
+    } else if (p->on_vine && !p->on_ground) {
+        /* hanging on a vine: jump climbs, crouch slides down, else you hold on */
+        float vy = in->jump ? 3.2f : in->crouch ? -3.0f : 0.0f;
+        p->vel.y += (vy - p->vel.y) * fminf(1.0f, 8.0f * dt);
+    } else if (p->on_vine && in->jump) {
+        p->vel.y = 3.2f; /* from the ground up onto the vine */
     } else if (swim) {
         /* buoyant: float with the eyes at the surface; jump swims up, crouch dives */
         float vy = in->jump ? 3.2f : in->crouch ? -3.0f : p->water > 1.5f ? 0.9f : p->water < 1.3f ? -0.6f : 0.0f;
