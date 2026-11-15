@@ -21,6 +21,7 @@ typedef struct HeatChunk {
     int cx, cy, cz;
     float base;
     float t[HCV], src[HCV];
+    float cond[HCV];          /* how readily it passes heat on: air quickly, stone slowly, metal fastest */
     float seen;               /* game time it was last within reach */
     bool dirty;               /* something in it changed: look at its sources again */
 } HeatChunk;
@@ -67,11 +68,17 @@ static float source_of(Block b, int level) {
 /* Finds what heats or cools each cell of a chunk (the strongest source among its 8 blocks). */
 static void scan(Game *g, HeatChunk *h) {
     Chunk *c = chunkmap_get(&g->map, h->cx, h->cy, h->cz);
-    for (int i = 0; i < HCV; i++) h->src[i] = NO_SRC;
-    if (!c || c->state != CH_READY) return;
+    for (int i = 0; i < HCV; i++) { h->src[i] = NO_SRC; h->cond[i] = 0; }
+    if (!c || c->state != CH_READY) { for (int i = 0; i < HCV; i++) h->cond[i] = 0.22f; return; }
     h->base = heat_base_theme(c->info.theme);
     for (int i = 0; i < CHUNK_VOL; i++) {
         Block b = c->blocks[i] & BLOCK_MAT;
+        {
+            /* conduction: each of the 8 blocks of the cell adds its share (table of materials) */
+            int x = i % CHUNK, z = (i / CHUNK) % CHUNK, y = i / (CHUNK * CHUNK);
+            float k = !BLOCKS[b].solid ? 0.22f : SUBSTANCES[b].lightning ? 0.35f : b == B_WOOD || b == B_DIRT ? 0.05f : 0.09f;
+            h->cond[hidx(x / 2, y / 2, z / 2)] += k / 8.0f;
+        }
         float s = source_of(b, c->fluid ? c->fluid[i] : 0);
         if (s == NO_SRC) continue;
         int x = i % CHUNK, z = (i / CHUNK) % CHUNK, y = i / (CHUNK * CHUNK);
@@ -154,7 +161,7 @@ static void diffuse(HeatChunk *h) {
                     else sum += h->base;
                 }
                 float t = h->t[i];
-                t += 0.22f * (sum / 6.0f - t) + 0.015f * (h->base - t);
+                t += h->cond[i] * (sum / 6.0f - t) + 0.015f * (h->base - t);
                 if (h->src[i] != NO_SRC) t += 0.35f * (h->src[i] - t);
                 nt[i] = t;
             }

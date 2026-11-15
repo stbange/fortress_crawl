@@ -256,16 +256,27 @@ void wildlife_despawn_far(Game *g) {
 
 static bool water_at(Game *g, vec3 p) { return block_at(g, (int)floorf(p.x), (int)floorf(p.y), (int)floorf(p.z), B_WATER); }
 
+static void die(Game *g, Critter *c, int owner);
+
 static void move_ground(Game *g, Critter *c, vec3 want, float dt) {
-    c->vel.x = want.x;
-    c->vel.z = want.z;
-    if (!c->on_ground) c->vel.y -= 18.0f * dt;
+    /* in deep water it swims, slower, its head held out; held under too long it drowns
+     * (crabs and salamanders are at home where they are) */
+    const CritterDef *d = &DEFS[c->kind];
+    float depth = sim_water_depth(g, c->pos);
+    bool swim = depth > d->h * 0.6f && c->kind != CR_CRAB;
+    c->vel.x = want.x * (swim ? 0.5f : 1.0f);
+    c->vel.z = want.z * (swim ? 0.5f : 1.0f);
+    if (swim) c->vel.y += ((depth > d->h * 0.85f ? 1.2f : -0.3f) - c->vel.y) * fminf(1.0f, 4.0f * dt);
+    else if (!c->on_ground) c->vel.y -= 18.0f * dt;
     else if (c->vel.y < 0) c->vel.y = 0;
+    if (depth > d->h + 0.05f && c->kind != CR_CRAB && c->kind != CR_SALAMANDER) {
+        if ((c->air_used += dt) > 8.0f) { die(g, c, -1); return; }
+    } else c->air_used = 0;
     vec3 n = v3_add(c->pos, v3_scale(c->vel, dt));
     int fx = (int)floorf(n.x), fz = (int)floorf(n.z), fy = (int)floorf(c->pos.y + 0.05f);
     if (game_solid(g, fx, fy, fz)) {
         /* a step up, if there is room */
-        if (c->on_ground && !game_solid(g, fx, fy + 1, fz) && !game_solid(g, fx, fy + 2, fz)) n.y = (float)(fy + 1);
+        if ((c->on_ground || swim) && !game_solid(g, fx, fy + 1, fz) && !game_solid(g, fx, fy + 2, fz)) n.y = (float)(fy + 1);
         else { n.x = c->pos.x; n.z = c->pos.z; c->timer = 0; }
     }
     /* no running into lava or off into deep water (except fish, handled elsewhere) */

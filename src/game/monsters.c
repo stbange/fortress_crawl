@@ -781,6 +781,18 @@ static void monster_physics(Game *g, Monster *m, vec3 want, float dt) {
         if (falling) m->on_ground = true;
         m->vel.y = 0;
     }
+    /* the big ones break through what stands between them and you (docs/SIMULATION.md):
+     * brutes and trolls through rock, golems through masonry too */
+    if (m->dig_t > 0) m->dig_t -= dt;
+    if (blocked && m->awake && m->state == MS_CHASE && m->dig_t <= 0 && (m->type == MON_BRUTE || m->type == MON_TROLL || m->type == MON_GOLEM)) {
+        float wl = sqrtf(want.x * want.x + want.z * want.z);
+        if (wl > 0.1f) {
+            vec3 at = v3_add(m->pos, v3(want.x / wl * (hw + 0.6f), h * 0.5f, want.z / wl * (hw + 0.6f)));
+            int n = world_break_sphere(g, NULL, at, 0.55f + 0.25f * m->scale, m->type == MON_GOLEM ? HARD_MASONRY : HARD_ROCK);
+            if (n) { sfx_at(g, SFX_HIT_WALL, at, 1.0f); m->dig_t = 0.9f; }
+            else m->dig_t = 2.0f;
+        }
+    }
     if (blocked && m->state == MS_CHARGE) {
         sfx_at(g, SFX_MONSTER_STUN, m->pos, 1.0f);
         m->state = MS_STUN;

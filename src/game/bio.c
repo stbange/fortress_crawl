@@ -326,6 +326,23 @@ static void swarms_update(Game *g, float dt) {
     }
 }
 
+/* Saving the swarms: 5 floats each (x, y, z, life, kind). */
+int bio_swarm_list(float *out, int max) {
+    int n = 0;
+    for (int i = 0; i < MAX_SWARMS && n < max; i++) {
+        if (!swarms[i].alive) continue;
+        float *o = out + n++ * 5;
+        o[0] = swarms[i].pos.x; o[1] = swarms[i].pos.y; o[2] = swarms[i].pos.z; o[3] = swarms[i].life; o[4] = swarms[i].kind;
+    }
+    return n;
+}
+
+void bio_swarm_restore(const float *in) {
+    int k = (int)in[4];
+    if (k < SW_FLIES || k > SW_ANGRY || !(in[3] > 0.0f)) return;
+    swarm_add(k, v3(in[0], in[1], in[2]), fminf(in[3], 60.0f));
+}
+
 /* A hive broken open: honey, and the bees. */
 void bio_hive_broken(Game *g, vec3 p) {
     swarm_add(SW_ANGRY, p, 14.0f);

@@ -123,7 +123,7 @@ void touch_event(Game *g, const SDL_Event *e) {
             if (role == TB_WEAPON) game_cycle_weapon(ps, 1);
             else if (role == TB_SKILLS) { ps->show_skills = true; ps->show_map = false; role = TOUCH_NONE; }
             else if (role == TB_MAP) { ps->show_map = true; ps->show_skills = false; role = TOUCH_NONE; }
-            else if (role == TB_NEXT_SPELL) spell_next(ps, 1);
+            else if (role == TB_NEXT_SPELL) { if (ps->pick_out) throw_cycle(ps); else spell_next(ps, 1); } /* (the pickaxe out: what to throw) */
             else if (role == TB_POTION) { drink_potion(g, ps, ps->st.hp >= ps->st.maxhp * 0.9f); role = TOUCH_NONE; }
             else if (role == TB_THREAD) { game_thread_key(g, ps); role = TOUCH_NONE; }
             if (role == TOUCH_NONE && !ps->show_skills && !ps->show_map) {

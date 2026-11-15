@@ -691,8 +691,9 @@ static void read_pad(Game *g, PlayerSlot *ps, PlayerInput *in, float dt) {
         return;
     }
     if (PRESSED(SDL_GAMEPAD_BUTTON_NORTH)) { ps->show_skills = true; ps->show_map = false; }
-    if (PRESSED(SDL_GAMEPAD_BUTTON_DPAD_RIGHT)) spell_next(ps, 1);
-    if (PRESSED(SDL_GAMEPAD_BUTTON_DPAD_LEFT)) spell_next(ps, -1);
+    /* with the pickaxe out the d-pad chooses what to throw, else the spell */
+    if (PRESSED(SDL_GAMEPAD_BUTTON_DPAD_RIGHT)) { if (ps->pick_out) throw_cycle(ps); else spell_next(ps, 1); }
+    if (PRESSED(SDL_GAMEPAD_BUTTON_DPAD_LEFT)) { if (ps->pick_out) throw_cycle(ps); else spell_next(ps, -1); }
     if (PRESSED(SDL_GAMEPAD_BUTTON_DPAD_UP)) drink_potion(g, ps, false);
     if (PRESSED(SDL_GAMEPAD_BUTTON_DPAD_DOWN)) drink_potion(g, ps, true);
     ps->pad_spell = HELD(SDL_GAMEPAD_BUTTON_WEST) != 0;

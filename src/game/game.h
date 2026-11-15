@@ -91,6 +91,7 @@ typedef struct Monster {
     float close_t;   /* brute: how long you have stood within its reach */
     float air_used;  /* seconds under water (docs/SIMULATION.md): past MON_BREATH it drowns */
     float wet;       /* 0..1 soaked (fire hurts half, lightning twice, frost freezes it)*/
+    float dig_t;     /* the big ones break through what blocks them: time to the next blow */
     i16 charmer;     /* player slot it fights for */
     u8 alt_kind;     /* this tick's target: 0 a player, 1 a decoy or lure, 2 a monster, 3 follows its charmer */
     i16 alt_idx;     /* that decoy (effect) or monster */
@@ -492,6 +493,7 @@ typedef struct Critter {
     float calm_t;   /* a hive: smoked (fire) */
     float angry_t;  /* a hive: its bees sting */
     float sound_t;
+    float air_used;  /* seconds with its head under water (docs/SIMULATION.md) */
     u64 key, chunk_key;
 } Critter;
 #define MAX_CRITTERS 128
@@ -937,6 +939,8 @@ void bio_on_death(Game *g, vec3 p, u64 h);   /* bones where something died */
 void bio_hive_broken(Game *g, vec3 p);       /* angry bees */
 int bio_grown(int block);                    /* cells grown since start (demo, tests) */
 int bio_withered(void);
+int bio_swarm_list(float *out, int max);
+void bio_swarm_restore(const float *in);
 void bio_catch_up_begin(Game *g, int cx, int cy, int cz, float dt);
 bool bio_catch_up_run(Game *g, int budget);
 bool sim_catch_up_fires(Game *g, int cx, int cy, int cz, float dt);

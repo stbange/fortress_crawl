@@ -381,6 +381,13 @@ void mesh_build(const MeshInput *in, MeshScratch *s, MeshOutput *out) {
                 u16 tile = (u16)(in->tile_base + b * TEX_VARIANTS + (int)(h % TEX_VARIANTS));
                 if (raw & BLOCK_CARVED) {
                     emit_pieces(&solid, in, s, x, y, z, b, tile, (0.93f + 0.1f * hash_unit(h >> 3)) * stain_tint(in, s, px, py, pz));
+                    /* water held in among its pieces: its surface */
+                    const u8 *fl = in->fluid[13];
+                    int wl = fl ? fl[cidx(x, y, z)] : 0;
+                    if (wl > 0 && !block_opaque(s->blocks[pidx(px, py + 1, pz)])) {
+                        u16 wt = (u16)(in->tile_base + B_WATER * TEX_VARIANTS + (int)(h % TEX_VARIANTS));
+                        emit_face(&solid, s, x, y, z, 2, B_WATER, wt, 1.0f, MAXI(1, MINI(7, 8 - wl)), 0);
+                    }
                     continue;
                 }
                 if (bd->render == RENDER_CROSS) {

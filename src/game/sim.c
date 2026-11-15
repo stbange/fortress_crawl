@@ -125,7 +125,12 @@ static int kind_of(Game *g, int x, int y, int z, Block *out) {
     bool known;
     Block raw = chunkmap_block_raw(&g->map, x, y, z, &known);
     *out = raw;
-    if (!known || (raw & BLOCK_CARVED)) return 0;
+    if (!known) return 0;
+    if (raw & BLOCK_CARVED) {
+        /* a broken block open enough (of a porous material) holds water in its gaps */
+        if (!SUBSTANCES[raw & BLOCK_MAT].porous || __builtin_popcountll(~chunkmap_mask(&g->map, x, y, z)) < 8) return 0;
+        return 2;
+    }
     switch (raw) {
     case B_AIR: case B_FIRE: case B_TORCH: case B_ASH: return 1;
     case B_WATER: return 2;
@@ -161,6 +166,15 @@ int sim_flow_near(Game *g, vec3 p, float r) {
 }
 
 static bool set_water(Game *g, int x, int y, int z, int level) {
+    {
+        /* water in among a broken block's pieces: the block stays, the level changes */
+        bool known;
+        Block raw = chunkmap_block_raw(&g->map, x, y, z, &known);
+        if (known && (raw & BLOCK_CARVED)) {
+            if (level > 0) { flow_pos[flow_next] = v3(x + 0.5f, y + 0.5f, z + 0.5f); flow_t[flow_next] = g->time; flow_next = (flow_next + 1) % FLOWS; }
+            return chunkmap_edit(&g->map, x, y, z, raw, chunkmap_mask(&g->map, x, y, z), CLAMPI(level, 0, 8));
+        }
+    }
     if (level <= 0) {
         /* where water drains away the stone under it stays wet for a while */
         bool known;

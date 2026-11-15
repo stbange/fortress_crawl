@@ -271,7 +271,8 @@ static int break_cell(Game *g, PlayerSlot *ps, int x, int y, int z, vec3 p, floa
     /* a few pieces left are no block any more: they crumble */
     if (__builtin_popcountll(keep) <= 6) keep = 0;
     bool bore = __builtin_popcountll(mask) >= 32; /* (bearing load: half its pieces or more) */
-    if (!chunkmap_edit(&g->map, x, y, z, keep ? (Block)(b | BLOCK_CARVED) : B_AIR, keep, 0)) return 0;
+    int wl = (raw & BLOCK_CARVED) ? chunkmap_fluid(&g->map, x, y, z) : 0; /* water held in its gaps stays */
+    if (!chunkmap_edit(&g->map, x, y, z, keep ? (Block)(b | BLOCK_CARVED) : (wl ? B_WATER : B_AIR), keep, wl)) return 0;
     if (bore && __builtin_popcountll(keep) < 32) collapse_note(x, y, z, b);
     vec3 at = v3_add(p, v3((x + 0.5f - p.x) * 0.3f, (y + 0.5f - p.y) * 0.3f, (z + 0.5f - p.z) * 0.3f));
     particles_burst(g, at, mat_color(b), MINI(4 + removed, 14), 2.5f, 0.05f, false);
@@ -561,5 +562,5 @@ void dig_update(Game *g, PlayerSlot *ps, bool attack, bool alt) {
     Stats *s = &ps->st;
     if (ps->bomb_cd > 0) ps->bomb_cd -= 1.0f / 60.0f;
     if (attack && s->cooldown <= 0) dig_swing(g, ps);
-    else if (alt) bomb_throw(g, ps);
+    else if (alt) throw_selected(g, ps); /* (what C, the d-pad or the > button chose with the pickaxe out) */
 }

@@ -429,6 +429,7 @@ int chunkmap_fluid(ChunkMap *m, int wx, int wy, int wz) {
     Chunk *c = chunkmap_get(m, floordiv(wx, CHUNK), floordiv(wy, CHUNK), floordiv(wz, CHUNK));
     if (!c || c->state != CH_READY) return 0;
     int i = cidx(floormod(wx, CHUNK), floormod(wy, CHUNK), floormod(wz, CHUNK));
+    if (c->blocks[i] & BLOCK_CARVED) return c->fluid ? c->fluid[i] : 0; /* water in among a broken block's pieces */
     if (c->blocks[i] != B_WATER) return 0;
     int l = c->fluid ? c->fluid[i] : 0;
     return l ? l : 8;
