@@ -451,6 +451,14 @@ In `--demo flood --cast 5` a crawler and a golem are shut in a lidded shaft of w
 crawler floats up against the lid, runs out of air after 12 seconds and drowns at 24; the golem
 sinks, walks the bottom and is unharmed (it does not breathe).
 
+After the living world (time away, temperature, materials, sound and sight, collapse, food
+chain), the same four worlds for 12 minutes each: no crashes and no deaths. Areas the bots came
+back to caught up 45 times (24 for the quester, who doubles back most); one collapse in all (a
+bot's blast), so ordinary fighting does not bring the fortress down; the bots dug 21 times when
+stuck. Between 109 and 440 cells of each world changed. The regions' numbers in the log look
+like the places: a grassy cave by Ulwall feeds a grazer and a bit (42 plant cells), the
+quester's corridors full of the dead it left have carrion 8.7 and insects to match.
+
 ## Not done yet
 
 - Critters (hares, goats, fish) do not swim or drown; monsters do.
