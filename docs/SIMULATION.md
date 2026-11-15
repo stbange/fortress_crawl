@@ -254,7 +254,8 @@ What reads it:
 - The fur cloak, warmth and cold are saved with the character (save version 18).
 
 `--demo thaw`: a ring of ice round a hearth fire, a pool with a pit of lava beyond a rock, you
-moved into the pool and struck by lightning while wet (20 damage instead of 10). The ice melts
+moved into the pool and struck by a 20-point lightning blow while soaked (20 health lost: the
+jolt, the half again for being wet, and the shock through the pool). The ice melts
 (14 cells to 3 in a minute); the air by the lava rises to 160 and the pool boils down slowly.
 `--cast 1` in the far north (`--pos 8 6 -700 --fly`): you stand in -8 degrees and are COLD
 after about two minutes.
