@@ -518,7 +518,7 @@ no crashes, one death in all (the quester, to the elite brute by Edhold's gate t
 in earlier runs too), and no bot had to give up a goal and go home. The bots harvested 36 times,
 dug 12 times, and ten fungal slimes rose from bones. Between 123 and 1309 cells of each world
 changed (the explorer's most: harvesting, trampling and erosion along its long walk). They threw
-no flasks and met no cold: none could spare the gold for flasks in 12 minutes, and none of these
+no flasks and met no cold: none bought flasks (a bot buys them only with 400 gold or more to spare after potions), and none of these
 worlds' starts is in the north (the warming was checked with a run started there).
 
 ## Not done yet
