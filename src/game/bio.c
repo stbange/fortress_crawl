@@ -74,7 +74,29 @@ static bool exposed(Game *g, int x, int y, int z) {
 static int g_grown[B_COUNT]; /* growth since start, for the demo and the tests */
 
 static void grow(Game *g, int x, int y, int z, Block b) {
-    if (chunkmap_edit(&g->map, x, y, z, b, 0, 0)) g_grown[b]++;
+    /* a plant starts as a shoot (its age in the cell's marks; the mesher draws it small) */
+    bool plant = BLOCKS[b].render == RENDER_CROSS;
+    u8 st = chunkmap_stain(&g->map, x, y, z) & 0x3F;
+    if (chunkmap_edit_stain(&g->map, x, y, z, b, 0, 0, plant ? (st | (1 << 6)) : st)) g_grown[b]++;
+}
+
+/* Marks fade, and shoots grow up: looked at with the rest of a cell. */
+static void marks(Game *g, int x, int y, int z, Block b, float r) {
+    u8 st = chunkmap_stain(&g->map, x, y, z);
+    if (!st) return;
+    u8 n = st;
+    int age = STAIN_AGE(st);
+    if (age && r < 0.5f) n = (u8)((n & 0x3F) | (age == 2 ? 0 : (2 << 6))); /* shoot, young, grown */
+    if (STAIN_WET(st) && r < 0.35f) {
+        bool water = false;
+        for (int k = 0; k < 6 && !water; k++)
+            water = blk(g, x + (k == 0) - (k == 1), y + (k == 2) - (k == 3), z + (k == 4) - (k == 5)) == B_WATER;
+        if (!water) n = (u8)(n - 1); /* dries */
+    }
+    if (STAIN_SOOT(st) && r < 0.01f) n = (u8)(n - (1 << 2));     /* soot and scorch fade very slowly */
+    if (STAIN_SCORCH(st) && r > 0.99f) n = (u8)(n - (1 << 4));
+    (void)b;
+    if (n != st) chunkmap_set_stain(&g->map, x, y, z, n);
 }
 
 /* Whether the cell is one the game changed (grown, not generated): only those wither, so the
@@ -110,6 +132,7 @@ static bool heat_rules(Game *g, int x, int y, int z, Block b, float r) {
     if (m->melt) { /* (ice into water) */
         if (t > (float)m->melt && r < 0.5f && !dig_protected(g, x, y, z)) {
             chunkmap_edit(&g->map, x, y, z, m->melt_to, 0, m->melt_to == B_WATER ? 8 : 0);
+            if (game_nearest_player(g, v3((float)x, (float)y, (float)z), 18.0f)) sfx_at(g, SFX_ICE_CRACK, v3(x + 0.5f, y + 0.5f, z + 0.5f), 0.6f);
             return true;
         }
         return false;
@@ -150,6 +173,7 @@ static bool growing_weather(Game *g, int x, int y, int z) {
 static void bio_cell(Game *g, int x, int y, int z, u64 h) {
     Block b = blk(g, x, y, z);
     float r = hash_unit(h);
+    marks(g, x, y, z, b, hash_unit(h >> 40));
     if (heat_rules(g, x, y, z, b, hash_unit(h >> 20))) return;
     if ((b == B_AIR || b == B_ASH || b == B_GRASS || b == B_ROCK || b == B_BONES) && !growing_weather(g, x, y, z)) return;
     if (b == B_AIR || b == B_ASH) {

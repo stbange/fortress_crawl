@@ -1178,6 +1178,15 @@ static void screenshot_step(App *a, float frame_dt) {
     if (g->opt.demo && a->demo_done && !strcmp(kind, "blast")) {
         static bool thrown;
         if (!thrown && a->shot_wait > 0.6f) { thrown = true; bomb_throw(g, p1); }
+        static bool counted;
+        if (!counted && a->shot_wait > 4.0f) {
+            counted = true;
+            int scorch = 0, x0 = (int)floorf(p1->pl.pos.x), y0 = (int)floorf(p1->pl.pos.y), z0 = (int)floorf(p1->pl.pos.z);
+            for (int y = -6; y <= 6; y++)
+                for (int z = -12; z <= 12; z++)
+                    for (int x = -12; x <= 12; x++) scorch += STAIN_SCORCH(chunkmap_stain(&g->map, x0 + x, y0 + y, z0 + z)) > 0;
+            SDL_Log("blast: %d cells scorched", scorch);
+        }
     }
     if (g->opt.demo && a->demo_done && !strcmp(kind, "matter")) {
         /* the table of materials (docs/SIMULATION.md): oil thrown on a pool and lit, acid against a
@@ -1484,6 +1493,8 @@ static void screenshot_step(App *a, float frame_dt) {
             for (int y = 0; y < 3; y++)
                 for (int z = -3; z <= 3; z++) n += chunkmap_edit(&g->map, bx, by + y, bz + z, B_WOOD, 0, 0);
             for (int z = -3; z <= 3; z++) chunkmap_edit(&g->map, bx - 1, by, bz + z, B_GRASS, 0, 0);
+            for (int z = -4; z <= 4; z++)
+                for (int x = -2; x <= 1; x++) chunkmap_edit(&g->map, bx + x, by + 5, bz + z, B_ROCK, 0, 0); /* a low stone ceiling (soot) */
             if (n > 15) {
                 stage = 1;
                 if (g_demo_cast == 1) sim_gas(g, GAS_SWAMP, v3(bx - 1.5f, by + 1.5f, bz + 2.5f), 1.0f);
@@ -1505,6 +1516,11 @@ static void screenshot_step(App *a, float frame_dt) {
                         wood += b == B_WOOD;
                         fire += b == B_FIRE;
                     }
+            int soot = 0;
+            for (int y = 0; y < 16; y++)
+                for (int z = -4; z <= 4; z++)
+                    for (int x = -2; x <= 1; x++) soot += STAIN_SOOT(chunkmap_stain(&g->map, bx + x, by + y, bz + z)) > 0;
+            SDL_Log("burn: soot on %d cells", soot);
             SDL_Log("burn: t %.1f  wood %d  fire %d  smoke %.2f  waiting %d", a->shot_wait, wood, fire,
                     sim_gas_at(v3(bx + 0.5f, by + 3.0f, bz + 0.5f), GAS_SMOKE), sim_pending());
         }

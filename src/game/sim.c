@@ -134,15 +134,53 @@ static int kind_of(Game *g, int x, int y, int z, Block *out) {
     }
 }
 
+/* A sound of the simulation at p, not more often than every gap seconds for that sound. */
+static void sim_sound(Game *g, int id, vec3 p, float vol, float gap) {
+    static int ids[16];
+    static float last[16];
+    int slot = -1;
+    for (int i = 0; i < 16; i++) if (ids[i] == id) slot = i;
+    if (slot < 0) for (int i = 0; i < 16 && slot < 0; i++) if (!ids[i]) { ids[i] = id; slot = i; }
+    if (slot < 0) slot = id & 15;
+    if (g->time - last[slot] < gap && g->time >= last[slot]) return;
+    last[slot] = g->time;
+    if (game_nearest_player(g, p, 20.0f)) sfx_at(g, id, p, vol);
+}
+
+/* Where water moved lately (for the sound of running water). */
+#define FLOWS 64
+static vec3 flow_pos[FLOWS];
+static float flow_t[FLOWS];
+static int flow_next;
+
+int sim_flow_near(Game *g, vec3 p, float r) {
+    int n = 0;
+    for (int i = 0; i < FLOWS; i++)
+        if (g->time - flow_t[i] < 2.0f && v3_len(v3_sub(flow_pos[i], p)) < r) n++;
+    return n;
+}
+
 static bool set_water(Game *g, int x, int y, int z, int level) {
-    if (level <= 0) return chunkmap_edit(&g->map, x, y, z, B_AIR, 0, 0);
+    if (level <= 0) {
+        /* where water drains away the stone under it stays wet for a while */
+        bool known;
+        Block under = chunkmap_block(&g->map, x, y - 1, z, &known);
+        if (known && block_solid(under) && BLOCKS[under].render == RENDER_CUBE && chunkmap_fluid(&g->map, x, y, z)) {
+            u8 st = chunkmap_stain(&g->map, x, y - 1, z);
+            chunkmap_set_stain(&g->map, x, y - 1, z, (u8)((st & ~3) | 3));
+        }
+        return chunkmap_edit(&g->map, x, y, z, B_AIR, 0, 0);
+    }
+    flow_pos[flow_next] = v3(x + 0.5f, y + 0.5f, z + 0.5f);
+    flow_t[flow_next] = g->time;
+    flow_next = (flow_next + 1) % FLOWS;
     return chunkmap_edit(&g->map, x, y, z, B_WATER, 0, MINI(level, 8));
 }
 
 static void hiss(Game *g, int x, int y, int z, bool steam) {
     vec3 p = v3(x + 0.5f, y + 0.6f, z + 0.5f);
     particles_burst(g, p, steam ? v3(0.85f, 0.85f, 0.9f) : v3(0.35f, 0.35f, 0.35f), steam ? 14 : 6, 2.0f, 0.07f, false);
-    sfx_at(g, SFX_SALAMANDER_HISS, p, steam ? 1.0f : 0.6f);
+    sim_sound(g, SFX_STEAM_HISS, p, steam ? 0.9f : 0.5f, 0.3f);
 }
 
 /* Moves n eighths from (x, y, z) at level l to the cell t of kind tk holding tl. False if a
@@ -160,6 +198,8 @@ static bool flow(Game *g, int x, int y, int z, int *l, int tx, int ty, int tz, i
         return true;
     }
     if (tk == 1 && tb != B_AIR) hiss(g, tx, ty, tz, false); /* a fire or torch goes out */
+    if (ty < y && tk == 1 && ((tick_no + (u32)tx) & 3) == 0 && game_nearest_player(g, v3((float)tx, (float)ty, (float)tz), 24.0f))
+        particles_burst(g, v3(tx + 0.5f, ty + 0.3f, tz + 0.5f), v3(0.85f, 0.9f, 1.0f), 3, 1.5f, 0.03f, false); /* spray */
     *l -= n;
     set_water(g, x, y, z, *l);
     set_water(g, tx, ty, tz, tl + n);
@@ -337,6 +377,7 @@ static bool ignite(Game *g, int x, int y, int z) {
     }
     if (!fuel) return false;
     if (!chunkmap_edit(&g->map, x, y, z, B_FIRE, 0, fuel)) return false;
+    if (raw == B_OIL) sim_sound(g, SFX_OIL_IGNITE, v3(x + 0.5f, y + 0.5f, z + 0.5f), 1.0f, 0.8f);
     particles_burst(g, v3(x + 0.5f, y + 0.4f, z + 0.5f), v3(1.0f, 0.55f, 0.15f), 6, 1.5f, 0.05f, true);
     return true;
 }
@@ -358,6 +399,18 @@ static void fire_step(Game *g, Cell c, int fuel) {
         if (flammable(nb) && (int)((h >> (k * 7 + 3)) % (u64)chance) == 0) ignite(g, x, y, z);
     }
     if ((h >> 50 & 15) == 0) sim_gas(g, GAS_SMOKE, v3(c.x + 0.5f, c.y + 1.2f, c.z + 0.5f), 0.25f);
+    /* the smoke blackens the ceiling above the fire */
+    if ((h >> 44 & 31) == 0)
+        for (int dy = 1; dy <= 12; dy++) {
+            bool known;
+            Block up = chunkmap_block(&g->map, c.x, c.y + dy, c.z, &known);
+            if (!known) break;
+            if (block_solid(up)) {
+                u8 st = chunkmap_stain(&g->map, c.x, c.y + dy, c.z);
+                if (STAIN_SOOT(st) < 3) chunkmap_set_stain(&g->map, c.x, c.y + dy, c.z, (u8)(st + (1 << 2)));
+                break;
+            }
+        }
     if ((h >> 56 & 7) == 0) {
         fuel--;
         /* burnt out: ash where it lay on something, nothing where it hung */
@@ -600,6 +653,7 @@ static void seep(Game *g, Cell c, int l) {
         if ((cell_hash(c.x, c.y, c.z) ^ tick_no) & 1) { push(c.x, c.y, c.z); return; } /* slowly */
         if (!flow(g, c.x, c.y, c.z, &l, tx, ty, tz, tk, tl, 1, tb)) { push(c.x, c.y, c.z); return; }
         particles_burst(g, v3(bx + 0.5f, by + 0.5f, bz + 0.5f), v3(0.4f, 0.55f, 0.7f), 2, 0.5f, 0.03f, false);
+        sim_sound(g, SFX_AMB_DRIP, v3(bx + 0.5f, by + 0.5f, bz + 0.5f), 0.5f, 1.5f);
     }
 }
 
@@ -695,6 +749,7 @@ static void lava_step(Game *g, Cell c, int l) {
     if (l <= 2 && (h >> 40) % 24 == 0) {
         chunkmap_edit(&g->map, c.x, c.y, c.z, B_OBSIDIAN, 0, 0);
         particles_burst(g, v3(c.x + 0.5f, c.y + 0.4f, c.z + 0.5f), v3(0.4f, 0.4f, 0.4f), 4, 1.0f, 0.05f, false);
+        sim_gas(g, GAS_SMOKE, v3(c.x + 0.5f, c.y + 1.0f, c.z + 0.5f), 0.15f); /* fresh obsidian smokes */
         return;
     }
     if (l <= 2) push(c.x, c.y, c.z); /* keeps cooling */
@@ -749,6 +804,7 @@ static void liquid_step(Game *g, Cell c, Block b, int l) {
             if (__builtin_popcountll(mask) <= 6) mask = 0;
             chunkmap_edit(&g->map, x, y, z, mask ? (Block)(m | BLOCK_CARVED) : B_AIR, mask, 0);
             particles_burst(g, v3(x + 0.5f, y + 0.5f, z + 0.5f), v3(0.5f, 0.85f, 0.3f), 3, 0.8f, 0.04f, false);
+            sim_sound(g, SFX_ACID_SIZZLE, v3(x + 0.5f, y + 0.5f, z + 0.5f), 0.6f, 1.2f);
             if ((h >> 50) % 4 == 0) { l--; set_liq(g, c.x, c.y, c.z, b, l); if (l <= 0) return; }
         }
         push(c.x, c.y, c.z); /* it keeps eating */

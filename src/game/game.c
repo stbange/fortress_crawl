@@ -845,6 +845,12 @@ static void update_player(Game *g, PlayerSlot *ps, const PlayerInput *in, float 
                 if (before < 0.5f && s->cold >= 0.5f) game_banner(ps, s->cloak ? "COLD - EVEN IN THE CLOAK" : "COLD - A FIRE, A CLOAK OR A WARMING DRAUGHT WOULD HELP");
             } else s->cold = fmaxf(0.0f, s->cold - dt * (resist ? 0.1f : 0.02f));
             if (s->cold >= 1.0f) s->chill_t = fmaxf(s->chill_t, 0.5f);
+            /* your breath shows in the cold */
+            if (t < 2.0f && fmodf(g->time + ps->index * 0.7f, 2.5f) < dt && g->nparts < MAX_PARTICLES - 4) {
+                vec3 e = player_eye(&ps->pl), f = dir_from_angles(ps->pl.yaw, 0.0f);
+                Particle *q = &g->parts[g->nparts++];
+                *q = (Particle){ v3_add(e, v3_scale(f, 0.35f)), v3_add(v3_scale(f, 0.4f), v3(0, 0.25f, 0)), v3(0.85f, 0.88f, 0.92f), 1.0f, 1.0f, 0.07f, false, false };
+            }
         }
         /* breath: under water it runs out, then you drown */
         bool under = !ps->pl.fly && sim_water_depth(g, ps->pl.pos) > player_eye(&ps->pl).y - ps->pl.pos.y;
@@ -857,6 +863,7 @@ static void update_player(Game *g, PlayerSlot *ps, const PlayerInput *in, float 
                 if (ps->drown_t <= 0) {
                     ps->drown_t = 1.0f;
                     game_hurt_player(g, ps, 0.08f * s->maxhp, v3_add(ps->pl.pos, v3(0, 2, 0)));
+                    sfx_player(g, ps, SFX_DROWN_GURGLE, 0.8f);
                 }
             }
         } else {

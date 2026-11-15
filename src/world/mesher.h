@@ -15,7 +15,7 @@ typedef struct MeshVertex {
     u8 flags;
 } MeshVertex;
 
-enum { VF_EMISSIVE = 1, VF_SPRITE = 2, VF_LIQUID = 4 };
+enum { VF_EMISSIVE = 1, VF_SPRITE = 2, VF_LIQUID = 4, VF_FLOW = 8 }; /* with VF_FLOW: bits 4-6 the direction (+x, -x, +z, -z, down) */
 
 /* Light spreads at most 15 cells, so a 15-cell border of neighbour data is enough. */
 #define MESH_PAD 15
@@ -35,6 +35,7 @@ typedef struct MeshInput {
     const ChunkInfo *info[27];
     const CarveSet *carve[27]; /* the pieces of broken blocks */
     const u8 *fluid[27];       /* fluid levels (sim.c), or NULL: whole cells */
+    const u8 *stain[27];       /* marks on cells (chunkmap.h STAIN_*), or NULL */
     int tile_base; /* first atlas tile of the centre chunk's theme */
 } MeshInput;
 

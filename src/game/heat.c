@@ -191,6 +191,20 @@ void heat_update(Game *g, float dt) {
                 }
     }
     if (!heat) return;
+    /* the air shimmers over what is very hot */
+    for (int k = 0; k < MAX_PLAYERS; k++) {
+        PlayerSlot *ps = &g->players[k];
+        if (!ps->active) continue;
+        for (int s = 0; s < 10 && g->nparts < MAX_PARTICLES - 100; s++) {
+            u64 h = mix64((u64)(g->time * 1000) + (u64)s * 7919 + (u64)k);
+            int x = (int)floorf(ps->pl.pos.x) + (int)(h % 13) - 6, z = (int)floorf(ps->pl.pos.z) + (int)((h >> 8) % 13) - 6;
+            int y = (int)floorf(ps->pl.pos.y) + (int)((h >> 16) % 6) - 2;
+            bool known;
+            if (heat_cell(g, x, y, z) < 150.0f || chunkmap_block(&g->map, x, y, z, &known) != B_AIR) continue;
+            Particle *q = &g->parts[g->nparts++];
+            *q = (Particle){ v3(x + hash_unit(h >> 24), y + hash_unit(h >> 32), z + hash_unit(h >> 40)), v3(0, 1.2f, 0), v3(0.9f, 0.75f, 0.55f), 0.7f, 0.7f, 0.025f, false, false };
+        }
+    }
     /* changed chunks are looked at again first (a few a tick) */
     for (int i = 0, n = 0; i < MAX_HEAT && n < 3; i++)
         if (heat[i].used && heat[i].dirty) { heat[i].dirty = false; scan(g, &heat[i]); n++; }

@@ -196,6 +196,10 @@ static void apply_edit(Chunk *c, const BlockEdit *e) {
         if (!c->fluid) c->fluid = calloc(CHUNK_VOL, 1);
         c->fluid[e->idx] = e->level;
     } else if (c->fluid) c->fluid[e->idx] = 0;
+    if (e->stain) {
+        if (!c->stain) c->stain = calloc(CHUNK_VOL, 1);
+        c->stain[e->idx] = e->stain;
+    } else if (c->stain) c->stain[e->idx] = 0;
 }
 
 static void apply_edits(ChunkMap *m, Chunk *c) {
@@ -203,6 +207,8 @@ static void apply_edits(ChunkMap *m, Chunk *c) {
     c->carve = NULL;
     free(c->fluid);
     c->fluid = NULL;
+    free(c->stain);
+    c->stain = NULL;
     ChunkEdits *ce = edits_find(m, c->cx, c->cy, c->cz, false);
     if (!ce) return;
     for (int i = 0; i < ce->n; i++) apply_edit(c, &ce->e[i]);
@@ -277,6 +283,8 @@ static bool evict(ChunkMap *m, Chunk *c) {
     c->carve = NULL;
     free(c->fluid);
     c->fluid = NULL;
+    free(c->stain);
+    c->stain = NULL;
     c->used = false;
     c->has_mesh = false;
     c->state = CH_EMPTY;
@@ -327,6 +335,7 @@ static bool submit_mesh(ChunkMap *m, Chunk *c) {
         mj->in.info[i] = &nb[i]->info;
         mj->in.carve[i] = nb[i]->carve;
         mj->in.fluid[i] = nb[i]->fluid;
+        mj->in.stain[i] = nb[i]->stain;
     }
     c->mesh_queued = true;
     jobs_submit(&mj->base);
@@ -464,13 +473,38 @@ u64 chunkmap_mask(ChunkMap *m, int wx, int wy, int wz) {
     return (c->blocks[i] & BLOCK_CARVED) ? carve_get(c->carve, i) : CARVE_FULL;
 }
 
+u8 chunkmap_stain(ChunkMap *m, int wx, int wy, int wz) {
+    Chunk *c = chunkmap_get(m, floordiv(wx, CHUNK), floordiv(wy, CHUNK), floordiv(wz, CHUNK));
+    if (!c || c->state != CH_READY || !c->stain) return 0;
+    return c->stain[cidx(floormod(wx, CHUNK), floormod(wy, CHUNK), floormod(wz, CHUNK))];
+}
+
+bool chunkmap_set_stain(ChunkMap *m, int wx, int wy, int wz, u8 stain) {
+    if (chunkmap_stain(m, wx, wy, wz) == stain) return true;
+    Chunk *c = chunkmap_get(m, floordiv(wx, CHUNK), floordiv(wy, CHUNK), floordiv(wz, CHUNK));
+    if (!c || c->state != CH_READY) return false;
+    int i = cidx(floormod(wx, CHUNK), floormod(wy, CHUNK), floormod(wz, CHUNK));
+    Block raw = c->blocks[i];
+    return chunkmap_edit_stain(m, wx, wy, wz, raw, (raw & BLOCK_CARVED) ? carve_get(c->carve, i) : 0, c->fluid ? c->fluid[i] : 0, stain);
+}
+
 bool chunkmap_edit(ChunkMap *m, int wx, int wy, int wz, Block raw, u64 mask, int level) {
+    return chunkmap_edit_stain(m, wx, wy, wz, raw, mask, level, -1);
+}
+
+bool chunkmap_edit_stain(ChunkMap *m, int wx, int wy, int wz, Block raw, u64 mask, int level, int stain) {
     if ((raw & BLOCK_CARVED) && mask == 0) raw = B_AIR;
     if ((raw & BLOCK_CARVED) && mask == CARVE_FULL) raw &= BLOCK_MAT;
+    if (stain < 0) {
+        /* a new block keeps the marks of the place, but not a plant's age */
+        bool known;
+        u8 old = chunkmap_stain(m, wx, wy, wz);
+        stain = chunkmap_block_raw(m, wx, wy, wz, &known) == raw ? old : (old & 0x3F);
+    }
     if (!chunkmap_set_block(m, wx, wy, wz, raw)) return false;
     int cx = floordiv(wx, CHUNK), cy = floordiv(wy, CHUNK), cz = floordiv(wz, CHUNK);
     Chunk *c = chunkmap_get(m, cx, cy, cz);
-    BlockEdit e = { (u16)cidx(wx - cx * CHUNK, wy - cy * CHUNK, wz - cz * CHUNK), raw, (u8)CLAMPI(level, 0, 255), mask };
+    BlockEdit e = { (u16)cidx(wx - cx * CHUNK, wy - cy * CHUNK, wz - cz * CHUNK), raw, (u8)CLAMPI(level, 0, 255), mask, (u8)stain };
     apply_edit(c, &e);
     edits_record(m, cx, cy, cz, &e);
     if (m->on_edit) m->on_edit(wx, wy, wz);

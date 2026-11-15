@@ -84,6 +84,13 @@ static inline bool block_opaque(Block b) { return !(b & BLOCK_CARVED) && BLOCKS[
 extern const u8 BLOCK_HARDNESS[B_COUNT];
 enum { HARD_NEVER, HARD_SOFT, HARD_ROCK, HARD_MASONRY, HARD_METAL };
 
+/* What a cell shows besides its block (docs/SIMULATION.md): two bits each. */
+#define STAIN_WET(s) ((s) & 3)
+#define STAIN_SOOT(s) (((s) >> 2) & 3)
+#define STAIN_SCORCH(s) (((s) >> 4) & 3)
+#define STAIN_AGE(s) (((s) >> 6) & 3) /* a plant: 1 a shoot, 2 young, 0 grown */
+#define STAIN_MAKE(wet, soot, scorch, age) ((u8)((wet) | ((soot) << 2) | ((scorch) << 4) | ((age) << 6)))
+
 /* What a material is like, for the rules of the simulation (docs/SIMULATION.md): what reads
  * this table needs no special cases for a new block. */
 typedef struct Substance {

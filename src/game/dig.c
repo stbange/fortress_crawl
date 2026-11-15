@@ -221,6 +221,25 @@ void world_explode(Game *g, vec3 p, float radius, int power, float dmg, int owne
     }
     PlayerSlot *who = owner >= 0 && owner < MAX_PLAYERS && g->players[owner].active ? &g->players[owner] : NULL;
     world_break_sphere(g, who, p, radius, power);
+    /* the walls round it are scorched black */
+    for (int k = 0; k < 40; k++) {
+        u64 h = mix64((u64)(p.x * 1000) ^ ((u64)(p.z * 1000) << 21) ^ (u64)k * 0x9E37);
+        vec3 d = v3_norm(v3(hash_unit(h) - 0.5f, hash_unit(h >> 16) - 0.5f, hash_unit(h >> 32) - 0.5f));
+        for (float t = 0.5f; t < radius + 1.0f; t += 0.5f) {
+            vec3 q = v3_add(p, v3_scale(d, t));
+            int x = (int)floorf(q.x), y = (int)floorf(q.y), z = (int)floorf(q.z);
+            bool known;
+            Block b = chunkmap_block(&g->map, x, y, z, &known);
+            if (!known) break;
+            if (block_solid(b)) {
+                if (BLOCKS[b].render == RENDER_CUBE && !dig_protected(g, x, y, z)) {
+                    u8 st = chunkmap_stain(&g->map, x, y, z);
+                    chunkmap_set_stain(&g->map, x, y, z, (u8)((st & ~(3 << 4)) | (3 << 4)));
+                }
+                break;
+            }
+        }
+    }
     /* the blast sets light to what burns, lights swamp gas around it and smokes */
     sim_element_hit(g, p, EL_FIRE, owner, 0.0f);
     sim_gas_fire(g, p, radius);
@@ -301,7 +320,7 @@ static void flask_break(Game *g, Bomb *b) {
     vec3 p = b->pos;
     int x = (int)floorf(p.x), y = (int)floorf(p.y), z = (int)floorf(p.z);
     for (int k = 0; k < 4 && sim_fluid(g, x, y, z); k++) y++; /* on water: on top of it */
-    sfx_at(g, SFX_HIT_WALL, p, 0.6f);
+    sfx_at(g, SFX_FLASK_BREAK, p, 0.8f);
     switch (b->kind) {
     case THROW_OIL: {
         /* a pool of oil, spilling round where it broke */

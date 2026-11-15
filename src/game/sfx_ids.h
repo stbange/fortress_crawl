@@ -279,6 +279,16 @@ enum {
     SFX_LOOP_LAVA,
     SFX_LOOP_WATER,
     SFX_LOOP_FLAMES,
+    SFX_LOOP_BLAZE,
+    SFX_LOOP_STREAM,
+    SFX_STEAM_HISS,
+    SFX_ICE_CRACK,
+    SFX_DROWN_GURGLE,
+    SFX_COLLAPSE_CREAK,
+    SFX_COLLAPSE_RUMBLE,
+    SFX_OIL_IGNITE,
+    SFX_ACID_SIZZLE,
+    SFX_FLASK_BREAK,
     SFX_COUNT
 };
 
@@ -561,6 +571,16 @@ static const SfxDef SFX_DEFS[SFX_COUNT] = {
     { "loop_lava", 1, 1 },
     { "loop_water", 1, 1 },
     { "loop_flames", 1, 1 },
+    { "loop_blaze", 1, 1 },
+    { "loop_stream", 1, 1 },
+    { "steam_hiss", 1, 0 },
+    { "ice_crack", 2, 0 },
+    { "drown_gurgle", 1, 0 },
+    { "collapse_creak", 1, 0 },
+    { "collapse_rumble", 1, 0 },
+    { "oil_ignite", 1, 0 },
+    { "acid_sizzle", 1, 0 },
+    { "flask_break", 2, 0 },
 };
 
 #endif

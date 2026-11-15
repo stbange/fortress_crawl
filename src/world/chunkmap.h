@@ -32,11 +32,12 @@ typedef struct Chunk {
     u32 gen_id;  /* the world's sanctum_gen when it was generated */
     CarveSet *carve; /* the pieces of its broken blocks, or NULL */
     u8 *fluid;   /* water levels 1..8 per cell (0: as generated), or NULL (sim.c) */
+    u8 *stain;   /* marks on a cell (STAIN_*: wet, soot, scorch, a plant's age), or NULL */
 } Chunk;
 
 /* What players changed in the world, kept per chunk and laid over the generated blocks
  * whenever a chunk is generated (docs/DESTRUCTION.md). Saved with the world. */
-typedef struct BlockEdit { u16 idx; u8 raw; u8 level; u64 mask; } BlockEdit;
+typedef struct BlockEdit { u16 idx; u8 raw; u8 level; u64 mask; u8 stain; } BlockEdit;
 typedef struct ChunkEdits { int cx, cy, cz; int n, cap; BlockEdit *e; } ChunkEdits;
 #define EDITS_MAX_TOTAL 60000 /* beyond this the oldest chunks' changes are forgotten */
 
@@ -95,6 +96,11 @@ bool chunkmap_can_edit(ChunkMap *m, int wx, int wy, int wz);
  * and records it so it survives the chunk being unloaded and generated again. False if the
  * chunk is not loaded or busy (try again later). A carved mask of 0 leaves air. */
 bool chunkmap_edit(ChunkMap *m, int wx, int wy, int wz, Block raw, u64 mask, int level);
+/* The same with the cell's marks given (-1: keep them; a new block loses its plant age). */
+bool chunkmap_edit_stain(ChunkMap *m, int wx, int wy, int wz, Block raw, u64 mask, int level, int stain);
+/* The marks of a cell, and changing only them (a lasting change too). */
+u8 chunkmap_stain(ChunkMap *m, int wx, int wy, int wz);
+bool chunkmap_set_stain(ChunkMap *m, int wx, int wy, int wz, u8 stain);
 /* Saving and loading the edits. */
 void chunkmap_edits_clear(ChunkMap *m);
 /* The recorded changes of one chunk (NULL, *n = 0 if none). */

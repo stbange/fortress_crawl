@@ -338,4 +338,17 @@ export const SOUNDS = [
   { id: "loop_lava", dur: 8, loop: true, text: "molten lava bubbling and gurgling, thick blobs popping, hot hiss" },
   { id: "loop_water", dur: 8, loop: true, text: "underground water flowing and lapping gently against stone" },
   { id: "loop_flames", dur: 6, loop: true, text: "roaring jet of fire from a trap vent, steady loud flame" },
+  // the living world (docs/SIMULATION.md)
+  { id: "loop_blaze", dur: 8, loop: true, text: "a big fire burning through dry wood and grass, loud roaring crackle, popping embers" },
+  { id: "loop_stream", dur: 8, loop: true, text: "water rushing and splashing through a broken stone channel, small waterfall spilling into a pool" },
+
+  // ---------------- the living world ----------------
+  { id: "steam_hiss", dur: 1.2, text: "water hitting hot stone, sharp loud steam hiss, sizzling burst of vapour" },
+  { id: "ice_crack", dur: 1.0, v: 2, text: "ice cracking and splitting as it melts, sharp creaking snap" },
+  { id: "drown_gurgle", dur: 1.5, text: "a person gasping and gurgling under water, air bubbles escaping, muffled" },
+  { id: "collapse_creak", dur: 2.0, text: "heavy stone ceiling groaning and creaking under strain, dust trickling, about to give way" },
+  { id: "collapse_rumble", dur: 3.0, text: "a stone ceiling collapsing, heavy blocks crashing down, deep rumble and rubble settling" },
+  { id: "oil_ignite", dur: 1.2, text: "a pool of oil catching fire with a sudden whoosh, flames spreading fast" },
+  { id: "acid_sizzle", dur: 1.2, text: "acid eating into stone, bubbling corrosive fizz and sizzle" },
+  { id: "flask_break", dur: 0.6, v: 2, text: "small glass flask shattering on stone, liquid splashing" },
 ];

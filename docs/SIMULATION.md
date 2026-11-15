@@ -292,6 +292,36 @@ rock wall eats 10 of its pieces and spreads out thin; lightning into iron bars h
 behind them (28 health to 12); a growth tonic on bare earth leaves 12 tufts of grass and three
 flowers; a fish dropped into the pool floats at the surface.
 
+## Sound and sight
+
+Every process shows and sounds as it goes, and changes gently.
+
+**Marks on cells.** Each cell can carry marks besides its block (two bits each, kept in a layer
+per chunk and saved with the edits, save version 20): wet, soot, scorch and, for a plant, its
+age. The mesher draws them:
+
+- **Wet stone** next to water, or where water drained away, is drawn darker; it dries in a few
+  minutes once the water is gone.
+- **Soot:** the smoke of a fire blackens the first ceiling above it (up to 12 m up); it fades
+  over hours. **Scorch:** a blast blackens the walls round it.
+- **Plants grow:** what grows starts as a shoot (half height), then young, then grown; vines
+  grow down from their top.
+- **Fires** are drawn as big as their fuel: a fresh one fills its cell, a dying one is a few
+  low flames.
+- **Lava** in a thin flow is drawn darker as it thins; fresh obsidian smokes.
+- **Flowing liquids:** the surface texture of water, oil and acid slides the way it runs
+  (toward the steepest drop, over edges), and down the sides where it falls; falling water
+  throws spray.
+- **Heat shimmer:** pale motes rise from air hotter than 150 degrees. **Cold breath:** your
+  breath shows as a white puff every few seconds below 2 degrees.
+
+**Sound.** New sounds made with the ElevenLabs sound effects API (`tools/sfx_list.mjs`): the
+fire loop grows louder the more burns near you and a roaring **blaze** joins in from four
+burning cells on; a **stream** loop where water is moving near you (not only where it lies);
+**steam hissing**, **ice cracking** as it melts, **drips** where water seeps through, a
+**gurgle** when you drown, oil **catching fire**, acid **sizzling** on stone, **flasks
+shattering**, and the **creak** and **rumble** of a collapse (step 5).
+
 ## Time away
 
 The simulation runs only near the players, so the world would freeze wherever nobody is. It

@@ -179,7 +179,7 @@ static void face_vertex_light(const MeshScratch *s, int px, int py, int pz, int 
 }
 
 static void emit_face(VBuf *vb, const MeshScratch *s, int x, int y, int z, int face, Block b, u16 tile,
-                      float tint, int liquid_drop) {
+                      float tint, int liquid_drop, u8 xflags) {
     int px = x + MESH_PAD, py = y + MESH_PAD, pz = z + MESH_PAD;
     MeshVertex v[4];
     int ao[4];
@@ -201,7 +201,7 @@ static void emit_face(VBuf *vb, const MeshScratch *s, int x, int y, int z, int f
         v[k].b = (u8)clampf(brightness(l[2]) * shade * 255.0f, 0, 255);
         v[k].f = (u8)clampf(l[3] / 15.0f * 255.0f, 0, 255);
         v[k].n = (u8)face;
-        v[k].flags = (u8)((emissive ? VF_EMISSIVE : 0) | (BLOCKS[b & BLOCK_MAT].render == RENDER_LIQUID ? VF_LIQUID : 0));
+        v[k].flags = (u8)((emissive ? VF_EMISSIVE : 0) | (BLOCKS[b & BLOCK_MAT].render == RENDER_LIQUID ? VF_LIQUID : 0) | xflags);
         if (emissive) { v[k].r = v[k].g = v[k].b = (u8)(255 * shade); }
     }
     MeshVertex *q = vb_quad(vb);
@@ -210,7 +210,8 @@ static void emit_face(VBuf *vb, const MeshScratch *s, int x, int y, int z, int f
     else { q[0] = v[0]; q[1] = v[1]; q[2] = v[2]; q[3] = v[3]; }
 }
 
-static void emit_sprite(VBuf *vb, const MeshScratch *s, int x, int y, int z, Block b, u16 tile) {
+/* hgt: how tall it stands (a shoot, a dying fire), 1 for full; a vine hangs from its top. */
+static void emit_sprite(VBuf *vb, const MeshScratch *s, int x, int y, int z, Block b, u16 tile, float hgt) {
     int px = x + MESH_PAD, py = y + MESH_PAD, pz = z + MESH_PAD;
     const u8 *l = &s->light[pidx(px, py, pz) * 4];
     int lo = 1, hi = 7, ox = 0, oz = 0;
@@ -234,7 +235,8 @@ static void emit_sprite(VBuf *vb, const MeshScratch *s, int x, int y, int z, Blo
             int end = (k == 1 || k == 2) ? 1 : 0;
             int top = (k >= 2) ? 1 : 0;
             v[k].x = (i16)(x * 8 + pts[q][end][0] + ox);
-            v[k].y = (i16)((y + top) * 8);
+            if (b == B_VINE) v[k].y = (i16)(top ? (y + 1) * 8 : (y + 1) * 8 - (int)lroundf(8.0f * hgt));
+            else v[k].y = (i16)(top ? y * 8 + (int)lroundf(8.0f * hgt) : y * 8);
             v[k].z = (i16)(z * 8 + pts[q][end][1] + oz);
             v[k].u = (u8)(end * 16);
             v[k].v = (u8)(top ? 0 : 16);
@@ -310,6 +312,44 @@ static int fluid_level(const MeshInput *in, int px, int py, int pz) {
     return level ? level : 8;
 }
 
+/* The marks of a cell (padded coordinates; chunkmap.h STAIN_*). */
+static u8 stain_at(const MeshInput *in, int px, int py, int pz) {
+    int x = px - MESH_PAD, y = py - MESH_PAD, z = pz - MESH_PAD;
+    int cx = x < 0 ? -1 : (x >= CHUNK ? 1 : 0), cy = y < 0 ? -1 : (y >= CHUNK ? 1 : 0), cz = z < 0 ? -1 : (z >= CHUNK ? 1 : 0);
+    const u8 *st = in->stain[(cx + 1) + (cy + 1) * 3 + (cz + 1) * 9];
+    return st ? st[cidx(x - cx * CHUNK, y - cy * CHUNK, z - cz * CHUNK)] : 0;
+}
+
+/* How much darker a block's faces are drawn for its marks: soot and scorch, and wet stone (marked
+ * wet, or with water beside it). */
+static float stain_tint(const MeshInput *in, const MeshScratch *s, int px, int py, int pz) {
+    u8 st = stain_at(in, px, py, pz);
+    float k = 1.0f - 0.15f * (float)STAIN_SOOT(st) - 0.12f * (float)STAIN_SCORCH(st);
+    bool wet = STAIN_WET(st) > 0;
+    for (int f = 0; f < 6 && !wet; f++) wet = (s->blocks[pidx(px + FACE_N[f][0], py + FACE_N[f][1], pz + FACE_N[f][2])] & BLOCK_MAT) == B_WATER;
+    if (wet) k *= 0.78f;
+    return k;
+}
+
+/* Which way a liquid runs (vertex flags VF_FLOW and the direction): along the surface toward the
+ * steepest drop, and down the sides where it falls; 0 if it lies still. */
+static u8 flow_flags(const MeshInput *in, const MeshScratch *s, int px, int py, int pz, Block b, bool side) {
+    Block below = s->blocks[pidx(px, py - 1, pz)] & BLOCK_MAT;
+    bool falls = !BLOCKS[below].solid && (below != b || fluid_level(in, px, py - 1, pz) < 8);
+    if (side) return falls ? (u8)(VF_FLOW | (4 << 4)) : 0;
+    int me = fluid_level(in, px, py, pz), best = -1, drop = 0;
+    for (int d = 0; d < 4; d++) {
+        static const int DX[4] = { 1, -1, 0, 0 }, DZ[4] = { 0, 0, 1, -1 };
+        int qx = px + DX[d], qz = pz + DZ[d];
+        Block nb = s->blocks[pidx(qx, py, qz)] & BLOCK_MAT;
+        int dd = 0;
+        if (nb == b) dd = me - fluid_level(in, qx, py, qz);
+        else if (nb == B_AIR && !BLOCKS[s->blocks[pidx(qx, py - 1, qz)] & BLOCK_MAT].solid) dd = me; /* an edge it spills over */
+        if (dd > drop) { drop = dd; best = d; }
+    }
+    return best >= 0 ? (u8)(VF_FLOW | (best << 4)) : 0;
+}
+
 /* A cell of lava that does not fill its cell (a flow): drawn like a liquid, at its height. */
 static bool thin_lava(const MeshInput *in, const MeshScratch *s, int px, int py, int pz) {
     return s->blocks[pidx(px, py, pz)] == B_LAVA && fluid_level(in, px, py, pz) < 8;
@@ -340,15 +380,26 @@ void mesh_build(const MeshInput *in, MeshScratch *s, MeshOutput *out) {
                 u64 h = hash3(0x7A11, ox + x, oy + y, oz + z, 9);
                 u16 tile = (u16)(in->tile_base + b * TEX_VARIANTS + (int)(h % TEX_VARIANTS));
                 if (raw & BLOCK_CARVED) {
-                    emit_pieces(&solid, in, s, x, y, z, b, tile, 0.93f + 0.1f * hash_unit(h >> 3));
+                    emit_pieces(&solid, in, s, x, y, z, b, tile, (0.93f + 0.1f * hash_unit(h >> 3)) * stain_tint(in, s, px, py, pz));
                     continue;
                 }
                 if (bd->render == RENDER_CROSS) {
-                    emit_sprite(&sprite, s, x, y, z, b, tile);
+                    /* plants grow from shoots; a fire is as big as its fuel */
+                    float hgt = 1.0f;
+                    int age = STAIN_AGE(stain_at(in, px, py, pz));
+                    if (age == 1) hgt = 0.45f;
+                    else if (age == 2) hgt = 0.75f;
+                    if (b == B_FIRE) {
+                        int fuel = fluid_level(in, px, py, pz); /* (8 where the world lit it) */
+                        if (fuel < 8) hgt = 0.35f + 0.09f * (float)fuel;
+                    }
+                    emit_sprite(&sprite, s, x, y, z, b, tile, hgt);
                     continue;
                 }
                 float tint = 0.93f + 0.1f * hash_unit(h >> 3);
+                if (bd->render == RENDER_CUBE && b != B_LAVA) tint *= stain_tint(in, s, px, py, pz);
                 bool liquid = bd->render == RENDER_LIQUID || (b == B_LAVA && thin_lava(in, s, px, py, pz));
+                if (b == B_LAVA && liquid) tint *= 0.45f + 0.07f * (float)fluid_level(in, px, py, pz); /* a thin flow cools darker */
                 for (int f = 0; f < 6; f++) {
                     Block nb = s->blocks[pidx(px + FACE_N[f][0], py + FACE_N[f][1], pz + FACE_N[f][2])];
                     if (block_opaque(nb) && !(nb == B_LAVA && thin_lava(in, s, px + FACE_N[f][0], py + FACE_N[f][1], pz + FACE_N[f][2]))) continue;
@@ -360,7 +411,8 @@ void mesh_build(const MeshInput *in, MeshScratch *s, MeshOutput *out) {
                         if (fluid_level(in, px + FACE_N[f][0], py, pz + FACE_N[f][2]) >= fluid_level(in, px, py, pz)) continue;
                         if (block_mat(s->blocks[pidx(px, py + 1, pz)]) == b) continue;
                     }
-                    emit_face(&solid, s, x, y, z, f, b, tile, tint, liquid ? liquid_drop(in, s, x, y, z) : 0);
+                    u8 xf = bd->render == RENDER_LIQUID ? flow_flags(in, s, px, py, pz, b, f != 2) : 0;
+                    emit_face(&solid, s, x, y, z, f, b, tile, tint, liquid ? liquid_drop(in, s, x, y, z) : 0, xf);
                 }
             }
     out->light = malloc((size_t)CHUNK_VOL * 4);

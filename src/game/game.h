@@ -899,6 +899,7 @@ int sim_fluid(Game *g, int x, int y, int z);
 int sim_lava(Game *g, int x, int y, int z); /* lava level 1..8, 0 if none */
 float sim_water_depth(Game *g, vec3 feet);
 int sim_pending(void);
+int sim_flow_near(Game *g, vec3 p, float r); /* cells of water that moved in the last 2 s near p */
 int sim_gas_list(float *out, int max); /* 6 floats each: x, y, z, amount, radius, kind */
 void sim_gas_restore(const float *in);
 enum { GAS_STEAM, GAS_SMOKE, GAS_POISON, GAS_SWAMP, GAS_SPORES, GAS_COUNT };

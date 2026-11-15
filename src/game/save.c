@@ -11,7 +11,7 @@
  * user's preference folder. The world itself never needs saving: the seed rebuilds it. */
 
 #define SAVE_MAGIC 0x56534346u /* "FCSV" */
-#define SAVE_VERSION 19 /* 19: flasks to throw; 18: the fur cloak, warmth and cold of each character; 17: when each chunk was last seen (the world goes on while you are away); 16: the clouds of gas in the air; 15: what was broken in the world, the pickaxe and bombs; 14: the ledger of deeds (choices); 13: the story generator of the world; 12: the forge (materials, smithing, blueprints, runes); 11: the Sanctum's decorations, keystones bought; 10: meal variety, toxicity, torn formulae; 9: alchemy (reagents, elixirs, formulae, the elixir working); 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms;
+#define SAVE_VERSION 20 /* 20: the marks on cells (wet, soot, scorch, plants' age); 19: flasks to throw; 18: the fur cloak, warmth and cold of each character; 17: when each chunk was last seen (the world goes on while you are away); 16: the clouds of gas in the air; 15: what was broken in the world, the pickaxe and bombs; 14: the ledger of deeds (choices); 13: the story generator of the world; 12: the forge (materials, smithing, blueprints, runes); 11: the Sanctum's decorations, keystones bought; 10: meal variety, toxicity, torn formulae; 9: alchemy (reagents, elixirs, formulae, the elixir working); 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms;
                           6: weapons with materials, powers, legendaries and memory; 7: the Sanctum per world (written by one
                           build still marked 6); 8: food (the larder, dishes, recipes, the meal) */
 #define EXPLORED_BUDGET (1200 * 1024)
@@ -283,6 +283,7 @@ bool game_save(Game *g) {
         for (int k = 0; k < ce->n; k++) {
             w16(&b, ce->e[k].idx); w8(&b, ce->e[k].raw); w8(&b, ce->e[k].level);
             if (ce->e[k].raw & BLOCK_CARVED) w64(&b, ce->e[k].mask);
+            w8(&b, ce->e[k].stain); /* v20 */
         }
     }
     /* v16: the clouds of gas (docs/SIMULATION.md) */
@@ -577,6 +578,7 @@ bool game_load(Game *g) {
                     BlockEdit e = { 0 };
                     e.idx = r16(&r); e.raw = r8(&r); e.level = r8(&r);
                     e.mask = (e.raw & BLOCK_CARVED) ? r64(&r) : 0;
+                    if (r.ver >= 20) e.stain = r8(&r);
                     if (!r.bad) chunkmap_edit_restore(&g->map, cx, cy, cz, &e);
                 }
             }

@@ -243,9 +243,11 @@ static const int STRATUM_LOOP[ST_COUNT] = {
     [ST_ASTRAL] = SFX_LOOP_ASTRAL,
 };
 
-enum { LP_FIRE, LP_LAVA, LP_WATER, LP_FLAMES, LP_POINT_COUNT };
-static const int POINT_LOOP[LP_POINT_COUNT] = { SFX_LOOP_FIRE, SFX_LOOP_LAVA, SFX_LOOP_WATER, SFX_LOOP_FLAMES };
-static const float POINT_VOL[LP_POINT_COUNT] = { 0.45f, 0.7f, 0.45f, 0.8f };
+/* LP_BLAZE and LP_STREAM are not found by block: a blaze is many fires near, a stream is water
+ * that moved near in the last seconds (docs/SIMULATION.md) */
+enum { LP_FIRE, LP_LAVA, LP_WATER, LP_FLAMES, LP_BLAZE, LP_STREAM, LP_POINT_COUNT };
+static const int POINT_LOOP[LP_POINT_COUNT] = { SFX_LOOP_FIRE, SFX_LOOP_LAVA, SFX_LOOP_WATER, SFX_LOOP_FLAMES, SFX_LOOP_BLAZE, SFX_LOOP_STREAM };
+static const float POINT_VOL[LP_POINT_COUNT] = { 0.45f, 0.7f, 0.45f, 0.8f, 0.8f, 0.6f };
 
 #define AMB_COUNT (ST_COUNT + 1) /* strata and the outside */
 static Loop amb[AMB_COUNT];
@@ -281,7 +283,9 @@ static void scan_points(Game *g) {
         vec3 eye = player_eye(&ps->pl);
         int ex = (int)floorf(eye.x), ey = (int)floorf(eye.y), ez = (int)floorf(eye.z);
         const int R = 8;
-        float nd[LP_POINT_COUNT] = { 1e9f, 1e9f, 1e9f, 1e9f };
+        float nd[LP_POINT_COUNT] = { 1e9f, 1e9f, 1e9f, 1e9f, 1e9f, 1e9f };
+        int fires = 0;
+        vec3 fire_sum = v3(0, 0, 0);
         vec3 np[LP_POINT_COUNT];
         for (int y = ey - 4; y <= ey + 3; y++)
             for (int z = ez - R; z <= ez + R; z++)
@@ -293,6 +297,7 @@ static void scan_points(Game *g) {
                     float dx = x + 0.5f - eye.x, dy = y + 0.5f - eye.y, dz = z + 0.5f - eye.z;
                     float d2 = dx * dx + dy * dy + dz * dz;
                     if (d2 < nd[k]) { nd[k] = d2; np[k] = v3(x + 0.5f, y + 0.5f, z + 0.5f); }
+                    if (b == B_FIRE) { fires++; fire_sum = v3_add(fire_sum, v3(x + 0.5f, y + 0.5f, z + 0.5f)); }
                 }
         vec3 vents[MAX_DEVICES];
         int nv = mech_burning_flames(g, vents, MAX_DEVICES);
@@ -300,9 +305,16 @@ static void scan_points(Game *g) {
             float dd = v3_len(v3_sub(vents[d], eye));
             if (dd * dd < nd[LP_FLAMES]) { nd[LP_FLAMES] = dd * dd; np[LP_FLAMES] = vents[d]; }
         }
+        /* many fires: a blaze, heard from where they burn */
+        if (fires >= 4) { nd[LP_BLAZE] = 1.0f; np[LP_BLAZE] = v3_scale(fire_sum, 1.0f / (float)fires); }
+        int flows = sim_flow_near(g, eye, 12.0f);
+        if (flows >= 2) { nd[LP_STREAM] = 1.0f; np[LP_STREAM] = eye; }
         for (int k = 0; k < LP_POINT_COUNT; k++) {
             if (nd[k] > 1e8f) continue;
-            float p, v = hear(ps, np[k], k == LP_LAVA ? 14.0f : k == LP_FLAMES ? 24.0f : 11.0f, &p);
+            float p, v = hear(ps, np[k], k == LP_LAVA ? 14.0f : k == LP_FLAMES || k == LP_BLAZE ? 24.0f : 11.0f, &p);
+            if (k == LP_FIRE) v *= 0.7f + 0.3f * fminf(1.0f, fires / 4.0f);     /* louder the more there burns */
+            if (k == LP_BLAZE) v *= fminf(1.0f, fires / 12.0f);
+            if (k == LP_STREAM) v *= fminf(1.0f, flows / 12.0f);
             if (v > best[k]) { best[k] = v; pan[k] = g->nplayers > 1 ? p * 0.5f : p; }
         }
     }
