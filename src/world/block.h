@@ -3,8 +3,12 @@
 
 #include "core/common.h"
 
-/* One byte per 1 m cell. The look of a block comes from the chunk's theme. */
+/* One byte per 1 m cell. The look of a block comes from the chunk's theme. The top bit marks
+ * a block that has been broken into: its 4x4x4 pieces of 25 cm are kept in the chunk's carve
+ * set (carve.h); the low bits stay its material (docs/DESTRUCTION.md). */
 typedef u8 Block;
+#define BLOCK_CARVED 0x80
+#define BLOCK_MAT 0x7F
 
 enum {
     B_AIR = 0,
@@ -60,7 +64,15 @@ enum { LIGHT_TORCH, LIGHT_LAVA, LIGHT_CRYSTAL, LIGHT_GLASS, LIGHT_FUNGUS };
 
 extern const BlockDef BLOCKS[B_COUNT];
 
-static inline bool block_solid(Block b) { return BLOCKS[b].solid; }
-static inline bool block_opaque(Block b) { return BLOCKS[b].opaque; }
+static inline Block block_mat(Block b) { return (Block)(b & BLOCK_MAT); }
+static inline bool block_carved(Block b) { return (b & BLOCK_CARVED) != 0; }
+static inline bool block_solid(Block b) { return BLOCKS[b & BLOCK_MAT].solid; }
+/* a broken block lets light and sight through (its pieces are drawn on their own) */
+static inline bool block_opaque(Block b) { return !(b & BLOCK_CARVED) && BLOCKS[b & BLOCK_MAT].opaque; }
+
+/* How hard a material is to break: 0 never, 1 soft (anything breaks it), 2 rock and ore (a
+ * pickaxe), 3 masonry (explosives), 4 metal (nothing the player has). */
+extern const u8 BLOCK_HARDNESS[B_COUNT];
+enum { HARD_NEVER, HARD_SOFT, HARD_ROCK, HARD_MASONRY, HARD_METAL };
 
 #endif

@@ -707,6 +707,15 @@ static void demo_setup(Game *g) {
                 p1->thread.n, p1->thread.reached, (SDL_GetTicksNS() - t0) / 1e6, t.name, t.cx, t.cy, t.cz, p1->banner);
         return;
     }
+    if (!strcmp(g_demo_kind, "dig") || !strcmp(g_demo_kind, "blast")) {
+        /* the pickaxe out at a wall (docs/DESTRUCTION.md); the swings and the bomb come in
+         * screenshot_step */
+        for (int i = 0; i < MAX_MONSTERS; i++) g->mons[i].alive = false;
+        p1->pick_out = true;
+        p1->st.bombs = 5;
+        p1->banner_time = 0;
+        return;
+    }
     if (!strcmp(g_demo_kind, "parley")) {
         /* a chapter target on its knees, and the choice (docs/STORY_CHOICES.md) */
         s->motive = MOTIVE_REVENGE + 1;
@@ -1162,6 +1171,14 @@ static void screenshot_step(App *a, float frame_dt) {
         return;
     }
     const char *kind = g_demo_kind ? g_demo_kind : "";
+    if (g->opt.demo && a->demo_done && !strcmp(kind, "dig") && a->shot_wait > 0.6f && a->shot_wait < 0.6f + 0.3f * 12) {
+        static float next;
+        if (a->shot_wait >= next) { p1->st.cooldown = 0; dig_swing(g, p1); next = a->shot_wait + 0.3f; p1->pl.yaw += 0.06f; }
+    }
+    if (g->opt.demo && a->demo_done && !strcmp(kind, "blast")) {
+        static bool thrown;
+        if (!thrown && a->shot_wait > 0.6f) { thrown = true; bomb_throw(g, p1); }
+    }
     bool fight = !strcmp(kind, "combat") || !strcmp(kind, "sword") || !strcmp(kind, "death") || !strcmp(kind, "coop") ||
                  !strcmp(kind, "impact");
     bool magic = !strcmp(kind, "magic");
@@ -1487,7 +1504,7 @@ int main(int argc, char **argv) {
     while (a->running) frame(a);
     if (!a->in_menu && (!g->opt.shot || g->opt.persist)) {
         bool ok = game_save(g);
-        SDL_Log("%s the world %s", ok ? "Saved" : "Could not save", g->opt.seed_text);
+        SDL_Log("%s the world %s (%d changed blocks)", ok ? "Saved" : "Could not save", g->opt.seed_text, g->map.edits_total);
     }
     if (!a->in_menu) chunkmap_shutdown(&g->map);
     jobs_shutdown();

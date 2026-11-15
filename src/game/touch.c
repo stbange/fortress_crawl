@@ -120,7 +120,7 @@ void touch_event(Game *g, const SDL_Event *e) {
         } else {
             for (int b = 0; b < TB_COUNT && role == TOUCH_NONE; b++)
                 if (button_hit(W, H, b, x, y)) role = b;
-            if (role == TB_WEAPON) ps->st.weapon = (ps->st.weapon + 1) % WPN_COUNT;
+            if (role == TB_WEAPON) game_cycle_weapon(ps, 1);
             else if (role == TB_SKILLS) { ps->show_skills = true; ps->show_map = false; role = TOUCH_NONE; }
             else if (role == TB_MAP) { ps->show_map = true; ps->show_skills = false; role = TOUCH_NONE; }
             else if (role == TB_NEXT_SPELL) spell_next(ps, 1);

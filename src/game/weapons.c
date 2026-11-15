@@ -571,6 +571,13 @@ void weapon_draw_held(const Item *it, vec3 hand, vec3 dir, vec3 side, vec3 light
 void weapon_draw_view(Game *g, PlayerSlot *ps, vec3 light) {
     Stats *s = &ps->st;
     const Item *it = &s->equipped[s->weapon];
+    Item pick = { 0 };
+    if (ps->pick_out) { /* the pickaxe, swung like an axe */
+        pick.used = 1;
+        pick.base = WB_AXE;
+        pick.rarity = (u8)(s->pick >= 3 ? RAR_RARE : s->pick == 2 ? RAR_MAGIC : RAR_COMMON);
+        it = &pick;
+    }
     float t = s->swing_len > 0 ? 1.0f - s->swing / s->swing_len : 1.0f; /* 0 at the start of an attack */
     bool attacking = s->swing > 0;
     float walk = sinf(ps->pl.bob * 2.0f) * 0.015f;
@@ -579,7 +586,7 @@ void weapon_draw_view(Game *g, PlayerSlot *ps, vec3 light) {
     WF f = { 0 };
     f.up = v3(0, 1, 0);
     f.s = 1.0f;
-    switch (s->weapon) {
+    switch (ps->pick_out ? WPN_SWORD : s->weapon) {
     case WPN_SWORD: {
         int base = it->base;
         float reach = base == WB_GREATSWORD ? 0.85f : base == WB_DAGGER ? 1.15f : 1.0f;

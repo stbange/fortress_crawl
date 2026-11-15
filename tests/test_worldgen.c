@@ -13,6 +13,8 @@
 #include "world/layout.h"
 #include "world/story.h"
 #include "world/history.h"
+#include "world/carve.h"
+#include "game/physics.h"
 #include "world/mech.h"
 #include "world/mesher.h"
 #include "world/texgen.h"
@@ -102,6 +104,16 @@ static long flood(int sx, int sy, int sz) {
     }
     return n;
 }
+
+/* A tiny world for the physics of broken blocks: a floor at y = 0, one broken block at (5, 1, 5). */
+static u64 g_test_mask;
+static int broken_solid(void *u, int x, int y, int z) {
+    (void)u;
+    if (y <= 0) return 1;
+    if (x == 5 && y == 1 && z == 5) return 2;
+    return 0;
+}
+static u64 test_pieces(void *u, int x, int y, int z) { (void)u; (void)x; (void)y; (void)z; return g_test_mask; }
 
 int main(int argc, char **argv) {
     u64 seed = argc > 1 ? strtoull(argv[1], NULL, 10) : 1337;
@@ -557,6 +569,35 @@ int main(int argc, char **argv) {
         }
         printf("story: choices give %d texts that fit; %d killed lords changed their domains (%d emptied)\n", texts, changed, emptied);
         CHECK(lords_tested > 4, "too few lords tested");
+    }
+
+    /* 6b. the physics of broken blocks (docs/DESTRUCTION.md) */
+    {
+        phys_pieces = test_pieces;
+        /* only the lower half of the block is left: a step of 50 cm */
+        g_test_mask = 0;
+        for (int sy = 0; sy < 2; sy++)
+            for (int sz = 0; sz < 4; sz++)
+                for (int sx = 0; sx < 4; sx++) g_test_mask |= 1ULL << carve_bit(sx, sy, sz);
+        CHECK(!phys_box_free(v3(5.5f, 1.2f, 5.5f), 0.3f, 1.8f, broken_solid, NULL), "a box inside the pieces is free");
+        CHECK(phys_box_free(v3(5.5f, 1.5f, 5.5f), 0.3f, 1.8f, broken_solid, NULL), "a box standing on the half block is blocked");
+        vec3 p = v3(5.5f, 3.0f, 5.5f);
+        phys_move_axis(&p, 1, -2.5f, 0.3f, 1.8f, broken_solid, NULL);
+        CHECK(fabsf(p.y - 1.5f) < 0.01f, "falling onto the half block lands at %.3f, not 1.5", p.y);
+        vec3 q = v3(3.5f, 1.0f, 5.5f);
+        phys_move_axis(&q, 0, 3.0f, 0.3f, 0.4f, broken_solid, NULL);
+        CHECK(fabsf(q.x - (5.0f - 0.3f)) < 0.01f, "walking into the half block stops at %.3f", q.x);
+        vec3 r = v3(3.5f, 1.8f, 5.5f);
+        phys_move_axis(&r, 0, 3.0f, 0.3f, 0.1f, broken_solid, NULL);
+        CHECK(r.x > 6.0f, "above the half block the way is free (%.2f)", r.x);
+        float d = phys_raycast(v3(3.5f, 1.25f, 5.5f), v3(1, 0, 0), 5.0f, broken_solid, NULL);
+        CHECK(fabsf(d - 1.5f) < 0.06f, "a ray hits the pieces at %.2f, not 1.5", d);
+        d = phys_raycast(v3(3.5f, 1.75f, 5.5f), v3(1, 0, 0), 5.0f, broken_solid, NULL);
+        CHECK(d >= 5.0f, "a ray above the pieces hits at %.2f", d);
+        g_test_mask = 0;
+        CHECK(phys_box_free(v3(5.5f, 1.0f, 5.5f), 0.3f, 1.8f, broken_solid, NULL), "a block with no pieces left blocks");
+        phys_pieces = NULL;
+        printf("physics: broken blocks collide and cast rays by their 25 cm pieces\n");
     }
 
     /* 7. mechanisms */

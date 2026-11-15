@@ -112,6 +112,10 @@ void chunkmap_shutdown(ChunkMap *m) {
     free(m->free_list);
     free(m->index);
     free(m->offsets);
+    chunkmap_edits_clear(m);
+    free(m->edits);
+    m->edits = NULL;
+    m->edits_cap = 0;
     for (int i = 0; i < MAX_SCRATCH; i++) {
         mesh_scratch_free(g_scratch[i]);
         g_scratch[i] = NULL;
@@ -130,7 +134,7 @@ Block chunkmap_block(ChunkMap *m, int wx, int wy, int wz, bool *known) {
         return B_ROCK;
     }
     if (known) *known = true;
-    return c->blocks[cidx(floormod(wx, CHUNK), floormod(wy, CHUNK), floormod(wz, CHUNK))];
+    return c->blocks[cidx(floormod(wx, CHUNK), floormod(wy, CHUNK), floormod(wz, CHUNK))] & BLOCK_MAT;
 }
 
 bool chunkmap_light(ChunkMap *m, int wx, int wy, int wz, u8 out[4]) {
@@ -147,8 +151,79 @@ static void gen_run(Job *j, int worker) {
     world_generate_chunk(g->w, g->c->cx, g->c->cy, g->c->cz, g->c->blocks, &g->c->info);
 }
 
+/* ---------- what players changed ---------- */
+
+static ChunkEdits *edits_find(ChunkMap *m, int cx, int cy, int cz, bool create) {
+    for (int i = 0; i < m->nedits; i++)
+        if (m->edits[i].cx == cx && m->edits[i].cy == cy && m->edits[i].cz == cz) return &m->edits[i];
+    if (!create) return NULL;
+    if (m->nedits == m->edits_cap) {
+        m->edits_cap = m->edits_cap ? m->edits_cap * 2 : 64;
+        m->edits = realloc(m->edits, sizeof(ChunkEdits) * (size_t)m->edits_cap);
+    }
+    ChunkEdits *ce = &m->edits[m->nedits++];
+    memset(ce, 0, sizeof *ce);
+    ce->cx = cx; ce->cy = cy; ce->cz = cz;
+    return ce;
+}
+
+static void edits_record(ChunkMap *m, int cx, int cy, int cz, const BlockEdit *e) {
+    ChunkEdits *ce = edits_find(m, cx, cy, cz, true);
+    for (int i = 0; i < ce->n; i++)
+        if (ce->e[i].idx == e->idx) { ce->e[i] = *e; return; }
+    if (ce->n == ce->cap) {
+        ce->cap = ce->cap ? ce->cap * 2 : 32;
+        ce->e = realloc(ce->e, sizeof(BlockEdit) * (size_t)ce->cap);
+    }
+    ce->e[ce->n++] = *e;
+    m->edits_total++;
+    while (m->edits_total > EDITS_MAX_TOTAL && m->nedits > 1) {
+        /* too much: the oldest chunk's changes are forgotten (it is generated as it was) */
+        if (&m->edits[0] == ce) break;
+        m->edits_total -= m->edits[0].n;
+        free(m->edits[0].e);
+        memmove(&m->edits[0], &m->edits[1], sizeof(ChunkEdits) * (size_t)(m->nedits - 1));
+        m->nedits--;
+        ce--;
+    }
+}
+
+static void apply_edit(Chunk *c, const BlockEdit *e) {
+    c->blocks[e->idx] = e->raw;
+    if (e->raw & BLOCK_CARVED) carve_put(&c->carve, e->idx, e->mask);
+    else carve_del(c->carve, e->idx);
+    if (e->level) {
+        if (!c->fluid) c->fluid = calloc(CHUNK_VOL, 1);
+        c->fluid[e->idx] = e->level;
+    } else if (c->fluid) c->fluid[e->idx] = 0;
+}
+
+static void apply_edits(ChunkMap *m, Chunk *c) {
+    carve_free(c->carve);
+    c->carve = NULL;
+    free(c->fluid);
+    c->fluid = NULL;
+    ChunkEdits *ce = edits_find(m, c->cx, c->cy, c->cz, false);
+    if (!ce) return;
+    for (int i = 0; i < ce->n; i++) apply_edit(c, &ce->e[i]);
+}
+
+void chunkmap_edits_clear(ChunkMap *m) {
+    for (int i = 0; i < m->nedits; i++) free(m->edits[i].e);
+    m->nedits = 0;
+    m->edits_total = 0;
+}
+
+void chunkmap_edit_restore(ChunkMap *m, int cx, int cy, int cz, const BlockEdit *e) {
+    if (e->idx >= CHUNK_VOL) return;
+    edits_record(m, cx, cy, cz, e);
+    Chunk *c = chunkmap_get(m, cx, cy, cz);
+    if (c && c->state == CH_READY && c->pins == 0 && !c->mesh_queued) { apply_edit(c, e); c->remesh = true; }
+}
+
 static void gen_done(Job *j) {
     GenJob *g = (GenJob *)j;
+    apply_edits(g_map, g->c); /* (main thread: the edits are only touched here) */
     g->c->state = CH_READY;
     free(g);
 }
@@ -191,6 +266,10 @@ static bool evict(ChunkMap *m, Chunk *c) {
     renderer_free_mesh(&c->vao, &c->vbo);
     free(c->light);
     c->light = NULL;
+    carve_free(c->carve);
+    c->carve = NULL;
+    free(c->fluid);
+    c->fluid = NULL;
     c->used = false;
     c->has_mesh = false;
     c->state = CH_EMPTY;
@@ -239,6 +318,8 @@ static bool submit_mesh(ChunkMap *m, Chunk *c) {
         nb[i]->pins++;
         mj->in.blocks[i] = nb[i]->blocks;
         mj->in.info[i] = &nb[i]->info;
+        mj->in.carve[i] = nb[i]->carve;
+        mj->in.fluid[i] = nb[i]->fluid;
     }
     c->mesh_queued = true;
     jobs_submit(&mj->base);
@@ -323,8 +404,38 @@ bool chunkmap_set_block(ChunkMap *m, int wx, int wy, int wz, Block b) {
                 nb[nn++] = n;
             }
     c->blocks[cidx(lx, ly, lz)] = b;
+    if (!(b & BLOCK_CARVED)) carve_del(c->carve, cidx(lx, ly, lz)); /* (a temporary change keeps no pieces) */
     c->remesh = true;
     for (int i = 0; i < nn; i++) nb[i]->remesh = true;
+    return true;
+}
+
+Block chunkmap_block_raw(ChunkMap *m, int wx, int wy, int wz, bool *known) {
+    Chunk *c = chunkmap_get(m, floordiv(wx, CHUNK), floordiv(wy, CHUNK), floordiv(wz, CHUNK));
+    if (!c || c->state != CH_READY) {
+        if (known) *known = false;
+        return B_ROCK;
+    }
+    if (known) *known = true;
+    return c->blocks[cidx(floormod(wx, CHUNK), floormod(wy, CHUNK), floormod(wz, CHUNK))];
+}
+
+u64 chunkmap_mask(ChunkMap *m, int wx, int wy, int wz) {
+    Chunk *c = chunkmap_get(m, floordiv(wx, CHUNK), floordiv(wy, CHUNK), floordiv(wz, CHUNK));
+    if (!c || c->state != CH_READY) return CARVE_FULL;
+    int i = cidx(floormod(wx, CHUNK), floormod(wy, CHUNK), floormod(wz, CHUNK));
+    return (c->blocks[i] & BLOCK_CARVED) ? carve_get(c->carve, i) : CARVE_FULL;
+}
+
+bool chunkmap_edit(ChunkMap *m, int wx, int wy, int wz, Block raw, u64 mask, int level) {
+    if ((raw & BLOCK_CARVED) && mask == 0) raw = B_AIR;
+    if ((raw & BLOCK_CARVED) && mask == CARVE_FULL) raw &= BLOCK_MAT;
+    if (!chunkmap_set_block(m, wx, wy, wz, raw)) return false;
+    int cx = floordiv(wx, CHUNK), cy = floordiv(wy, CHUNK), cz = floordiv(wz, CHUNK);
+    Chunk *c = chunkmap_get(m, cx, cy, cz);
+    BlockEdit e = { (u16)cidx(wx - cx * CHUNK, wy - cy * CHUNK, wz - cz * CHUNK), raw, (u8)CLAMPI(level, 0, 255), mask };
+    apply_edit(c, &e);
+    edits_record(m, cx, cy, cz, &e);
     return true;
 }
 
@@ -339,6 +450,7 @@ bool chunkmap_regenerate(ChunkMap *m, int cx, int cy, int cz) {
             }
     c->gen_id = m->world->sanctum_gen;
     world_generate_chunk(m->world, cx, cy, cz, c->blocks, &c->info);
+    apply_edits(m, c);
     for (int dz = -1; dz <= 1; dz++)
         for (int dy = -1; dy <= 1; dy++)
             for (int dx = -1; dx <= 1; dx++) {

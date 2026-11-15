@@ -411,7 +411,8 @@ last and shows what is saved; *New characters* (press twice) deletes the save of
 |-----|--------|
 | WASD / mouse | move / look |
 | Left / right mouse button | attack / alternate attack (unlocked by skills) |
-| 1, 2, 3 or mouse wheel | blade, bow, staff |
+| 1, 2, 3, 4 or mouse wheel | blade, bow, staff, pickaxe (left digs, right throws a bomb) |
+| X | throw a bomb (2.2 s fuse; breaks masonry; the shop sells 3 for 90 gold) |
 | Q (or middle mouse button) | cast the selected spell (hold for breath spells) |
 | R / Shift+R | next / previous known spell |
 | H / J | drink a health / mana potion |
@@ -564,6 +565,16 @@ See [`docs/PLAN.md`](docs/PLAN.md) section 3 for the full tables.
 To look at a far place: `--pos x y z --fly --demo place` puts you on the most open floor of
 that chunk, for example `./build/fortress_crawl --pos 16 8 -3024 --fly --demo place` (90
 chunks north).
+
+## Digging and blasting
+
+Every block is made of 4x4x4 pieces of 25 cm, and most of them break. The pickaxe (key 4)
+chips rock, ore, wood, earth and ice away a few pieces at a time; bombs (X) blow craters into
+masonry floors and walls as well. Bloaters bursting tear soft things apart. Blocks left with
+only a few pieces crumble, and a piece of ceiling or wall that is no longer held by anything
+falls. Ore and plants drop what they hold. Vaults, shrines, the Sanctum, stairwells and the
+outside walls do not break. What you break stays broken, also after saving.
+See [docs/DESTRUCTION.md](docs/DESTRUCTION.md).
 
 ## Weapons
 

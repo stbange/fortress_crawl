@@ -5,6 +5,7 @@
 #include "engine/gl.h"
 #include "render/renderer.h"
 #include "world/layout.h"
+#include "world/carve.h"
 
 /* Streams chunks around one or more centres (one per player, so split-screen
  * players can roam freely). Generation and meshing run on worker threads,
@@ -29,7 +30,15 @@ typedef struct Chunk {
     int pins; /* mesh jobs currently reading this chunk */
     bool remesh; /* a block changed: build the mesh again */
     u32 gen_id;  /* the world's sanctum_gen when it was generated */
+    CarveSet *carve; /* the pieces of its broken blocks, or NULL */
+    u8 *fluid;   /* water levels 1..8 per cell (0: as generated), or NULL (sim.c) */
 } Chunk;
+
+/* What players changed in the world, kept per chunk and laid over the generated blocks
+ * whenever a chunk is generated (docs/DESTRUCTION.md). Saved with the world. */
+typedef struct BlockEdit { u16 idx; u8 raw; u8 level; u64 mask; } BlockEdit;
+typedef struct ChunkEdits { int cx, cy, cz; int n, cap; BlockEdit *e; } ChunkEdits;
+#define EDITS_MAX_TOTAL 60000 /* beyond this the oldest chunks' changes are forgotten */
 
 typedef struct ChunkStats {
     int loaded, ready, meshed, drawn, jobs;
@@ -47,6 +56,8 @@ typedef struct ChunkMap {
     int (*offsets)[3];
     int noffsets;
     ChunkStats stats;
+    ChunkEdits *edits;
+    int nedits, edits_cap, edits_total;
 } ChunkMap;
 
 void chunkmap_init(ChunkMap *m, const World *w, Renderer *r, int rh, int rv);
@@ -69,6 +80,16 @@ bool chunkmap_light(ChunkMap *m, int wx, int wy, int wz, u8 out[4]);
  * again. False if the chunk is not loaded or is being read by a job right now: try again
  * later. Spells use it for temporary walls, bridges and tunnels. */
 bool chunkmap_set_block(ChunkMap *m, int wx, int wy, int wz, Block b);
+/* The raw block (with BLOCK_CARVED) and the pieces left of a cell (CARVE_FULL if whole). */
+Block chunkmap_block_raw(ChunkMap *m, int wx, int wy, int wz, bool *known);
+u64 chunkmap_mask(ChunkMap *m, int wx, int wy, int wz);
+/* A lasting change: sets a cell (raw block, and its pieces if carved; a fluid level 1..8 or 0)
+ * and records it so it survives the chunk being unloaded and generated again. False if the
+ * chunk is not loaded or busy (try again later). A carved mask of 0 leaves air. */
+bool chunkmap_edit(ChunkMap *m, int wx, int wy, int wz, Block raw, u64 mask, int level);
+/* Saving and loading the edits. */
+void chunkmap_edits_clear(ChunkMap *m);
+void chunkmap_edit_restore(ChunkMap *m, int cx, int cy, int cz, const BlockEdit *e);
 /* True once every chunk within the mesh radius has a mesh. */
 bool chunkmap_settled(ChunkMap *m, vec3 pos);
 

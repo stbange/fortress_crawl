@@ -789,12 +789,14 @@ void combat_update(Game *g, float dt) {
             /* struck a lever, a statue or a mirror */
             s->cooldown = s->swing_len = s->swing = 0.45f;
             s->swing_kind = 0;
-        } else if (attack) try_attack(g, ps, false);
+        } else if (ps->pick_out) dig_update(g, ps, attack, alt); /* the pickaxe: dig, or throw a bomb */
+        else if (attack) try_attack(g, ps, false);
         else if (alt) try_attack(g, ps, true);
         bool spell = (ps->keyboard && ps->spell_held && (g->mouse || g->opt.demo)) || ps->pad_spell || (touch && g->touch.held[TB_SPELL]);
         if (spell) spell_cast(g, ps);
     }
     spells_update(g, dt);
+    bombs_update(g, dt);
     pickups_update(g, dt);
     update_projectiles(g, dt);
     update_particles(g, dt);
@@ -803,6 +805,7 @@ void combat_update(Game *g, float dt) {
 /* ---------- drawing ---------- */
 
 void combat_draw_world(Game *g, vec3 eye) {
+    bombs_draw(g);
     for (int i = 0; i < MAX_PROJECTILES; i++) {
         Projectile *p = &g->proj[i];
         if (!p->alive) continue;
@@ -918,4 +921,11 @@ void combat_draw_viewmodel(Game *g, PlayerSlot *ps) {
     (void)WEAPON_NAMES;
 }
 
-const char *combat_weapon_name(int w) { return WEAPON_NAMES[w]; }
+const char *combat_weapon_name(int w) { return w >= 0 && w < WPN_COUNT ? WEAPON_NAMES[w] : "PICKAXE"; }
+
+void game_cycle_weapon(PlayerSlot *ps, int dir) {
+    int cur = ps->pick_out ? WPN_COUNT : ps->st.weapon;
+    cur = (cur + dir + WPN_COUNT + 1) % (WPN_COUNT + 1);
+    ps->pick_out = cur == WPN_COUNT;
+    if (!ps->pick_out) ps->st.weapon = cur;
+}

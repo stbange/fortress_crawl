@@ -80,6 +80,7 @@ add_executable(fortress_crawl
   src/game/food.c
   src/game/alchemy.c
   src/game/forge.c
+  src/game/dig.c
   src/game/wildlife.c
   src/game/monster_draw.c
   src/game/combat.c
@@ -121,7 +122,7 @@ if(EMSCRIPTEN)
 endif()
 
 if(FC_BUILD_TESTS)
-  add_executable(test_worldgen tests/test_worldgen.c)
+  add_executable(test_worldgen tests/test_worldgen.c src/game/physics.c)
   target_link_libraries(test_worldgen PRIVATE fcworld)
   target_compile_options(test_worldgen PRIVATE ${FC_WARN})
 

@@ -234,6 +234,10 @@ static int shop_items(Game *g, PlayerSlot *ps, ShopItem *out) {
         bool sold = looted_has(g, merchant_key(g, 97) ^ (u64)ps->index);
         add(out, &n, SH_RECIPE, 0, 300, unknown && !sold, unknown ? "ONE A DAY: MORE TOMORROW" : "YOU KNOW THEM ALL", "THE COOK: A RECIPE YOU DO NOT KNOW");
     }
+    /* tools for breaking the world (docs/DESTRUCTION.md) */
+    add(out, &n, SH_SUPPLY, 100, 90, s->bombs + 3 <= 30, "YOU CARRY ALL YOU CAN", "3 BOMBS: THEY BREAK MASONRY (YOU HAVE %d)", s->bombs);
+    if (s->pick < 3)
+        add(out, &n, SH_SUPPLY, 101, s->pick == 1 ? 400 : 1500, true, NULL, s->pick == 1 ? "A STEEL PICKAXE: DIGS FASTER" : "A MITHRIL PICKAXE: DIGS FASTEST");
     /* the smith (with the forge): the supplies that are only bought, and two metals */
     if (sanctum_stage(g, SP_FORGE) >= 1 && sanctum_stage(g, SP_ISLAND) >= 2) {
         static const struct { int m, n, price; } SUP[] = { { FG_CHARCOAL, 5, 100 }, { FG_FLUX, 1, 80 }, { FG_QUENCH_OIL, 1, 150 }, { FG_RUNE_INK, 1, 300 }, { FG_STEEL, 1, 200 }, { FG_IRON, 1, 50 } };
@@ -425,6 +429,16 @@ static void buy(Game *g, PlayerSlot *ps, const ShopItem *it) {
     }
     case SH_SUPPLY: {
         static const int M[] = { FG_CHARCOAL, FG_FLUX, FG_QUENCH_OIL, FG_RUNE_INK, FG_STEEL, FG_IRON }, N[] = { 5, 1, 1, 1, 1, 1 };
+        if (it->arg == 100) {
+            ps->st.bombs += 3;
+            snprintf(buf, sizeof buf, "3 BOMBS (%d) - X OR THE PICKAXE'S ALTERNATE ATTACK THROWS ONE", ps->st.bombs);
+            break;
+        }
+        if (it->arg == 101) {
+            ps->st.pick = (u8)MINI(ps->st.pick + 1, 3);
+            snprintf(buf, sizeof buf, "%s - KEY 4 TAKES IT OUT", dig_pick_name(&ps->st));
+            break;
+        }
         if (it->arg == 99) {
             looted_mark(g, merchant_key(g, 96) ^ (u64)ps->index);
             forge_give(g, ps, FG_MOONSILVER, 1);

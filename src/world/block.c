@@ -31,3 +31,14 @@ const BlockDef BLOCKS[B_COUNT] = {
     [B_BONES]   = { "bones", RENDER_CROSS, false, false, false, 0, 0, false },
     [B_GRASS]   = { "grass", RENDER_CROSS, false, false, false, 0, 0, false },
 };
+
+const u8 BLOCK_HARDNESS[B_COUNT] = {
+    [B_AIR] = HARD_NEVER,      [B_ROCK] = HARD_ROCK,     [B_WALL] = HARD_MASONRY,  [B_FLOOR] = HARD_MASONRY,
+    [B_CEIL] = HARD_MASONRY,   [B_PILLAR] = HARD_MASONRY, [B_WOOD] = HARD_SOFT,    [B_METAL] = HARD_METAL,
+    [B_ACCENT] = HARD_MASONRY, [B_DIRT] = HARD_SOFT,     [B_LAVA] = HARD_NEVER,    [B_WATER] = HARD_NEVER,
+    [B_CRYSTAL] = HARD_ROCK,   [B_ICE] = HARD_SOFT,      [B_BRAZIER] = HARD_METAL, [B_GLASS] = HARD_SOFT,
+    [B_ROOF] = HARD_MASONRY,   [B_ORE] = HARD_ROCK,      [B_SHRINE] = HARD_NEVER,  [B_TORCH] = HARD_SOFT,
+    [B_FIRE] = HARD_NEVER,     [B_WEB] = HARD_SOFT,      [B_CHAIN] = HARD_METAL,   [B_BARS] = HARD_METAL,
+    [B_ROOTS] = HARD_SOFT,     [B_FUNGUS] = HARD_SOFT,   [B_LANTERN] = HARD_SOFT,  [B_BONES] = HARD_SOFT,
+    [B_GRASS] = HARD_SOFT,
+};

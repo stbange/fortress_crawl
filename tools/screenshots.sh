@@ -84,6 +84,10 @@ shot story_choice     --demo parley --cast 2
 shot story_finale     --demo parley --cast 9
 SHOT_TIME=4 shot story_residents --demo residents --look 90 -8
 
+# ---- digging and blasting ----
+SHOT_TIME=5 shot dig --demo dig
+SHOT_TIME=5 shot blast --demo blast --pos 8 7.5 0.5 --look 0 -12
+
 # ---- the Sanctum: ruin, door, built, hall, decorations, shop, forge ----
 shot sanctum          --demo sanctum --cast 0
 shot sanctum_sky      --demo realm --pos 64.5 9625 30 --look 167 55 --fly

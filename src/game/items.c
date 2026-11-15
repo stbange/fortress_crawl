@@ -169,6 +169,8 @@ void items_give_start(Stats *s) {
     s->equipped[WPN_SWORD] = start_weapon(WB_SWORD);
     s->equipped[WPN_BOW] = start_weapon(WB_SHORTBOW);
     s->equipped[WPN_STAFF] = start_weapon(WB_STAFF);
+    s->pick = 1; /* everyone carries an iron pickaxe */
+    s->bombs = 2;
     s->potions_hp = 2;
     s->potions_mp = 1;
     s->formulae = ELIXIRS_START; /* two formulae every alchemist knows */

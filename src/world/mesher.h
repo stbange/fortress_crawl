@@ -2,6 +2,7 @@
 #define FC_MESHER_H
 
 #include "world/layout.h"
+#include "world/carve.h"
 
 /* 16-byte vertex. Positions are chunk-local in 1/8 m units. */
 typedef struct MeshVertex {
@@ -32,6 +33,8 @@ typedef struct MeshInput {
     /* 3x3x3 neighbourhood, index (dx+1) + (dy+1)*3 + (dz+1)*9; NULL = treat as rock */
     const Block *blocks[27];
     const ChunkInfo *info[27];
+    const CarveSet *carve[27]; /* the pieces of broken blocks */
+    const u8 *fluid[27];       /* fluid levels (sim.c), or NULL: whole cells */
     int tile_base; /* first atlas tile of the centre chunk's theme */
 } MeshInput;
 

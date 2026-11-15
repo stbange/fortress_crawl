@@ -3,8 +3,10 @@
 
 #include "core/fmath.h"
 
-/* Returns 1 for solid, 0 for free, -1 for not loaded yet (treated as solid). */
+/* Returns 1 for solid, 0 for free, -1 for not loaded yet (treated as solid), 2 for a block
+ * broken into pieces: then phys_pieces tells which of its 4x4x4 pieces of 25 cm are there. */
 typedef int (*SolidFn)(void *user, int x, int y, int z);
+extern u64 (*phys_pieces)(void *user, int x, int y, int z);
 
 /* Axis-aligned box standing on pos (feet centre), half width hw, height h. */
 bool phys_box_free(vec3 pos, float hw, float h, SolidFn solid, void *user);

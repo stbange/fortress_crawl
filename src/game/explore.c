@@ -183,7 +183,7 @@ void explore_draw_map(Game *g, PlayerSlot *ps, int w, int h) {
                 float depth = clampf(1.0f - (pyw - y) * 0.12f, 0.35f, 1.0f);
                 if (y > pyw) depth = 1.0f - (y - pyw) * 0.12f;
                 if (b == B_WATER) batch2d_rect(fx, fy, (float)px, (float)px, 0.15f * depth, 0.3f * depth, 0.55f * depth, 1.0f);
-                else if (b == B_SHRINE || BLOCKS[b].light) batch2d_rect(fx, fy, (float)px, (float)px, 1.0f, 0.75f, 0.3f, 1.0f);
+                else if (b == B_SHRINE || BLOCKS[b & BLOCK_MAT].light) batch2d_rect(fx, fy, (float)px, (float)px, 1.0f, 0.75f, 0.3f, 1.0f);
                 else batch2d_rect(fx, fy, (float)px, (float)px, 0.72f * depth, 0.66f * depth, 0.52f * depth, 1.0f);
                 seen_air = false;
                 break;

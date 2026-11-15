@@ -54,7 +54,7 @@ static void compute_light(const MeshInput *in, MeshScratch *s) {
         for (int pz = 0; pz < MESH_P; pz++)
             for (int px = 0; px < MESH_P; px++) {
                 int i = pidx(px, py, pz);
-                const BlockDef *bd = &BLOCKS[s->blocks[i]];
+                const BlockDef *bd = &BLOCKS[s->blocks[i] & BLOCK_MAT];
                 if (!bd->light) continue;
                 int ci = chunk_of(px) + chunk_of(py) * 3 + chunk_of(pz) * 9;
                 if (!in->info[ci]) continue;
@@ -179,18 +179,18 @@ static void face_vertex_light(const MeshScratch *s, int px, int py, int pz, int 
 }
 
 static void emit_face(VBuf *vb, const MeshScratch *s, int x, int y, int z, int face, Block b, u16 tile,
-                      float tint, bool liquid_top) {
+                      float tint, int liquid_drop) {
     int px = x + MESH_PAD, py = y + MESH_PAD, pz = z + MESH_PAD;
     MeshVertex v[4];
     int ao[4];
-    bool emissive = BLOCKS[b].emissive;
+    bool emissive = BLOCKS[b & BLOCK_MAT].emissive;
     for (int k = 0; k < 4; k++) {
         const int *c = FACE_CORNERS[face][k];
         float l[4];
         face_vertex_light(s, px, py, pz, face, c, l, &ao[k]);
         float shade = FACE_SHADE[face] * AO_CURVE[ao[k]] * tint;
         v[k].x = (i16)((x + c[0]) * 8);
-        v[k].y = (i16)((y + c[1]) * 8 - ((liquid_top && c[1]) ? 1 : 0));
+        v[k].y = (i16)((y + c[1]) * 8 - (c[1] ? liquid_drop : 0));
         v[k].z = (i16)((z + c[2]) * 8);
         v[k].u = FACE_UV[k][0];
         v[k].v = FACE_UV[k][1];
@@ -201,7 +201,7 @@ static void emit_face(VBuf *vb, const MeshScratch *s, int x, int y, int z, int f
         v[k].b = (u8)clampf(brightness(l[2]) * shade * 255.0f, 0, 255);
         v[k].f = (u8)clampf(l[3] / 15.0f * 255.0f, 0, 255);
         v[k].n = (u8)face;
-        v[k].flags = (u8)((emissive ? VF_EMISSIVE : 0) | (BLOCKS[b].render == RENDER_LIQUID ? VF_LIQUID : 0));
+        v[k].flags = (u8)((emissive ? VF_EMISSIVE : 0) | (BLOCKS[b & BLOCK_MAT].render == RENDER_LIQUID ? VF_LIQUID : 0));
         if (emissive) { v[k].r = v[k].g = v[k].b = (u8)(255 * shade); }
     }
     MeshVertex *q = vb_quad(vb);
@@ -247,6 +247,70 @@ static void emit_sprite(VBuf *vb, const MeshScratch *s, int x, int y, int z, Blo
     }
 }
 
+/* ---------- broken blocks: their 25 cm pieces ---------- */
+
+/* The pieces of a cell of the padded neighbourhood (only blocks with BLOCK_CARVED have any). */
+static u64 cell_mask(const MeshInput *in, const MeshScratch *s, int px, int py, int pz) {
+    Block b = s->blocks[pidx(px, py, pz)];
+    if (!(b & BLOCK_CARVED)) return block_opaque(b) ? CARVE_FULL : 0;
+    int x = px - MESH_PAD, y = py - MESH_PAD, z = pz - MESH_PAD;
+    int cx = x < 0 ? -1 : (x >= CHUNK ? 1 : 0), cy = y < 0 ? -1 : (y >= CHUNK ? 1 : 0), cz = z < 0 ? -1 : (z >= CHUNK ? 1 : 0);
+    const CarveSet *cs = in->carve[(cx + 1) + (cy + 1) * 3 + (cz + 1) * 9];
+    return carve_get(cs, cidx(x - cx * CHUNK, y - cy * CHUNK, z - cz * CHUNK));
+}
+
+static void emit_pieces(VBuf *vb, const MeshInput *in, const MeshScratch *s, int x, int y, int z, Block b, u16 tile, float tint) {
+    int px = x + MESH_PAD, py = y + MESH_PAD, pz = z + MESH_PAD;
+    u64 mask = cell_mask(in, s, px, py, pz);
+    if (!mask) return;
+    const u8 *l = &s->light[pidx(px, py, pz) * 4];
+    u64 nb[6];
+    for (int f = 0; f < 6; f++) nb[f] = cell_mask(in, s, px + FACE_N[f][0], py + FACE_N[f][1], pz + FACE_N[f][2]);
+    bool emissive = BLOCKS[b & BLOCK_MAT].emissive;
+    for (int sy = 0; sy < 4; sy++)
+        for (int sz = 0; sz < 4; sz++)
+            for (int sx = 0; sx < 4; sx++) {
+                if (!(mask >> carve_bit(sx, sy, sz) & 1)) continue;
+                for (int f = 0; f < 6; f++) {
+                    int qx = sx + FACE_N[f][0], qy = sy + FACE_N[f][1], qz = sz + FACE_N[f][2];
+                    bool inside = qx >= 0 && qx < 4 && qy >= 0 && qy < 4 && qz >= 0 && qz < 4;
+                    u64 m = inside ? mask : nb[f];
+                    int bit = carve_bit((qx + 4) & 3, (qy + 4) & 3, (qz + 4) & 3);
+                    if (m >> bit & 1) continue; /* hidden by a piece next to it */
+                    float shade = FACE_SHADE[f] * tint * (inside ? 0.85f : 1.0f);
+                    MeshVertex *q = vb_quad(vb);
+                    for (int k = 0; k < 4; k++) {
+                        const int *c = FACE_CORNERS[f][k];
+                        int vx = sx + c[0], vy = sy + c[1], vz = sz + c[2];
+                        q[k].x = (i16)(x * 8 + vx * 2);
+                        q[k].y = (i16)(y * 8 + vy * 2);
+                        q[k].z = (i16)(z * 8 + vz * 2);
+                        if (f == 2 || f == 3) { q[k].u = (u8)(vx * 4); q[k].v = (u8)(vz * 4); }
+                        else if (f <= 1) { q[k].u = (u8)(vz * 4); q[k].v = (u8)(16 - vy * 4); }
+                        else { q[k].u = (u8)(vx * 4); q[k].v = (u8)(16 - vy * 4); }
+                        q[k].tile = tile;
+                        q[k].r = (u8)clampf(brightness(l[0]) * shade * 255.0f, 0, 255);
+                        q[k].g = (u8)clampf(brightness(l[1]) * shade * 255.0f, 0, 255);
+                        q[k].b = (u8)clampf(brightness(l[2]) * shade * 255.0f, 0, 255);
+                        q[k].f = (u8)clampf(l[3] / 15.0f * 255.0f, 0, 255);
+                        q[k].n = (u8)f;
+                        q[k].flags = emissive ? VF_EMISSIVE : 0;
+                        if (emissive) q[k].r = q[k].g = q[k].b = (u8)(255 * shade);
+                    }
+                }
+            }
+}
+
+/* How far a liquid's top sits below the top of its cell, in 1/8 m (sim.c's levels). */
+static int liquid_drop(const MeshInput *in, const MeshScratch *s, int x, int y, int z) {
+    const u8 *fl = in->fluid[13];
+    int level = fl ? fl[cidx(x, y, z)] : 0;
+    if (!level) level = 8;
+    /* a liquid with liquid above it fills its cell */
+    if (block_mat(s->blocks[pidx(x + MESH_PAD, y + MESH_PAD + 1, z + MESH_PAD)]) == block_mat(s->blocks[pidx(x + MESH_PAD, y + MESH_PAD, z + MESH_PAD)])) return 0;
+    return MAXI(1, 8 - level + (level == 8 ? 1 : 0));
+}
+
 void mesh_build(const MeshInput *in, MeshScratch *s, MeshOutput *out) {
     gather(in, s);
     compute_light(in, s);
@@ -257,11 +321,16 @@ void mesh_build(const MeshInput *in, MeshScratch *s, MeshOutput *out) {
         for (int z = 0; z < CHUNK; z++)
             for (int x = 0; x < CHUNK; x++) {
                 int px = x + MESH_PAD, py = y + MESH_PAD, pz = z + MESH_PAD;
-                Block b = s->blocks[pidx(px, py, pz)];
+                Block raw = s->blocks[pidx(px, py, pz)];
+                Block b = raw & BLOCK_MAT;
                 const BlockDef *bd = &BLOCKS[b];
                 if (bd->render == RENDER_NONE) continue;
                 u64 h = hash3(0x7A11, ox + x, oy + y, oz + z, 9);
                 u16 tile = (u16)(in->tile_base + b * TEX_VARIANTS + (int)(h % TEX_VARIANTS));
+                if (raw & BLOCK_CARVED) {
+                    emit_pieces(&solid, in, s, x, y, z, b, tile, 0.93f + 0.1f * hash_unit(h >> 3));
+                    continue;
+                }
                 if (bd->render == RENDER_CROSS) {
                     emit_sprite(&sprite, s, x, y, z, b, tile);
                     continue;
@@ -271,9 +340,8 @@ void mesh_build(const MeshInput *in, MeshScratch *s, MeshOutput *out) {
                 for (int f = 0; f < 6; f++) {
                     Block nb = s->blocks[pidx(px + FACE_N[f][0], py + FACE_N[f][1], pz + FACE_N[f][2])];
                     if (block_opaque(nb)) continue;
-                    if (liquid && nb == b) continue;
-                    bool liquid_top = liquid && f == 2;
-                    emit_face(&solid, s, x, y, z, f, b, tile, tint, liquid_top);
+                    if (liquid && (nb & BLOCK_MAT) == b) continue;
+                    emit_face(&solid, s, x, y, z, f, b, tile, tint, liquid ? liquid_drop(in, s, x, y, z) : 0);
                 }
             }
     out->light = malloc((size_t)CHUNK_VOL * 4);

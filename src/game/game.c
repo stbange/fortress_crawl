@@ -11,11 +11,15 @@ static const vec3 PLAYER_COLORS[MAX_PLAYERS] = {
 int game_solid(void *user, int x, int y, int z) {
     Game *g = user;
     bool known;
-    Block b = chunkmap_block(&g->map, x, y, z, &known);
+    Block b = chunkmap_block_raw(&g->map, x, y, z, &known);
     if (!known) return -1;
-    if (block_solid(b)) return 1;
+    if (block_solid(b)) return block_carved(b) ? 2 : 1; /* 2: broken, only its pieces are solid */
     return mech_solid(g, x, y, z) ? 1 : 0;
 }
+
+/* The pieces left of a broken block (physics.h). */
+static u64 game_pieces(void *user, int x, int y, int z) { return chunkmap_mask(&((Game *)user)->map, x, y, z); }
+
 
 void (*g_note_hook)(int player, const char *kind, const char *text);
 
@@ -69,6 +73,7 @@ static void stats_init(PlayerSlot *ps) {
 }
 
 void game_init(Game *g, vec3 start, float yaw) {
+    phys_pieces = game_pieces; /* collisions see the pieces of broken blocks */
     g->start_pos = start;
     g->start_yaw = yaw;
     PlayerSlot *p1 = game_add_player(g);
@@ -491,8 +496,7 @@ void game_event(Game *g, const SDL_Event *e) {
         if (e->button.button == SDL_BUTTON_LEFT) ps->attack_held = down;
         if (e->button.button == SDL_BUTTON_RIGHT) ps->alt_held = down;
     } else if (e->type == SDL_EVENT_MOUSE_WHEEL && !ps->show_skills) {
-        int d = e->wheel.y > 0 ? WPN_COUNT - 1 : 1;
-        ps->st.weapon = (ps->st.weapon + d) % WPN_COUNT;
+        game_cycle_weapon(ps, e->wheel.y > 0 ? -1 : 1);
     } else if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat) {
         SDL_Keycode k = e->key.key;
         if (story_parley_open(ps)) {
@@ -537,9 +541,11 @@ void game_event(Game *g, const SDL_Event *e) {
         case SDLK_O: open_menu(ps, TAB_ALCHEMY); break;
         case SDLK_U: open_menu(ps, TAB_FORGE); break;
         case SDLK_M: ps->show_map = !ps->show_map; ps->show_skills = false; break;
-        case SDLK_1: ps->st.weapon = WPN_SWORD; break;
-        case SDLK_2: ps->st.weapon = WPN_BOW; break;
-        case SDLK_3: ps->st.weapon = WPN_STAFF; break;
+        case SDLK_1: ps->st.weapon = WPN_SWORD; ps->pick_out = false; break;
+        case SDLK_2: ps->st.weapon = WPN_BOW; ps->pick_out = false; break;
+        case SDLK_3: ps->st.weapon = WPN_STAFF; ps->pick_out = false; break;
+        case SDLK_4: ps->pick_out = true; break;
+        case SDLK_X: bomb_throw(g, ps); break;
         case SDLK_F1: g->hud = !g->hud; break;
         case SDLK_F9: sfx_toggle_mute(); game_banner(ps, sfx_muted() ? "SOUND OFF (F9)" : "SOUND ON (F9)"); break;
         case SDLK_F10: music_toggle(); game_banner(ps, music_on() ? "MUSIC ON (F10)" : "MUSIC OFF (F10)"); break;
@@ -665,8 +671,8 @@ static void read_pad(Game *g, PlayerSlot *ps, PlayerInput *in, float dt) {
     if (PRESSED(SDL_GAMEPAD_BUTTON_DPAD_DOWN)) drink_potion(g, ps, true);
     ps->pad_spell = HELD(SDL_GAMEPAD_BUTTON_WEST) != 0;
     if (PRESSED(SDL_GAMEPAD_BUTTON_BACK)) { ps->show_map = true; ps->show_skills = false; }
-    if (PRESSED(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER)) ps->st.weapon = (ps->st.weapon + 1) % WPN_COUNT;
-    if (PRESSED(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER)) ps->st.weapon = (ps->st.weapon + WPN_COUNT - 1) % WPN_COUNT;
+    if (PRESSED(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER)) game_cycle_weapon(ps, 1);
+    if (PRESSED(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER)) game_cycle_weapon(ps, -1);
     if (PRESSED(SDL_GAMEPAD_BUTTON_LEFT_STICK)) ps->sprint_toggle = !ps->sprint_toggle;
     if (PRESSED(SDL_GAMEPAD_BUTTON_RIGHT_STICK)) game_thread_key(g, ps);
     if (fabsf(lx) < 0.1f && fabsf(ly) < 0.1f) ps->sprint_toggle = false;
@@ -1068,17 +1074,20 @@ static void draw_hud(Game *g, PlayerSlot *ps, int W, int H) {
     }
     if (touch) {
         /* the lower right belongs to the buttons */
-        font_text(6, H - 36, combat_weapon_name(s->weapon), 1.0f, 0.85f, 0.6f);
+        font_text(6, H - 36, ps->pick_out ? dig_pick_name(s) : combat_weapon_name(s->weapon), 1.0f, 0.85f, 0.6f);
     } else if (small) {
-        const char *wn = combat_weapon_name(s->weapon);
+        const char *wn = ps->pick_out ? "PICKAXE" : combat_weapon_name(s->weapon);
         font_text(W - font_text_width(wn) - 5, H - 14, wn, 1.0f, 0.85f, 0.6f);
     } else {
         int x = W - 5;
+        snprintf(buf, sizeof buf, s->bombs ? "4 PICKAXE (%d BOMBS)" : "4 PICKAXE", s->bombs);
+        x -= font_text_width(buf) + 8;
+        font_text(x + 8, H - 14, buf, ps->pick_out ? 1.0f : 0.45f, ps->pick_out ? 0.9f : 0.42f, ps->pick_out ? 0.7f : 0.38f);
         for (int w = WPN_COUNT - 1; w >= 0; w--) {
             snprintf(buf, sizeof buf, "%d %s", w + 1, WEAPON_BASES[s->equipped[w].base].name);
             x -= font_text_width(buf) + 8;
             vec3 rc = rarity_color(s->equipped[w].rarity);
-            float c = w == s->weapon ? 1.0f : 0.45f;
+            float c = w == s->weapon && !ps->pick_out ? 1.0f : 0.45f;
             font_text(x + 8, H - 14, buf, rc.x * c, rc.y * c, rc.z * c);
         }
     }

@@ -192,6 +192,14 @@ typedef struct LoreEntry {
     char *text;  /* generated on first display (not saved) */
 } LoreEntry;
 
+#define MAX_BOMBS 16
+typedef struct Bomb {
+    bool alive;
+    vec3 pos, vel;
+    float fuse;
+    int owner, level;
+} Bomb;
+
 typedef struct Stats {
     float hp, maxhp, mana, maxmana;
     int level, points, kills;
@@ -256,6 +264,8 @@ typedef struct Stats {
      * (PT_* and PE_* bits) */
     u8 forge[FG_COUNT];
     int smith_xp;
+    u8 pick;   /* the pickaxe: 1 iron, 2 steel, 3 mithril (docs/DESTRUCTION.md) */
+    int bombs;
     u32 blueprints;
     u16 runes_t, runes_e;
     /* story (per character) */
@@ -406,6 +416,8 @@ typedef struct PlayerSlot {
     char domain_name[STORY_NAME];
     int motive_sel, story_scroll;
     int parley, parley_sel; /* 1 + the monster that yielded to this player, the choice under the cursor */
+    bool pick_out;          /* the pickaxe in hand (the fourth slot): attack digs, the alternate throws a bomb */
+    float bomb_cd;
     int shop_sel;
     int food_sel;           /* the FOOD tab's row */
     u8 pot[4];              /* ingredients in the pot (food ids) */
@@ -522,6 +534,7 @@ typedef struct Game {
     int nlore;
     u32 story_answers; /* the questions of the world's history answered so far (history.h) */
     bool parley_hold;  /* someone is choosing: monsters wait (co-op; alone, the game pauses) */
+    Bomb bombs[MAX_BOMBS];
     bool world_started;
     bool freeze_monsters; /* screenshot demos: monsters stand still */
     /* utility spells (utility.c): timed changes to the world, cells only monsters cannot pass */
@@ -843,6 +856,20 @@ void forge_draw(Game *g, PlayerSlot *ps, int W, int H, int top);
 void forge_draw_mat(int m, vec3 c, float yaw, vec3 light);
 void forge_monster_drop(Game *g, const Monster *m);
 bool forge_mine(Game *g, PlayerSlot *ps, int x, int y, int z); /* a blow on an ore vein */
+
+/* dig.c: breaking the world (docs/DESTRUCTION.md) */
+bool dig_protected(Game *g, int x, int y, int z);
+/* Breaks the pieces within r of p that yield to power (HARD_*); returns how many. */
+int world_break_sphere(Game *g, PlayerSlot *ps, vec3 p, float r, int power);
+void world_explode(Game *g, vec3 p, float radius, int power, float dmg, int owner);
+void bomb_throw(Game *g, PlayerSlot *ps);
+void bombs_update(Game *g, float dt);
+void bombs_draw(Game *g);
+void dig_swing(Game *g, PlayerSlot *ps);
+void dig_update(Game *g, PlayerSlot *ps, bool attack, bool alt);
+const char *dig_pick_name(const Stats *s);
+/* The next or previous of the four slots: blade, bow, staff, pickaxe. */
+void game_cycle_weapon(PlayerSlot *ps, int dir);
 bool forge_start(Game *g, PlayerSlot *ps, bool reforge);
 void forge_strike(Game *g, PlayerSlot *ps);
 void forge_bellows(Game *g, PlayerSlot *ps);

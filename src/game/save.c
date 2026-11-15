@@ -11,7 +11,7 @@
  * user's preference folder. The world itself never needs saving: the seed rebuilds it. */
 
 #define SAVE_MAGIC 0x56534346u /* "FCSV" */
-#define SAVE_VERSION 14 /* 14: the ledger of deeds (choices); 13: the story generator of the world; 12: the forge (materials, smithing, blueprints, runes); 11: the Sanctum's decorations, keystones bought; 10: meal variety, toxicity, torn formulae; 9: alchemy (reagents, elixirs, formulae, the elixir working); 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms;
+#define SAVE_VERSION 15 /* 15: what was broken in the world, the pickaxe and bombs; 14: the ledger of deeds (choices); 13: the story generator of the world; 12: the forge (materials, smithing, blueprints, runes); 11: the Sanctum's decorations, keystones bought; 10: meal variety, toxicity, torn formulae; 9: alchemy (reagents, elixirs, formulae, the elixir working); 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms;
                           6: weapons with materials, powers, legendaries and memory; 7: the Sanctum per world (written by one
                           build still marked 6); 8: food (the larder, dishes, recipes, the meal) */
 #define EXPLORED_BUDGET (1200 * 1024)
@@ -182,6 +182,8 @@ static void write_player(Buf *b, const Stats *s, const Player *pl) {
     w32(b, (u32)s->smith_xp);
     w32(b, s->blueprints);
     w16(b, s->runes_t); w16(b, s->runes_e);
+    /* v15: the pickaxe and bombs */
+    w8(b, s->pick); w16(b, (u16)s->bombs);
 }
 
 /* Explored cells: per chunk a 512-byte mask of the non-zero bytes, then those bytes. */
@@ -269,6 +271,17 @@ bool game_save(Game *g) {
         w8(&b, d->kind); w8(&b, d->chapter); w8(&b, d->choice); w8(&b, d->by); w8(&b, d->flags);
         w16(&b, (u16)d->gx); w16(&b, (u16)d->gy); w16(&b, (u16)d->gz);
         w64(&b, d->key);
+    }
+    /* v15: what players broke and changed in the world */
+    w16(&b, (u16)g->map.nedits);
+    for (int i = 0; i < g->map.nedits; i++) {
+        const ChunkEdits *ce = &g->map.edits[i];
+        w32(&b, (u32)ce->cx); w32(&b, (u32)ce->cy); w32(&b, (u32)ce->cz);
+        w32(&b, (u32)ce->n);
+        for (int k = 0; k < ce->n; k++) {
+            w16(&b, ce->e[k].idx); w8(&b, ce->e[k].raw); w8(&b, ce->e[k].level);
+            if (ce->e[k].raw & BLOCK_CARVED) w64(&b, ce->e[k].mask);
+        }
     }
     char key[64];
     save_key(g->opt.seed, key, sizeof key);
@@ -413,6 +426,8 @@ static void read_player(Rd *r, SavedPlayer *sp) {
         s->blueprints = r32(r);
         s->runes_t = r16(r); s->runes_e = r16(r);
     }
+    if (r->ver >= 15) { s->pick = r8(r); u16 nb = r16(r); s->bombs = MINI(nb, 99); }
+    if (s->pick < 1 || s->pick > 3) s->pick = 1;
     if (!s->blueprints) s->blueprints = (1u << WB_DAGGER) | (1u << WB_SWORD) | (1u << WB_SHORTBOW) | (1u << WB_STAFF);
     /* sanity: a save from a broken build must not crash the game */
     if (s->level < 1 || s->level > 999) s->level = 1;
@@ -528,6 +543,19 @@ bool game_load(Game *g) {
                 if (!r.bad && i < MAX_DEEDS && d.kind > DK_NONE && d.kind <= DK_LORD && d.choice < CH_COUNT) g->world.deeds[g->world.ndeeds++] = d;
             }
         }
+        chunkmap_edits_clear(&g->map);
+        if (r.ver >= 15) {
+            int nc = r16(&r);
+            for (int i = 0; i < nc && !r.bad; i++) {
+                int cx = (int)r32(&r), cy = (int)r32(&r), cz = (int)r32(&r), n = (int)r32(&r);
+                for (int k = 0; k < n && !r.bad; k++) {
+                    BlockEdit e = { 0 };
+                    e.idx = r16(&r); e.raw = r8(&r); e.level = r8(&r);
+                    e.mask = (e.raw & BLOCK_CARVED) ? r64(&r) : 0;
+                    if (!r.bad) chunkmap_edit_restore(&g->map, cx, cy, cz, &e);
+                }
+            }
+        }
         if (r.bad) { /* a broken tail: the Sanctum as a new world has it */
             u8 gen = r.ver >= 13 ? g->world.story_gen : 0;
             memset(&g->sanctum, 0, sizeof g->sanctum);
@@ -550,8 +578,8 @@ bool game_load(Game *g) {
     }
     g->world.sanctum_gen++;
     free(d);
-    SDL_Log("Loaded the save of world %s: %d characters, %u chests and relics taken, %u map chunks", g->opt.seed_text,
-            g->saved[0].valid + g->saved[1].valid + g->saved[2].valid + g->saved[3].valid, nl, nc);
+    SDL_Log("Loaded the save of world %s: %d characters, %u chests and relics taken, %u map chunks, %d changed blocks", g->opt.seed_text,
+            g->saved[0].valid + g->saved[1].valid + g->saved[2].valid + g->saved[3].valid, nl, nc, g->map.edits_total);
     return g->saved[0].valid;
 }
 
