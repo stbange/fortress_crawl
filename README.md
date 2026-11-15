@@ -583,6 +583,8 @@ melts ice; frost freezes water into ice you can walk on; lightning runs through 
 everyone in it; still water by roots and fungus gives off swamp gas that explodes when fire
 reaches it. Lava flows thickly, sets wood alight and crusts into obsidian; water seeps through
 cracked floors; monsters swim, drown and keep out of fire, and thick smoke hides you from them.
+Every spell acts on the world by its element: meteors and fire bolts set meadows alight, a
+lightning storm over a lake shocks everything in it, a frost aura lets you walk across water.
 Grass and flowers spread in the light, moss on damp stone, fungus in the dark and on
 bones, vines down from wet ceilings, and bees hang hives where flowers bloom; fire leaves ash,
 grazing animals crop the grass, and flies, bees, moths and glowworms gather where they belong.

@@ -893,6 +893,7 @@ void sim_gas_fire(Game *g, vec3 p, float r); /* fire reaches p: swamp gas there 
 /* An element strikes the world at p: fire lights and melts, frost freezes water, lightning runs
  * through water, poison leaves a cloud. */
 void sim_element_hit(Game *g, vec3 p, int el, int owner, float dmg);
+bool cell_occupied(Game *g, int x, int y, int z); /* a player or monster in the cell (utility.c) */
 
 /* bio.c: living things (docs/SIMULATION.md) */
 void bio_update(Game *g, float dt);

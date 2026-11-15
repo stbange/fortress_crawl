@@ -707,7 +707,7 @@ static void demo_setup(Game *g) {
                 p1->thread.n, p1->thread.reached, (SDL_GetTicksNS() - t0) / 1e6, t.name, t.cx, t.cy, t.cz, p1->banner);
         return;
     }
-    if (!strcmp(g_demo_kind, "dig") || !strcmp(g_demo_kind, "blast") || !strcmp(g_demo_kind, "flood") || !strcmp(g_demo_kind, "burn") || !strcmp(g_demo_kind, "grow") || !strcmp(g_demo_kind, "lava")) {
+    if (!strcmp(g_demo_kind, "dig") || !strcmp(g_demo_kind, "blast") || !strcmp(g_demo_kind, "flood") || !strcmp(g_demo_kind, "burn") || !strcmp(g_demo_kind, "grow") || !strcmp(g_demo_kind, "lava") || !strcmp(g_demo_kind, "elements")) {
         /* the pickaxe out at a wall (docs/DESTRUCTION.md); the swings and the bomb come in
          * screenshot_step */
         for (int i = 0; i < MAX_MONSTERS; i++) g->mons[i].alive = false;
@@ -1178,6 +1178,64 @@ static void screenshot_step(App *a, float frame_dt) {
     if (g->opt.demo && a->demo_done && !strcmp(kind, "blast")) {
         static bool thrown;
         if (!thrown && a->shot_wait > 0.6f) { thrown = true; bomb_throw(g, p1); }
+    }
+    if (g->opt.demo && a->demo_done && !strcmp(kind, "elements")) {
+        /* spells on the world (docs/SIMULATION.md): a meadow with a crawler in it, a wooden post,
+         * a pool with a crawler wading; a fire meteor on the meadow, a fire bolt into the crawler
+         * in the grass, a lightning storm over the pool, and a frost aura on you by the pool */
+        static int stage;
+        static float logged;
+        static Monster *in_grass, *in_pool;
+        static int bx, by, bz, px, pz;
+        if (stage == 0) {
+            vec3 f = v3(cosf(p1->pl.yaw), 0, sinf(p1->pl.yaw)), side = v3(-f.z, 0, f.x);
+            bx = (int)floorf(p1->pl.pos.x + f.x * 8); by = (int)floorf(p1->pl.pos.y); bz = (int)floorf(p1->pl.pos.z + f.z * 8);
+            px = bx + (int)lroundf(side.x * 7); pz = bz + (int)lroundf(side.z * 7);
+        }
+        if (stage == 0 && a->shot_wait > 0.4f) {
+            int n = 0;
+            for (int z = -3; z <= 3; z++)
+                for (int x = -3; x <= 3; x++) n += chunkmap_edit(&g->map, bx + x, by, bz + z, B_GRASS, 0, 0);
+            for (int y = 0; y < 3; y++) chunkmap_edit(&g->map, bx + 4, by + y, bz, B_WOOD, 0, 0);
+            for (int z = -2; z <= 2; z++)
+                for (int x = -2; x <= 2; x++) chunkmap_edit(&g->map, px + x, by - 1, pz + z, B_WATER, 0, 8);
+            if (n > 30) {
+                stage = 1;
+                in_grass = monster_spawn(g, MON_CRAWLER, v3(bx - 2 + 0.5f, (float)by, bz + 2 + 0.5f), 3, false, v3(1, 1, 1), 0xE1E1);
+                in_pool = monster_spawn(g, MON_CRAWLER, v3(px + 0.5f, (float)by - 0.9f, pz + 0.5f), 3, false, v3(1, 1, 1), 0xE1E2);
+                SDL_Log("elements: meadow at %d %d %d, pool at %d %d", bx, by, bz, px, pz);
+            }
+        }
+        if (stage == 1 && a->shot_wait > 1.0f) {
+            stage = 2;
+            effect_new(g, EF_METEOR, EL_FIRE, 0, v3(bx + 1.5f, (float)by, bz - 1.5f), 1.0f, 40.0f, 4.5f);
+            if (in_grass && in_grass->alive) element_hit(g, in_grass, EL_FIRE, 30.0f, p1->pl.pos, 1.0f, 0);
+            effect_new(g, EF_STORM, EL_LIGHTNING, 0, v3(px + 0.5f, (float)by - 1.0f, pz + 0.5f), 3.0f, 25.0f, 2.5f);
+            SDL_Log("elements: meteor, bolt, storm");
+        }
+        if (stage == 2 && a->shot_wait > 5.0f) {
+            /* you, with a frost aura, at the pool's edge */
+            stage = 3;
+            p1->pl.pos = v3(px - 3 + 0.5f, (float)by, pz + 0.5f);
+            effect_new(g, EF_AURA, EL_FROST, 0, p1->pl.pos, 6.0f, 10.0f, 3.8f);
+            SDL_Log("elements: frost aura at the pool");
+        }
+        if (stage && a->shot_wait > logged + 1.0f) {
+            logged = a->shot_wait;
+            int grass = 0, fire = 0, ash = 0, ice = 0, water = 0, wood = 0;
+            for (int y = -1; y < 3; y++)
+                for (int z = -4; z <= 4; z++)
+                    for (int x = -4; x <= 4; x++) {
+                        bool known;
+                        Block b = chunkmap_block(&g->map, bx + x, by + y, bz + z, &known);
+                        grass += b == B_GRASS; fire += b == B_FIRE; ash += b == B_ASH; wood += b == B_WOOD;
+                        Block w = chunkmap_block(&g->map, px + x, by + y, pz + z, &known);
+                        ice += w == B_ICE; water += w == B_WATER;
+                    }
+            SDL_Log("elements: t %.0f  meadow grass %d fire %d ash %d wood %d | pool water %d ice %d | crawler in grass %s, in pool %s",
+                    a->shot_wait, grass, fire, ash, wood, water, ice, in_grass && in_grass->alive && in_grass->chunk_key == 0xE1E1 ? "alive" : "dead",
+                    in_pool && in_pool->alive && in_pool->chunk_key == 0xE1E2 ? "alive" : "dead");
+        }
     }
     if (g->opt.demo && a->demo_done && !strcmp(kind, "lava")) {
         /* a block of lava let loose, a wooden post to one side and a pool of water to the

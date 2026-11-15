@@ -433,7 +433,7 @@ void sim_element_hit(Game *g, vec3 p, int el, int owner, float dmg) {
                     bool known;
                     Block b = chunkmap_block_raw(&g->map, x, y, z, &known);
                     if (!known || dig_protected(g, x, y, z)) continue;
-                    if (b == B_WATER && chunkmap_block(&g->map, x, y + 1, z, &known) != B_WATER) {
+                    if (b == B_WATER && chunkmap_block(&g->map, x, y + 1, z, &known) != B_WATER && !cell_occupied(g, x, y, z)) {
                         if (chunkmap_edit(&g->map, x, y, z, B_ICE, 0, 0))
                             particles_burst(g, v3(x + 0.5f, y + 1.0f, z + 0.5f), v3(0.7f, 0.9f, 1.0f), 3, 1.0f, 0.04f, true);
                     } else if (b == B_FIRE && chunkmap_level(&g->map, x, y, z)) chunkmap_edit(&g->map, x, y, z, B_AIR, 0, 0);

@@ -408,7 +408,12 @@ static void update_projectiles(Game *g, float dt0) {
         bool enemy = p->kind == PJ_ENEMY_FIRE || p->kind == PJ_ENEMY_ARROW || p->kind == PJ_BOULDER;
         float dt = enemy ? dt0 * utility_time_scale(g) : dt0;
         p->life -= dt;
-        if (p->life <= 0) { p->alive = false; continue; }
+        if (p->life <= 0) {
+            /* a spell that fades out (breath, nova) still acts where it ends: on what it reaches there */
+            if (p->kind == PJ_SPELL && p->element != EL_NONE && p->owner >= 0) sim_element_hit(g, p->pos, p->element, p->owner, p->dmg * 0.5f);
+            p->alive = false;
+            continue;
+        }
         if (p->kind == PJ_ARROW || p->kind == PJ_ENEMY_ARROW) p->vel.y -= p->grav * dt;
         if (p->wbase == WB_CHAKRAM && p->owner >= 0 && p->owner < MAX_PLAYERS) {
             /* out for a moment, then home to the hand that threw it */

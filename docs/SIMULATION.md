@@ -120,6 +120,38 @@ and lightning stop at water's surface and act on it):
 - **Poison** leaves a cloud.
 - **Bombs** set what burns alight, set off swamp gas around them and leave smoke.
 
+### Every spell, every blow
+
+All of it, for every way an element reaches the world:
+
+| Spell or blow | Where it acts on the world |
+|---------------|----------------------------|
+| bolt, barrage, orb, elemental arrows | where they hit a wall, the floor or water |
+| breath, nova | where they hit, and where they fade out (half strength) |
+| a hit on a monster (spells, arrows, weapons with fire, frost or lightning on them, chain lightning at every jump) | at the monster's feet: the grass it stands in catches, the water round it freezes, lightning runs through the water it wades in |
+| a fire, frost or lightning blow on a player (monsters' attacks, traps) | at the player's feet in the same way |
+| meteor | breaks what is soft where it lands (an earth meteor rock too), its element at the centre and at five points round it, and smoke |
+| storm | at every strike |
+| rune | where it goes off |
+| orbit | where the orbs pass (one of them each tick) |
+| aura | two points of its edge every pulse; a frost aura also freezes the water under your feet, so you can walk across a pool |
+
+Poison leaves its clouds only where spells land and from bloaters, not on every hit (a poisoned
+blade would otherwise poison its wielder). Frost never freezes a cell someone stands in: it
+does not shut monsters or players into ice. Small hurts (burning, steam, gas) do not act on the
+world again, so nothing feeds on itself.
+
+The utility spells join in: **Quench** also puts out fires and raises steam where it cools lava;
+the cells **Stoneshape**, **Quench** and the other temporary spells change wake the simulation
+when they appear and when they go, so water runs into a shaped tunnel and thawed water flows
+again. The hearths of **Warden's Keep** and **Hut** stay hearths: they are lit for warmth and do
+not spread (a hut would burn down around you).
+
+`--demo elements`: a meadow with a crawler in it, a wooden post and a pool with a crawler wading.
+A fire meteor and a fire bolt at the crawler in the grass burn the meadow to ash (48 tufts to
+15 cells of ash in ten seconds); a lightning storm over the pool kills the wading crawler
+through the water; a frost aura at the pool's edge freezes all 25 cells of it.
+
 ## Living things
 
 Six new blocks: **moss** (stone grown over), **vines**, **flowers**, **beehives**, **ash** and

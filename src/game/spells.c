@@ -167,6 +167,11 @@ int element_opposite(int e) {
 
 void element_hit(Game *g, Monster *m, int element, float dmg, vec3 from, float knock, int attacker) {
     if (!m->alive || m->hidden) return;
+    /* the element strikes the world where the monster stands too: fire lights the grass under
+     * it, frost freezes the water round it, lightning runs through the water it wades in
+     * (docs/SIMULATION.md; poison leaves its clouds only where spells land, not on every hit) */
+    if ((element == EL_FIRE || element == EL_FROST || element == EL_LIGHTNING) && dmg >= 5.0f)
+        sim_element_hit(g, v3_add(m->pos, v3(0, 0.3f, 0)), element, attacker, dmg * 0.5f);
     /* monsters of a region shrug off their own element and fear its opposite */
     if (m->element != EL_NONE && element != EL_NONE) {
         if (element == m->element) dmg *= 0.5f;
@@ -210,6 +215,13 @@ void element_hit(Game *g, Monster *m, int element, float dmg, vec3 from, float k
         return;
     }
     monster_damage(g, m, dmg, from, knock, attacker);
+}
+
+/* An effect spell's element on the world at p (docs/SIMULATION.md): what sim_element_hit does,
+ * and a poison cloud for poison. */
+static void world_strike(Game *g, vec3 p, int element, int owner, float dmg) {
+    if (element == EL_NONE || element >= EL_COUNT) return;
+    sim_element_hit(g, p, element, owner, dmg);
 }
 
 /* Damage every monster within r of c. */
@@ -567,6 +579,7 @@ void spells_update(Game *g, float dt) {
                 flash_add(g, p, col, 5.0f, 0.15f);
                 sfx_at(g, SFX_STORM_STRIKE, p, 0.7f);
                 area_hit(g, p, 1.8f, e->element, e->dmg, 2.0f, e->owner);
+                world_strike(g, p, e->element, e->owner, e->dmg);
             }
             break;
         case EF_RUNE: {
@@ -582,6 +595,7 @@ void spells_update(Game *g, float dt) {
                 sfx_at(g, sfx_element_impact(e->element), c, 0.8f);
                 particles_burst(g, c, col, 26, 6.0f, 0.08f, true);
                 area_hit(g, c, e->radius, e->element, e->dmg, 5.0f, e->owner);
+                world_strike(g, c, e->element, e->owner, e->dmg);
                 e->alive = false;
             }
             break;
@@ -595,6 +609,14 @@ void spells_update(Game *g, float dt) {
                 particles_burst(g, c, col, 40, 8.0f, 0.1f, true);
                 particles_burst(g, c, v3(0.4f, 0.35f, 0.3f), 20, 6.0f, 0.1f, false);
                 area_hit(g, c, e->radius, e->element, e->dmg, 7.0f, e->owner);
+                /* a meteor is a blast: it breaks what is soft (earth ones rock too), and its
+                 * element takes the ground around it */
+                world_break_sphere(g, owner, c, 1.6f, e->element == EL_EARTH ? HARD_ROCK : HARD_SOFT);
+                for (int k = 0; k < 5; k++) {
+                    float a = k * 2.0f * PI_F / 5.0f;
+                    world_strike(g, k ? v3_add(c, v3(cosf(a) * 1.8f, 0, sinf(a) * 1.8f)) : c, e->element, e->owner, e->dmg);
+                }
+                sim_gas(g, GAS_SMOKE, c, 0.4f);
                 e->alive = false;
             }
             break;
@@ -608,6 +630,9 @@ void spells_update(Game *g, float dt) {
                     vec3 o = v3_add(e->pos, v3(cosf(a) * e->radius, 1.0f, sinf(a) * e->radius));
                     area_hit(g, o, 0.8f, e->element, e->dmg, 2.0f, e->owner);
                 }
+                /* the orbs touch the world as they pass, one of them each time */
+                float a = e->t * 3.2f + (int)(e->t * 4.0f) % 3 * 2.0f * PI_F / 3.0f;
+                world_strike(g, v3_add(e->pos, v3(cosf(a) * e->radius, 0.4f, sinf(a) * e->radius)), e->element, e->owner, e->dmg * 0.5f);
             }
             break;
         case EF_AURA:
@@ -617,6 +642,13 @@ void spells_update(Game *g, float dt) {
                 e->tick = 0.5f;
                 if (owner && fmodf(e->t, 1.5f) < 0.5f) sfx_player(g, owner, SFX_AURA_PULSE, 0.3f);
                 area_hit(g, v3_add(e->pos, v3(0, 0.8f, 0)), e->radius, e->element, e->dmg, 1.0f, e->owner);
+                /* the edge of the aura acts on the world at two points a pulse; a frost aura also
+                 * freezes the water under your feet, so you can walk across it */
+                for (int k = 0; k < 2; k++) {
+                    float a = frand(&rs) * 2.0f * PI_F;
+                    world_strike(g, v3_add(e->pos, v3(cosf(a) * e->radius, 0.4f, sinf(a) * e->radius)), e->element, e->owner, e->dmg * 0.5f);
+                }
+                if (e->element == EL_FROST) sim_element_hit(g, v3_add(e->pos, v3(0, -0.6f, 0)), EL_FROST, e->owner, 0.0f);
                 for (int k = 0; k < 10; k++) {
                     float a = k * 2.0f * PI_F / 10.0f + e->t;
                     particles_burst(g, v3_add(e->pos, v3(cosf(a) * e->radius, 0.2f, sinf(a) * e->radius)), col, 1, 0.6f, 0.05f, true);

@@ -243,6 +243,10 @@ void game_dot_player(Game *g, PlayerSlot *ps, float dmg) {
 void player_element_hit(Game *g, PlayerSlot *ps, int el, float dmg) {
     Stats *s = &ps->st;
     if (s->dead || ps->pl.fly || s->invuln > 0 || el < 0 || el >= EL_COUNT) return;
+    /* a real blow of fire, frost or lightning also strikes the ground you stand on
+     * (docs/SIMULATION.md; the small hurts of burning, steam and gas do not) */
+    if ((el == EL_FIRE || el == EL_FROST || el == EL_LIGHTNING) && dmg >= 5.0f)
+        sim_element_hit(g, v3_add(ps->pl.pos, v3(0, 0.3f, 0)), el, -1, dmg * 0.5f);
     if (el == EL_FIRE && food_fx(s, ME_FIRE_RES) > 0) return; /* a fire broth in you */
     if (el == EL_FROST && food_fx(s, ME_FROST_RES) > 0) return;
     if (el == EL_POISON && food_fx(s, ME_POISON_IMM) > 0) return;

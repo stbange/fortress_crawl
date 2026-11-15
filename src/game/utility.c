@@ -61,7 +61,7 @@ void utility_player_physics(Game *g, PlayerSlot *ps) {
 
 /* ---------- timed world edits ---------- */
 
-static bool cell_occupied(Game *g, int x, int y, int z) {
+bool cell_occupied(Game *g, int x, int y, int z) {
     for (int i = 0; i < MAX_PLAYERS; i++) {
         const PlayerSlot *ps = &g->players[i];
         if (!ps->active) continue;
@@ -104,12 +104,14 @@ static void edits_update(Game *g) {
         bool remove = false;
         if (g->time < e->until) {
             /* in place (again, if its chunk was made anew) */
-            if (known && b == e->from && b != e->to && !(block_solid(e->to) && cell_occupied(g, e->x, e->y, e->z)))
-                chunkmap_set_block(&g->map, e->x, e->y, e->z, e->to);
+            if (known && b == e->from && b != e->to && !(block_solid(e->to) && cell_occupied(g, e->x, e->y, e->z)) &&
+                chunkmap_set_block(&g->map, e->x, e->y, e->z, e->to))
+                sim_wake(e->x, e->y, e->z); /* water beside a shaped tunnel runs in, and so on */
         } else if (!known || b != e->to) {
             remove = true; /* nothing to undo */
         } else if (!(block_solid(e->from) && cell_occupied(g, e->x, e->y, e->z))) {
             remove = chunkmap_set_block(&g->map, e->x, e->y, e->z, e->from);
+            if (remove) sim_wake(e->x, e->y, e->z); /* thawed water flows again */
         }
         if (remove) g->edits[i] = g->edits[--g->nedits];
         else i++;
@@ -497,7 +499,13 @@ bool utility_cast(Game *g, PlayerSlot *ps, int u, int rank) {
                 for (int x = fx - r; x <= fx + r; x++) {
                     if ((x - fx) * (x - fx) + (z - fz) * (z - fz) > r * r) continue;
                     n += edit_add(g, x, y, z, B_WATER, B_ICE, 60.0f * k);
-                    n += edit_add(g, x, y, z, B_LAVA, B_ROCK, 60.0f * k);
+                    if (edit_add(g, x, y, z, B_LAVA, B_ROCK, 60.0f * k)) {
+                        n++;
+                        if (((x ^ z) & 3) == 0) sim_gas(g, GAS_STEAM, v3(x + 0.5f, y + 1.2f, z + 0.5f), 0.3f);
+                    }
+                    /* and the fires it reaches go out */
+                    bool known;
+                    if (chunkmap_block(&g->map, x, y, z, &known) == B_FIRE && chunkmap_level(&g->map, x, y, z) && chunkmap_edit(&g->map, x, y, z, B_AIR, 0, 0)) n++;
                 }
         if (!n) return fail(ps, "NO WATER OR LAVA NEAR");
         particles_burst(g, eye, v3(0.7f, 0.9f, 1.0f), 30, 5.0f, 0.06f, true);

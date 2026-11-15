@@ -315,7 +315,6 @@ cost measured, SIMULATION.md updated, commit and push.
 
 ## Open questions
 
-None at the moment; the six questions of the first draft are decided above. Still to settle:
-when spells act on the world beyond what they do now (meteors, storms, runes, auras, hits on
-monsters, the utility fire and ice spells), before step 1 or as part of
-step 2.
+None at the moment; the six questions of the first draft are decided above. Spells now act on
+the world in every form (done before step 1; SIMULATION.md, "Every spell, every blow"); in step
+2 they also become sources of heat and cold.
