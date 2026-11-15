@@ -881,6 +881,13 @@ void sim_update(Game *g, float dt);
 int sim_fluid(Game *g, int x, int y, int z);
 float sim_water_depth(Game *g, vec3 feet);
 int sim_pending(void);
+enum { GAS_STEAM, GAS_SMOKE, GAS_POISON, GAS_SWAMP, GAS_SPORES, GAS_COUNT };
+void sim_gas(Game *g, int kind, vec3 p, float amount);
+float sim_gas_at(vec3 p, int kind);
+void sim_gas_fire(Game *g, vec3 p, float r); /* fire reaches p: swamp gas there explodes */
+/* An element strikes the world at p: fire lights and melts, frost freezes water, lightning runs
+ * through water, poison leaves a cloud. */
+void sim_element_hit(Game *g, vec3 p, int el, int owner, float dmg);
 bool forge_start(Game *g, PlayerSlot *ps, bool reforge);
 void forge_strike(Game *g, PlayerSlot *ps);
 void forge_bellows(Game *g, PlayerSlot *ps);

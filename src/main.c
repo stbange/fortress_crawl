@@ -707,7 +707,7 @@ static void demo_setup(Game *g) {
                 p1->thread.n, p1->thread.reached, (SDL_GetTicksNS() - t0) / 1e6, t.name, t.cx, t.cy, t.cz, p1->banner);
         return;
     }
-    if (!strcmp(g_demo_kind, "dig") || !strcmp(g_demo_kind, "blast") || !strcmp(g_demo_kind, "flood")) {
+    if (!strcmp(g_demo_kind, "dig") || !strcmp(g_demo_kind, "blast") || !strcmp(g_demo_kind, "flood") || !strcmp(g_demo_kind, "burn")) {
         /* the pickaxe out at a wall (docs/DESTRUCTION.md); the swings and the bomb come in
          * screenshot_step */
         for (int i = 0; i < MAX_MONSTERS; i++) g->mons[i].alive = false;
@@ -1179,6 +1179,43 @@ static void screenshot_step(App *a, float frame_dt) {
         static bool thrown;
         if (!thrown && a->shot_wait > 0.6f) { thrown = true; bomb_throw(g, p1); }
     }
+    if (g->opt.demo && a->demo_done && !strcmp(kind, "burn")) {
+        /* a wooden wall with grass in front, set alight (docs/SIMULATION.md); --cast 1: a cloud
+         * of swamp gas beside it as well */
+        static int stage;
+        static float logged;
+        vec3 f = v3(cosf(p1->pl.yaw), 0, sinf(p1->pl.yaw));
+        int bx = (int)floorf(p1->pl.pos.x + f.x * 6), by = (int)floorf(p1->pl.pos.y), bz = (int)floorf(p1->pl.pos.z + f.z * 6);
+        if (stage == 0 && a->shot_wait > 0.4f) {
+            int n = 0;
+            for (int y = 0; y < 3; y++)
+                for (int z = -3; z <= 3; z++) n += chunkmap_edit(&g->map, bx, by + y, bz + z, B_WOOD, 0, 0);
+            for (int z = -3; z <= 3; z++) chunkmap_edit(&g->map, bx - 1, by, bz + z, B_GRASS, 0, 0);
+            if (n > 15) {
+                stage = 1;
+                if (g_demo_cast == 1) sim_gas(g, GAS_SWAMP, v3(bx - 1.5f, by + 1.5f, bz + 2.5f), 1.0f);
+                SDL_Log("burn: %d wooden blocks at %d %d %d", n, bx, by, bz);
+            }
+        }
+        if (stage == 1 && a->shot_wait > 0.8f) {
+            stage = 2;
+            sim_element_hit(g, v3(bx - 1 + 0.5f, by + 0.5f, bz - 3 + 0.5f), EL_FIRE, 0, 20.0f);
+        }
+        if (stage && a->shot_wait > logged + 1.0f) {
+            logged = a->shot_wait;
+            int wood = 0, fire = 0;
+            for (int y = 0; y < 4; y++)
+                for (int z = -4; z <= 4; z++)
+                    for (int x = -2; x <= 1; x++) {
+                        bool known;
+                        Block b = chunkmap_block(&g->map, bx + x, by + y, bz + z, &known);
+                        wood += b == B_WOOD;
+                        fire += b == B_FIRE;
+                    }
+            SDL_Log("burn: t %.1f  wood %d  fire %d  smoke %.2f  waiting %d", a->shot_wait, wood, fire,
+                    sim_gas_at(v3(bx + 0.5f, by + 3.0f, bz + 0.5f), GAS_SMOKE), sim_pending());
+        }
+    }
     if (g->opt.demo && a->demo_done && !strcmp(kind, "flood")) {
         /* a block of water let loose in front of you (docs/SIMULATION.md) */
         static int stage;
@@ -1219,6 +1256,22 @@ static void screenshot_step(App *a, float frame_dt) {
                         bool known;
                         if (chunkmap_block(&g->map, bx + x, by + y, bz + z, &known) == B_LAVA) lava++;
                     }
+            /* --cast 3: frost on the pool after 3 s, lightning after 4 s */
+            if (g_demo_cast == 3 && stage == 1 && a->shot_wait > 3.0f) {
+                stage = 2;
+                sim_element_hit(g, v3(bx + 0.5f, by + 0.3f, bz + 0.5f), EL_FROST, 0, 20.0f);
+            }
+            if (g_demo_cast == 3 && stage == 2 && a->shot_wait > 4.0f) {
+                stage = 3;
+                float hp = p1->st.hp;
+                sim_element_hit(g, v3(bx + 4.5f, by + 0.1f, bz + 0.5f), EL_LIGHTNING, 1, 30.0f);
+                SDL_Log("flood: lightning; your hp %.0f -> %.0f", hp, p1->st.hp);
+            }
+            int ice = 0;
+            for (int y = -1; y < 2; y++)
+                for (int z = -3; z <= 3; z++)
+                    for (int x = -3; x <= 3; x++) { bool known; ice += chunkmap_block(&g->map, bx + x, by + y, bz + z, &known) == B_ICE; }
+            if (ice) SDL_Log("flood: %d ice", ice);
             SDL_Log("flood: t %.1f  %d cells, %d eighths, %d waiting, %d lava; you: y %.2f water %.2f breath %.1f hp %.0f", a->shot_wait,
                     cells, vol, sim_pending(), lava, p1->pl.pos.y, p1->pl.water, p1->breath, p1->st.hp);
         }

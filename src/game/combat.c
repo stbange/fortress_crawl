@@ -428,6 +428,14 @@ static void update_projectiles(Game *g, float dt0) {
         vec3 step = v3_scale(p->vel, dt / (float)steps);
         for (int s = 0; s < steps && p->alive; s++) {
             p->pos = v3_add(p->pos, step);
+            /* fire, frost and lightning end in water (and boil, freeze or electrify it) */
+            if ((p->element == EL_FIRE || p->element == EL_FROST || p->element == EL_LIGHTNING) &&
+                sim_fluid(g, (int)floorf(p->pos.x), (int)floorf(p->pos.y), (int)floorf(p->pos.z))) {
+                sim_element_hit(g, p->pos, p->element, p->owner, p->dmg);
+                particles_burst(g, p->pos, proj_color(p), 8, 2.5f, 0.05f, true);
+                p->alive = false;
+                break;
+            }
             if (game_solid(g, (int)floorf(p->pos.x), (int)floorf(p->pos.y), (int)floorf(p->pos.z)) != 0) {
                 if (p->wbase == WB_CHAKRAM && !p->back) { /* rings off the wall and comes back */
                     p->pos = v3_sub(p->pos, step);
@@ -439,6 +447,7 @@ static void update_projectiles(Game *g, float dt0) {
                 if (p->wbase == WB_CANNON) { explode(g, p->owner, v3_sub(p->pos, step), p->dmg * 0.6f, 3.0f, NULL); p->alive = false; break; }
                 p->alive = false;
                 vec3 back = v3_sub(p->pos, step);
+                if (p->element != EL_NONE) sim_element_hit(g, back, p->element, p->owner, p->dmg);
                 switch (p->kind) {
                 case PJ_ARROW: case PJ_ENEMY_ARROW: sfx_at(g, SFX_ARROW_WALL, back, 1.0f); break;
                 case PJ_BOLT: if (!p->explode) sfx_at(g, SFX_BOLT_HIT, back, 0.8f); break;

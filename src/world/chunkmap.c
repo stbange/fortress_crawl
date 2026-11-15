@@ -418,6 +418,12 @@ int chunkmap_fluid(ChunkMap *m, int wx, int wy, int wz) {
     return l ? l : 8;
 }
 
+int chunkmap_level(ChunkMap *m, int wx, int wy, int wz) {
+    Chunk *c = chunkmap_get(m, floordiv(wx, CHUNK), floordiv(wy, CHUNK), floordiv(wz, CHUNK));
+    if (!c || c->state != CH_READY || !c->fluid) return 0;
+    return c->fluid[cidx(floormod(wx, CHUNK), floormod(wy, CHUNK), floormod(wz, CHUNK))];
+}
+
 bool chunkmap_set_block(ChunkMap *m, int wx, int wy, int wz, Block b) {
     int cx = floordiv(wx, CHUNK), cy = floordiv(wy, CHUNK), cz = floordiv(wz, CHUNK);
     Chunk *c = chunkmap_get(m, cx, cy, cz);

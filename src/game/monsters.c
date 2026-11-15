@@ -822,6 +822,7 @@ static void bloater_burst(Game *g, Monster *m, float mult) {
     particles_burst(g, c, element_color(el), 34, 7.0f, 0.1f, true);
     particles_burst(g, c, v3_scale(m->color, 0.6f), 20, 5.0f, 0.1f, false);
     world_break_sphere(g, NULL, c, m->grade == GRADE_BOSS ? 2.2f : 1.4f, HARD_SOFT); /* soft things around it burst too */
+    sim_element_hit(g, c, el, -1, 0.0f); /* its element on the world: a poison cloud, fire, frost on water */
     flash_add(g, c, element_color(el), r * 3.0f, 0.4f);
     sfx_at(g, SFX_EXPLOSION, c, 1.0f);
 }

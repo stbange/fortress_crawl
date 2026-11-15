@@ -86,6 +86,8 @@ Block chunkmap_block_raw(ChunkMap *m, int wx, int wy, int wz, bool *known);
 u64 chunkmap_mask(ChunkMap *m, int wx, int wy, int wz);
 /* The water level of a cell: 1..8 (8 full), 0 if it holds no water or is not known. */
 int chunkmap_fluid(ChunkMap *m, int wx, int wy, int wz);
+/* The cell's level byte whatever it holds (a fire's fuel, sim.c), 0 if none or not known. */
+int chunkmap_level(ChunkMap *m, int wx, int wy, int wz);
 /* True if chunkmap_edit at the cell would succeed now. */
 bool chunkmap_can_edit(ChunkMap *m, int wx, int wy, int wz);
 /* A lasting change: sets a cell (raw block, and its pieces if carved; a fluid level 1..8 or 0)

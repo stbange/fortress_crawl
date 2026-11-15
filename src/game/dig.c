@@ -55,6 +55,7 @@ static void drop_for(Game *g, PlayerSlot *ps, Block b, int x, int y, int z, u64 
         if (ps) forge_mine(g, ps, x, y, z);
         break;
     case B_FUNGUS:
+        sim_gas(g, GAS_SPORES, v3(x + 0.5f, y + 0.6f, z + 0.5f), 0.35f); /* a broken fungus lets out its spores */
         if ((h & 3) == 0) pickup_spawn(g, PK_FOOD, at, (h >> 8) & 1 ? FD_GLOWCAP : FD_MUSHROOM, NULL, 0, 0);
         break;
     case B_GRASS:
@@ -197,6 +198,10 @@ void world_explode(Game *g, vec3 p, float radius, int power, float dmg, int owne
     }
     PlayerSlot *who = owner >= 0 && owner < MAX_PLAYERS && g->players[owner].active ? &g->players[owner] : NULL;
     world_break_sphere(g, who, p, radius, power);
+    /* the blast sets light to what burns, lights swamp gas around it and smokes */
+    sim_element_hit(g, p, EL_FIRE, owner, 0.0f);
+    sim_gas_fire(g, p, radius);
+    sim_gas(g, GAS_SMOKE, p, 0.5f);
 }
 
 /* ---------- bombs ---------- */
