@@ -247,6 +247,16 @@ void player_element_hit(Game *g, PlayerSlot *ps, int el, float dmg) {
      * (docs/SIMULATION.md; the small hurts of burning, steam and gas do not) */
     if ((el == EL_FIRE || el == EL_FROST || el == EL_LIGHTNING) && dmg >= 5.0f)
         sim_element_hit(g, v3_add(ps->pl.pos, v3(0, 0.3f, 0)), el, -1, dmg * 0.5f);
+    /* soaked: fire only steams on you, lightning bites twice, frost freezes the wet through */
+    if (s->wet > 0.3f) {
+        if (el == EL_FIRE) {
+            s->wet = fmaxf(0.0f, s->wet - 0.3f);
+            sim_gas(g, GAS_STEAM, player_eye(&ps->pl), 0.15f);
+            return;
+        }
+        if (el == EL_LIGHTNING) game_hurt_player(g, ps, dmg * 0.5f, v3_add(ps->pl.pos, v3(0, 2, 0)));
+        if (el == EL_FROST && food_fx(s, ME_FROST_RES) <= 0) { s->chill_t = fmaxf(s->chill_t, 5.0f); s->cold = fminf(1.0f, s->cold + 0.3f); }
+    }
     if (el == EL_FIRE && food_fx(s, ME_FIRE_RES) > 0) return; /* a fire broth in you */
     if (el == EL_FROST && food_fx(s, ME_FROST_RES) > 0) return;
     if (el == EL_POISON && food_fx(s, ME_POISON_IMM) > 0) return;
@@ -813,6 +823,28 @@ static void update_player(Game *g, PlayerSlot *ps, const PlayerInput *in, float 
         }
         player_update(&ps->pl, &pin, dt, player_solid, g);
         utility_physics_player(NULL);
+        /* temperature and wetness (docs/SIMULATION.md): the cold gets into you slowly (a fur cloak
+         * slows it, warmth stops it), a fire or a brazier near warms you through, water soaks you
+         * and the warmth dries you. The cold slows; it does not hurt. */
+        {
+            float t = heat_at(g, player_eye(&ps->pl));
+            if (ps->pl.water > 0.3f) s->wet = 1.0f;
+            else s->wet = fmaxf(0.0f, s->wet - dt * (0.01f + fmaxf(0.0f, t) * 0.0015f));
+            if (sim_gas_at(player_eye(&ps->pl), GAS_STEAM) > 0.3f) s->wet = fminf(1.0f, s->wet + 0.3f * dt);
+            if (s->warm_t > 0) s->warm_t -= dt;
+            bool resist = food_fx(s, ME_FROST_RES) > 0 || s->warm_t > 0;
+            if (t > 24.0f) {
+                if (s->cold > 0.3f && t > 40.0f) { s->warm_t = fmaxf(s->warm_t, 120.0f); game_banner(ps, "WARMED THROUGH BY THE FIRE"); }
+                s->cold = fmaxf(0.0f, s->cold - dt * 0.2f);
+            } else if (t < 2.0f && !resist) {
+                /* colder and wetter: faster */
+                float rate = (2.0f - t) / 1800.0f * (1.0f + s->wet) * (s->cloak ? 0.25f : 1.0f);
+                float before = s->cold;
+                s->cold = fminf(1.0f, s->cold + rate * dt);
+                if (before < 0.5f && s->cold >= 0.5f) game_banner(ps, s->cloak ? "COLD - EVEN IN THE CLOAK" : "COLD - A FIRE, A CLOAK OR A WARMING DRAUGHT WOULD HELP");
+            } else s->cold = fmaxf(0.0f, s->cold - dt * (resist ? 0.1f : 0.02f));
+            if (s->cold >= 1.0f) s->chill_t = fmaxf(s->chill_t, 0.5f);
+        }
         /* breath: under water it runs out, then you drown */
         bool under = !ps->pl.fly && sim_water_depth(g, ps->pl.pos) > player_eye(&ps->pl).y - ps->pl.pos.y;
         if (under) {
@@ -1110,11 +1142,13 @@ static void draw_hud(Game *g, PlayerSlot *ps, int W, int H) {
         font_text(6, touch ? H - 56 : H - 36, buf, 0.75f, 0.68f, 0.5f);
         /* what is on you: haste, and what monsters' elements did */
         int sx = (int)bw + 12;
-        struct { bool on; const char *t; vec3 c; } ST[4] = {
+        struct { bool on; const char *t; vec3 c; } ST[7] = {
             { s->haste_t > 0, "HASTE", { 1.0f, 0.9f, 0.4f } }, { s->burn_t > 0, "BURNING", { 1.0f, 0.5f, 0.15f } },
             { s->chill_t > 0, "CHILLED", { 0.6f, 0.85f, 1.0f } }, { s->poison_t > 0, "POISONED", { 0.45f, 1.0f, 0.3f } },
+            { s->cold >= 0.5f && s->chill_t <= 0, "COLD", { 0.7f, 0.8f, 0.95f } }, { s->warm_t > 0, "WARM", { 1.0f, 0.7f, 0.4f } },
+            { s->wet > 0.3f, "WET", { 0.4f, 0.6f, 0.95f } },
         };
-        for (int k = 0; k < 4; k++)
+        for (int k = 0; k < 7; k++)
             if (ST[k].on && !(small && sx > W / 2)) {
                 font_text(sx, H - 35, ST[k].t, ST[k].c.x, ST[k].c.y, ST[k].c.z);
                 sx += font_text_width(ST[k].t) + 6;

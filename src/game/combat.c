@@ -774,6 +774,7 @@ void combat_update(Game *g, float dt) {
                             (1.0f + food_fx(s, ME_SPEED));
         /* monsters' elements: burning and poison eat health, a chill slows */
         if (s->chill_t > 0) { s->chill_t -= dt; ps->pl.speed_mult *= 0.6f; }
+        else if (s->cold >= 0.5f) ps->pl.speed_mult *= 0.85f; /* cold: stiff */
         if (s->stoneskin_t > 0) ps->pl.speed_mult *= 0.75f;
         if (s->steed_t > 0) ps->pl.speed_mult *= 1.9f;
         if (ps->ritual_t > 0) ps->pl.speed_mult *= 0.4f; /* slow, inside the circle */
@@ -814,6 +815,7 @@ void combat_update(Game *g, float dt) {
     sim_update(g, dt);
     bio_update(g, dt);
     away_update(g, dt);
+    heat_update(g, dt);
     pickups_update(g, dt);
     update_projectiles(g, dt);
     update_particles(g, dt);

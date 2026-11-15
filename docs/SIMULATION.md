@@ -208,6 +208,57 @@ lava and fires that were moving when the game was saved, or when their chunk was
 move on as soon as their chunk is loaded again: a fire saved half-way burns on after loading
 and goes out by itself. Insect swarms are not saved; they gather again around what draws them.
 
+## Temperature
+
+One temperature per 2 m cube, for the chunks round the players (`src/game/heat.c`; rebuilt
+from what is there, never saved):
+
+- **Base by region:** mild (12 degrees) in most of the world; the frozen north from -6 down to
+  about -20 in its deepest tiers; the burning south from 26 up; the deep strata (the Core, the
+  Maw, Ironhell, the Inferno) 18 hotter; the high and airy ones 6 cooler. The Sanctum is 18.
+- **Sources** pull their cell toward their own temperature: lava 700, a spreading fire 320, a
+  hearth fire 160, a brazier 130, a torch 40, a lantern 30; ice keeps its cell at freezing.
+  Fire spells, blasts and the elements of spells add bursts of heat; frost adds cold.
+- **Spreading:** each cell moves toward its neighbours (a quarter of the way four times a
+  second) and slowly toward its region's base. A changed chunk is looked at again at once.
+
+What reads it:
+
+- **Ice** melts above 3 degrees (a ring of ice round a campfire is a puddle in half a minute,
+  and the water runs into the fire and puts it out).
+- **Still water** that has moved freezes at its surface below -6; the water the world was made
+  with keeps its look until something disturbs it.
+- **Water boils** away above 100 degrees, faster the hotter, as steam. **Steam** that drifts
+  into cool air condenses and drips back down as water.
+- **What burns** catches from heat alone: grass, vines, webs, roots and hives at 140, wood at
+  220. A log beside lava smoulders, then burns.
+- **Plants** grow only between 2 and 45 degrees; frost kills grown grass, flowers and vines.
+- **Monsters** keep out of air hotter than 60, as they keep out of fire.
+
+## Cold, warmth and wetness
+
+- **Cold** gets into you slowly where it is below 2 degrees: at -8 it takes about two minutes to
+  be COLD (85% speed), twice that to be CHILLED (60%, as frost spells do). Colder and wetter is
+  faster. **The cold does not hurt** (decided until there are remedies; there are now, so it
+  could, but it does not).
+- **Remedies:** standing by a fire or brazier (above 24 degrees) drives the cold out, and from a
+  real fire you are WARM (two minutes when the cold does not touch you); a frost-resisting meal;
+  a **fur cloak** (shop, 350 gold: the cold reaches you four times slower); a **warming draught**
+  (shop, 60 gold: an hour of warmth).
+- **Wetness** (WET): in water you are soaked; it dries with warmth (about half a minute in a
+  mild hall, much faster by a fire); steam wets you too. Soaked, fire only steams on you (no
+  burning, no hurt), lightning hurts you twice, frost chills you for five seconds and drives the
+  cold in.
+- **Monsters** get wet the same way: fire on a wet monster hurts half and does not catch,
+  lightning twice, and frost freezes it solid for a moment and a half (not bosses).
+- The fur cloak, warmth and cold are saved with the character (save version 18).
+
+`--demo thaw`: a ring of ice round a hearth fire, a pool with a pit of lava beyond a rock, you
+moved into the pool and struck by lightning while wet (20 damage instead of 10). The ice melts
+(14 cells to 3 in a minute); the air by the lava rises to 160 and the pool boils down slowly.
+`--cast 1` in the far north (`--pos 8 6 -700 --fly`): you stand in -8 degrees and are COLD
+after about two minutes.
+
 ## Time away
 
 The simulation runs only near the players, so the world would freeze wherever nobody is. It

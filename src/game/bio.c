@@ -101,9 +101,56 @@ int bio_grown(int b) { return b >= 0 && b < B_COUNT ? g_grown[b] : 0; }
 
 /* ---------- the rules ---------- */
 
+/* What temperature does (heat.c): ice melts, still water freezes or boils away, what burns
+ * catches when hot enough, and frost kills what grew. True if the cell changed. */
+static bool heat_rules(Game *g, int x, int y, int z, Block b, float r) {
+    if (b != B_ICE && b != B_WATER && b != B_WOOD && b != B_GRASS && b != B_FLOWER && b != B_VINE && b != B_ROOTS && b != B_WEB &&
+        b != B_HIVE && b != B_FUNGUS)
+        return false;
+    float t = heat_cell(g, x, y, z);
+    if (b == B_ICE) {
+        if (t > 3.0f && r < 0.5f && !dig_protected(g, x, y, z)) { chunkmap_edit(&g->map, x, y, z, B_WATER, 0, 8); return true; }
+        return false;
+    }
+    if (b == B_WATER) {
+        bool known;
+        bool surface = chunkmap_block(&g->map, x, y + 1, z, &known) == B_AIR;
+        /* water the world was made with keeps its look; water that moved freezes like any other */
+        if (t < -6.0f && surface && r < 0.3f && grown_here(g, x, y, z) && !cell_occupied(g, x, y, z)) {
+            chunkmap_edit(&g->map, x, y, z, B_ICE, 0, 0);
+            return true;
+        }
+        if (t > 100.0f && surface && r < 0.7f) {
+            /* the hotter, the faster */
+            int l = chunkmap_fluid(&g->map, x, y, z), lose = MINI(l, 2 + (int)((t - 100.0f) / 40.0f));
+            chunkmap_edit(&g->map, x, y, z, l > lose ? B_WATER : B_AIR, 0, l > lose ? l - lose : 0);
+            sim_gas(g, GAS_STEAM, v3(x + 0.5f, y + 1.2f, z + 0.5f), 0.25f);
+            return true;
+        }
+        return false;
+    }
+    /* catching fire from heat: wood smoulders longer than grass */
+    float ignite_at = b == B_WOOD ? 220.0f : 140.0f;
+    if (t > ignite_at && r < 0.4f) return sim_ignite(g, x, y, z);
+    /* frost kills what grew (the world's own plants are hardier) */
+    if (t < -2.0f && (b == B_GRASS || b == B_FLOWER || b == B_VINE) && r < 0.2f && grown_here(g, x, y, z)) {
+        wither(g, x, y, z, B_AIR);
+        return true;
+    }
+    return false;
+}
+
+/* Plants grow only where it is neither frozen nor scorching. */
+static bool growing_weather(Game *g, int x, int y, int z) {
+    float t = heat_cell(g, x, y, z);
+    return t > 2.0f && t < 45.0f;
+}
+
 static void bio_cell(Game *g, int x, int y, int z, u64 h) {
     Block b = blk(g, x, y, z);
     float r = hash_unit(h);
+    if (heat_rules(g, x, y, z, b, hash_unit(h >> 20))) return;
+    if ((b == B_AIR || b == B_ASH || b == B_GRASS || b == B_ROCK || b == B_BONES) && !growing_weather(g, x, y, z)) return;
     if (b == B_AIR || b == B_ASH) {
         Block below = blk(g, x, y - 1, z), above = blk(g, x, y + 1, z);
         int light = light_at(g, x, y, z);

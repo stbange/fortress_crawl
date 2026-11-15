@@ -1,6 +1,7 @@
 # The living world: implementation plan
 
-Status: **in progress** (November 2026): step 1 built. Builds on the simulation that exists
+Status: **in progress** (November 2026): steps 1 and 2 built (save versions 17 and 18; the
+later steps' versions move up by one). Builds on the simulation that exists
 ([SIMULATION.md](SIMULATION.md), [DESTRUCTION.md](DESTRUCTION.md)): breakable blocks, water and
 lava with levels, fire with fuel, drifting gases, growth by need, insects, decay.
 

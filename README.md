@@ -585,6 +585,9 @@ reaches it. Lava flows thickly, sets wood alight and crusts into obsidian; water
 cracked floors; monsters swim, drown and keep out of fire, and thick smoke hides you from them.
 Every spell acts on the world by its element: meteors and fire bolts set meadows alight, a
 lightning storm over a lake shocks everything in it, a frost aura lets you walk across water.
+Temperature runs through it all: the frozen north is cold (a fire, a fur cloak or a warming
+draught keep it off), ice melts by fires, water boils by lava, wood catches from heat, and being
+soaked keeps fire off you but makes lightning twice as bad.
 Grass and flowers spread in the light, moss on damp stone, fungus in the dark and on
 bones, vines down from wet ceilings, and bees hang hives where flowers bloom; fire leaves ash,
 grazing animals crop the grass, and flies, bees, moths and glowworms gather where they belong.

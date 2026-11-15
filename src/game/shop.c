@@ -238,6 +238,9 @@ static int shop_items(Game *g, PlayerSlot *ps, ShopItem *out) {
     add(out, &n, SH_SUPPLY, 100, 90, s->bombs + 3 <= 30, "YOU CARRY ALL YOU CAN", "3 BOMBS: THEY BREAK MASONRY (YOU HAVE %d)", s->bombs);
     if (s->pick < 3)
         add(out, &n, SH_SUPPLY, 101, s->pick == 1 ? 400 : 1500, true, NULL, s->pick == 1 ? "A STEEL PICKAXE: DIGS FASTER" : "A MITHRIL PICKAXE: DIGS FASTEST");
+    /* against the cold (docs/SIMULATION.md) */
+    if (!s->cloak) add(out, &n, SH_SUPPLY, 102, 350, true, NULL, "A FUR CLOAK: THE COLD REACHES YOU FOUR TIMES SLOWER");
+    add(out, &n, SH_SUPPLY, 103, 60, s->warm_t < 600.0f, "YOU ARE WARM ENOUGH", "A WARMING DRAUGHT: AN HOUR OF WARMTH IN THE COLD");
     /* the smith (with the forge): the supplies that are only bought, and two metals */
     if (sanctum_stage(g, SP_FORGE) >= 1 && sanctum_stage(g, SP_ISLAND) >= 2) {
         static const struct { int m, n, price; } SUP[] = { { FG_CHARCOAL, 5, 100 }, { FG_FLUX, 1, 80 }, { FG_QUENCH_OIL, 1, 150 }, { FG_RUNE_INK, 1, 300 }, { FG_STEEL, 1, 200 }, { FG_IRON, 1, 50 } };
@@ -432,6 +435,17 @@ static void buy(Game *g, PlayerSlot *ps, const ShopItem *it) {
         if (it->arg == 100) {
             ps->st.bombs += 3;
             snprintf(buf, sizeof buf, "3 BOMBS (%d) - X OR THE PICKAXE'S ALTERNATE ATTACK THROWS ONE", ps->st.bombs);
+            break;
+        }
+        if (it->arg == 102) {
+            ps->st.cloak = 1;
+            snprintf(buf, sizeof buf, "A FUR CLOAK - THE COLD REACHES YOU FOUR TIMES SLOWER");
+            break;
+        }
+        if (it->arg == 103) {
+            ps->st.warm_t = 3600.0f;
+            ps->st.cold = 0;
+            snprintf(buf, sizeof buf, "A WARMING DRAUGHT - AN HOUR OF WARMTH");
             break;
         }
         if (it->arg == 101) {

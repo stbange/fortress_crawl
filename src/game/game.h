@@ -90,6 +90,7 @@ typedef struct Monster {
     float giveup_t, giveup_d, sulk_t;
     float close_t;   /* brute: how long you have stood within its reach */
     float air_used;  /* seconds under water (docs/SIMULATION.md): past MON_BREATH it drowns */
+    float wet;       /* 0..1 soaked (fire hurts half, lightning twice, frost freezes it)*/
     i16 charmer;     /* player slot it fights for */
     u8 alt_kind;     /* this tick's target: 0 a player, 1 a decoy or lure, 2 a monster, 3 follows its charmer */
     i16 alt_idx;     /* that decoy (effect) or monster */
@@ -269,6 +270,11 @@ typedef struct Stats {
     int smith_xp;
     u8 pick;   /* the pickaxe: 1 iron, 2 steel, 3 mithril (docs/DESTRUCTION.md) */
     int bombs;
+    /* temperature and wetness (docs/SIMULATION.md) */
+    u8 cloak;        /* a fur cloak: the cold reaches you four times slower */
+    float cold;      /* 0..1: how far the cold has got into you (COLD from 0.5, CHILLED at 1) */
+    float warm_t;    /* warmed (by a fire or a warming draught): the cold does not touch you */
+    float wet;       /* 0..1: soaked through (no catching fire; lightning twice as bad; frost freezes) */
     u32 blueprints;
     u16 runes_t, runes_e;
     /* story (per character) */
@@ -894,6 +900,17 @@ void sim_gas_fire(Game *g, vec3 p, float r); /* fire reaches p: swamp gas there 
  * through water, poison leaves a cloud. */
 void sim_element_hit(Game *g, vec3 p, int el, int owner, float dmg);
 bool cell_occupied(Game *g, int x, int y, int z); /* a player or monster in the cell (utility.c) */
+bool sim_ignite(Game *g, int x, int y, int z);    /* sets the cell alight if it burns */
+
+/* heat.c: temperature (docs/SIMULATION.md) */
+void heat_reset(void);
+void heat_update(Game *g, float dt);
+float heat_cell(Game *g, int x, int y, int z);
+float heat_at(Game *g, vec3 p);
+void heat_add(Game *g, vec3 p, float degrees);
+float heat_base_theme(int theme);
+int heat_chunks(void);
+void heat_mark(int x, int y, int z);
 
 /* bio.c: living things (docs/SIMULATION.md) */
 void bio_update(Game *g, float dt);

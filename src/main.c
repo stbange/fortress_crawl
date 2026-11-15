@@ -707,7 +707,7 @@ static void demo_setup(Game *g) {
                 p1->thread.n, p1->thread.reached, (SDL_GetTicksNS() - t0) / 1e6, t.name, t.cx, t.cy, t.cz, p1->banner);
         return;
     }
-    if (!strcmp(g_demo_kind, "dig") || !strcmp(g_demo_kind, "blast") || !strcmp(g_demo_kind, "flood") || !strcmp(g_demo_kind, "burn") || !strcmp(g_demo_kind, "grow") || !strcmp(g_demo_kind, "lava") || !strcmp(g_demo_kind, "elements") || !strcmp(g_demo_kind, "away")) {
+    if (!strcmp(g_demo_kind, "dig") || !strcmp(g_demo_kind, "blast") || !strcmp(g_demo_kind, "flood") || !strcmp(g_demo_kind, "burn") || !strcmp(g_demo_kind, "grow") || !strcmp(g_demo_kind, "lava") || !strcmp(g_demo_kind, "elements") || !strcmp(g_demo_kind, "away") || !strcmp(g_demo_kind, "thaw")) {
         /* the pickaxe out at a wall (docs/DESTRUCTION.md); the swings and the bomb come in
          * screenshot_step */
         for (int i = 0; i < MAX_MONSTERS; i++) g->mons[i].alive = false;
@@ -1179,6 +1179,51 @@ static void screenshot_step(App *a, float frame_dt) {
         static bool thrown;
         if (!thrown && a->shot_wait > 0.6f) { thrown = true; bomb_throw(g, p1); }
     }
+    if (g->opt.demo && a->demo_done && !strcmp(kind, "thaw")) {
+        /* temperature (docs/SIMULATION.md): a ring of ice round a campfire, a pool beside a pit
+         * of lava, you soaked by the pool; the log follows the ice, the water, the heat and you */
+        static int stage, bx, by, bz;
+        static float logged;
+        if (stage == 0 && a->shot_wait > 0.4f) {
+            vec3 f = v3(cosf(p1->pl.yaw), 0, sinf(p1->pl.yaw));
+            bx = (int)floorf(p1->pl.pos.x + f.x * 7); by = (int)floorf(p1->pl.pos.y); bz = (int)floorf(p1->pl.pos.z + f.z * 7);
+            int n = 0;
+            for (int z = -2; z <= 2; z++)
+                for (int x = -2; x <= 2; x++) {
+                    if (abs(x) == 2 || abs(z) == 2) n += chunkmap_edit(&g->map, bx + x, by, bz + z, B_ICE, 0, 0);
+                }
+            chunkmap_edit(&g->map, bx, by, bz, B_FIRE, 0, 0); /* a hearth fire (does not spread) */
+            for (int z = 4; z <= 6; z++)
+                for (int x = -1; x <= 3; x++) chunkmap_edit(&g->map, bx + x, by - 1, bz + z, x == 3 ? B_LAVA : x == 2 ? B_ROCK : B_WATER, 0, x == 2 ? 0 : 8);
+            if (n > 10) { stage = 1; SDL_Log("thaw: base %.0f, at the fire %.0f", heat_base_theme(chunkmap_get(&g->map, floordiv(bx, CHUNK), floordiv(by, CHUNK), floordiv(bz, CHUNK))->info.theme), heat_cell(g, bx, by, bz)); }
+        }
+        if (stage == 1 && a->shot_wait > 3.0f && g_demo_cast != 1) { /* (--cast 1: you stay where you are, away from it all) */
+            stage = 2;
+            p1->pl.pos = v3(bx - 0.5f, (float)by, bz + 5.5f); /* into the pool */
+        }
+        if (stage == 1 && g_demo_cast == 1 && a->shot_wait > 1.0f) p1->pl.pos = v3(bx - 12.0f, p1->pl.pos.y, bz - 12.0f);
+        if (stage == 2 && a->shot_wait > 4.0f) {
+            stage = 3;
+            float hp = p1->st.hp;
+            player_element_hit(g, p1, EL_LIGHTNING, 20.0f);
+            SDL_Log("thaw: lightning on you wet (%.1f): hp %.0f -> %.0f", p1->st.wet, hp, p1->st.hp);
+        }
+        if (stage && a->shot_wait > logged + 2.0f) {
+            logged = a->shot_wait;
+            int ice = 0, water = 0, lava = 0, eighths = 0;
+            for (int y = -1; y < 2; y++)
+                for (int z = -3; z <= 7; z++)
+                    for (int x = -3; x <= 3; x++) {
+                        bool known;
+                        Block b = chunkmap_block(&g->map, bx + x, by + y, bz + z, &known);
+                        ice += b == B_ICE; water += b == B_WATER; lava += b == B_LAVA;
+                        if (z >= 4 && z <= 6) eighths += sim_fluid(g, bx + x, by + y, bz + z);
+                    }
+            SDL_Log("thaw: t %.0f  ice %d water %d (pool %d eighths) lava %d | by the fire %.0f, at the ring %.0f, by the lava %.0f | you: %.0f deg wet %.2f cold %.2f",
+                    a->shot_wait, ice, water, eighths, lava, heat_cell(g, bx, by + 1, bz), heat_cell(g, bx + 2, by, bz), heat_cell(g, bx + 1, by - 1, bz + 5),
+                    heat_at(g, player_eye(&p1->pl)), p1->st.wet, p1->st.cold);
+        }
+    }
     if (g->opt.demo && a->demo_done && !strcmp(kind, "away")) {
         /* the world goes on while you are away (docs/SIMULATION.md): a garden bed with two tufts
          * of grass by a channel of water and a torch, bones, a burning wooden post; you walk off
@@ -1539,6 +1584,7 @@ static void start_world(App *a) {
     sim_reset(); /* no clouds or swarms from another world */
     bio_reset();
     away_reset();
+    heat_reset();
     /* the saved characters of this world (screenshot and test runs start fresh) */
     if ((!g->opt.shot || g->opt.persist) && !g->opt.fresh) game_load(g);
     arms_story_lore(&g->world); /* the legendaries of a world with generated stories tell its history */

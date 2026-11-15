@@ -55,6 +55,7 @@ void sim_reset(void) {
 }
 
 static void sim_on_edit(int x, int y, int z) {
+    heat_mark(x, y, z);
     push(x, y, z);
     push(x + 1, y, z); push(x - 1, y, z);
     push(x, y + 1, z); push(x, y - 1, z);
@@ -232,6 +233,20 @@ static void gas_update(Game *g, float dt) {
         q->amount -= GAS_DEF[q->kind].decay * dt;
         if (q->amount <= 0.02f) { q->alive = false; continue; }
         q->r = fminf(GAS_DEF[q->kind].rmax, q->r + 0.6f * dt);
+        /* steam that meets cool air condenses and drips back down as water */
+        if (q->kind == GAS_STEAM && heat_at(g, q->pos) < 30.0f) {
+            q->amount -= 0.4f * dt;
+            if (hash_unit(mix64((u64)(q->t * 1000) + (u64)i * 31)) < 0.6f * dt) {
+                int x = (int)floorf(q->pos.x), y = (int)floorf(q->pos.y), z = (int)floorf(q->pos.z);
+                for (int k = 0; k < 8; k++, y--) {
+                    if (game_solid(g, x, y - 1, z) == 0 && chunkmap_fluid(&g->map, x, y - 1, z) < 8) continue;
+                    int l = chunkmap_fluid(&g->map, x, y, z);
+                    bool known;
+                    if ((l || chunkmap_block(&g->map, x, y, z, &known) == B_AIR) && l < 8) set_water(g, x, y, z, l + 1);
+                    break;
+                }
+            }
+        }
         /* drift: rise (or sink) and wander, sliding along what is solid */
         float w = q->t * 0.7f + i;
         vec3 v = v3(sinf(w) * 0.25f, GAS_DEF[q->kind].rise, cosf(w * 1.3f) * 0.25f);
@@ -412,6 +427,8 @@ bool sim_catch_up_fires(Game *g, int cx, int cy, int cz, float dt) {
     return true;
 }
 
+bool sim_ignite(Game *g, int x, int y, int z) { return ignite(g, x, y, z); }
+
 /* ---------- elements ---------- */
 
 /* Water cells joined to (x, y, z), up to max: lightning runs through all of them. */
@@ -439,6 +456,9 @@ static bool in_body(const Cell *body, int n, vec3 p) {
 
 void sim_element_hit(Game *g, vec3 p, int el, int owner, float dmg) {
     int x0 = (int)floorf(p.x), y0 = (int)floorf(p.y), z0 = (int)floorf(p.z);
+    /* fire and frost are heat and cold too */
+    if (el == EL_FIRE) heat_add(g, p, 60.0f + dmg * 2.0f);
+    else if (el == EL_FROST) heat_add(g, p, -(25.0f + dmg));
     switch (el) {
     case EL_FIRE:
         for (int dy = -1; dy <= 1; dy++)

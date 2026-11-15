@@ -11,7 +11,7 @@
  * user's preference folder. The world itself never needs saving: the seed rebuilds it. */
 
 #define SAVE_MAGIC 0x56534346u /* "FCSV" */
-#define SAVE_VERSION 17 /* 17: when each chunk was last seen (the world goes on while you are away); 16: the clouds of gas in the air; 15: what was broken in the world, the pickaxe and bombs; 14: the ledger of deeds (choices); 13: the story generator of the world; 12: the forge (materials, smithing, blueprints, runes); 11: the Sanctum's decorations, keystones bought; 10: meal variety, toxicity, torn formulae; 9: alchemy (reagents, elixirs, formulae, the elixir working); 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms;
+#define SAVE_VERSION 18 /* 18: the fur cloak, warmth and cold of each character; 17: when each chunk was last seen (the world goes on while you are away); 16: the clouds of gas in the air; 15: what was broken in the world, the pickaxe and bombs; 14: the ledger of deeds (choices); 13: the story generator of the world; 12: the forge (materials, smithing, blueprints, runes); 11: the Sanctum's decorations, keystones bought; 10: meal variety, toxicity, torn formulae; 9: alchemy (reagents, elixirs, formulae, the elixir working); 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms;
                           6: weapons with materials, powers, legendaries and memory; 7: the Sanctum per world (written by one
                           build still marked 6); 8: food (the larder, dishes, recipes, the meal) */
 #define EXPLORED_BUDGET (1200 * 1024)
@@ -184,6 +184,7 @@ static void write_player(Buf *b, const Stats *s, const Player *pl) {
     w16(b, s->runes_t); w16(b, s->runes_e);
     /* v15: the pickaxe and bombs */
     w8(b, s->pick); w16(b, (u16)s->bombs);
+    w8(b, s->cloak); wf(b, s->warm_t); wf(b, s->cold); /* v18 */
 }
 
 /* Explored cells: per chunk a 512-byte mask of the non-zero bytes, then those bytes. */
@@ -446,6 +447,7 @@ static void read_player(Rd *r, SavedPlayer *sp) {
     }
     if (r->ver >= 15) { s->pick = r8(r); u16 nb = r16(r); s->bombs = MINI(nb, 99); }
     if (s->pick < 1 || s->pick > 3) s->pick = 1;
+    if (r->ver >= 18) { s->cloak = r8(r) ? 1 : 0; s->warm_t = clampf(rf(r), 0.0f, 3600.0f); s->cold = clampf(rf(r), 0.0f, 1.0f); }
     if (!s->blueprints) s->blueprints = (1u << WB_DAGGER) | (1u << WB_SWORD) | (1u << WB_SHORTBOW) | (1u << WB_STAFF);
     /* sanity: a save from a broken build must not crash the game */
     if (s->level < 1 || s->level > 999) s->level = 1;

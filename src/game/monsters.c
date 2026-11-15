@@ -684,7 +684,7 @@ static bool hazard_at(Game *g, vec3 p) {
     if (here == B_FIRE && chunkmap_level(&g->map, x, y, z)) return true;
     if (chunkmap_block(&g->map, x, y - 1, z, &known) == B_LAVA || here == B_LAVA) return true;
     vec3 head = v3_add(p, v3(0, 1.0f, 0));
-    return sim_gas_at(head, GAS_POISON) > 0.3f || sim_gas_at(head, GAS_STEAM) > 0.4f;
+    return sim_gas_at(head, GAS_POISON) > 0.3f || sim_gas_at(head, GAS_STEAM) > 0.4f || heat_at(g, head) > 60.0f;
 }
 
 /* Those that do not breathe, and those too heavy to swim. */
@@ -711,6 +711,8 @@ static void monster_physics(Game *g, Monster *m, vec3 want, float dt) {
     /* water: swim (or wade along the bottom), and drown if it lasts */
     float depth = d->flies ? 0.0f : sim_water_depth(g, m->pos);
     bool swim = depth > h * 0.6f;
+    if (depth > h * 0.3f) m->wet = 1.0f;
+    else if (m->wet > 0) m->wet = fmaxf(0.0f, m->wet - dt * 0.04f);
     if (depth > h * 0.9f && breathes(m->type)) {
         m->air_used += dt;
         if (m->air_used > MON_BREATH) {

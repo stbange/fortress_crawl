@@ -177,6 +177,23 @@ void element_hit(Game *g, Monster *m, int element, float dmg, vec3 from, float k
         if (element == m->element) dmg *= 0.5f;
         else if (element == element_opposite(m->element)) dmg *= 1.5f;
     }
+    /* soaked: fire hurts half and does not catch, lightning twice, frost freezes it solid */
+    if (m->wet > 0.3f) {
+        vec3 c = v3_add(m->pos, v3(0, MONSTERS[m->type].h * m->scale * 0.5f, 0));
+        if (element == EL_FIRE) {
+            m->wet = fmaxf(0.0f, m->wet - 0.4f);
+            sim_gas(g, GAS_STEAM, c, 0.15f);
+            monster_damage(g, m, dmg * 0.5f, from, knock, attacker);
+            return;
+        }
+        if (element == EL_LIGHTNING) dmg *= 2.0f;
+        if (element == EL_FROST && m->grade != GRADE_BOSS && m->alive) {
+            m->state = MS_STUN;
+            m->timer = 1.5f;
+            m->wet = 0.0f;
+            particles_burst(g, c, v3(0.75f, 0.9f, 1.0f), 14, 1.5f, 0.06f, true);
+        }
+    }
     switch (element) {
     case EL_FIRE:
         m->burn_dps = fmaxf(m->burn_t > 0 ? m->burn_dps : 0.0f, dmg * 0.25f);
