@@ -513,6 +513,14 @@ stuck. Between 109 and 440 cells of each world changed. The regions' numbers in 
 like the places: a grassy cave by Ulwall feeds a grazer and a bit (42 plant cells), the
 quester's corridors full of the dead it left have carrion 8.7 and insects to match.
 
+After filling the gaps and the ideas left for later, the same four worlds for 12 minutes each:
+no crashes, one death in all (the quester, to the elite brute by Edhold's gate that has killed it
+in earlier runs too), and no bot had to give up a goal and go home. The bots harvested 36 times,
+dug 12 times, and ten fungal slimes rose from bones. Between 123 and 1309 cells of each world
+changed (the explorer's most: harvesting, trampling and erosion along its long walk). They threw
+no flasks and met no cold: none could spare the gold for flasks in 12 minutes, and none of these
+worlds' starts is in the north (the warming was checked with a run started there).
+
 ## Not done yet
 
 - Bots do not farm.
