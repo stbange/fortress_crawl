@@ -155,8 +155,9 @@ a vine they swim or climb up and out.
 Four bot runs of 15 minutes after all four stages (Edhold 1337 quester, Gerhold 2025 explorer,
 Aldburg 8080 caster, Ulwall 9001 archer): no crashes, no drownings, one death in all (the
 quester, at level 10 in chapter 3). Between 31 and 95 cells of each world changed (bones
-where monsters fell, grass and moss spreading, fungus on bones, a hive broken for honey by the
-quester), far below the 60000 kept. The simulation's cost stays under a tenth of a millisecond
+where monsters fell, grass and moss spreading, fungus on bones), far below the 60000 kept.
+Bots do not dig, blast or harvest, so the pickaxe, bombs, hives and swimming were checked with
+the demos rather than in these runs. The simulation's cost stays under a tenth of a millisecond
 a frame at its worst.
 
 ## Not done yet
