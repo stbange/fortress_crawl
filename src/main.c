@@ -708,7 +708,7 @@ static void demo_setup(Game *g) {
                 p1->thread.n, p1->thread.reached, (SDL_GetTicksNS() - t0) / 1e6, t.name, t.cx, t.cy, t.cz, p1->banner);
         return;
     }
-    if (!strcmp(g_demo_kind, "dig") || !strcmp(g_demo_kind, "blast") || !strcmp(g_demo_kind, "flood") || !strcmp(g_demo_kind, "burn") || !strcmp(g_demo_kind, "grow") || !strcmp(g_demo_kind, "lava") || !strcmp(g_demo_kind, "elements") || !strcmp(g_demo_kind, "away") || !strcmp(g_demo_kind, "thaw") || !strcmp(g_demo_kind, "matter") || !strcmp(g_demo_kind, "collapse") || !strcmp(g_demo_kind, "hunt")) {
+    if (!strcmp(g_demo_kind, "dig") || !strcmp(g_demo_kind, "blast") || !strcmp(g_demo_kind, "flood") || !strcmp(g_demo_kind, "burn") || !strcmp(g_demo_kind, "grow") || !strcmp(g_demo_kind, "lava") || !strcmp(g_demo_kind, "elements") || !strcmp(g_demo_kind, "away") || !strcmp(g_demo_kind, "thaw") || !strcmp(g_demo_kind, "matter") || !strcmp(g_demo_kind, "collapse") || !strcmp(g_demo_kind, "hunt") || !strcmp(g_demo_kind, "farm")) {
         /* the pickaxe out at a wall (docs/DESTRUCTION.md); the swings and the bomb come in
          * screenshot_step */
         for (int i = 0; i < MAX_MONSTERS; i++) g->mons[i].alive = false;
@@ -1187,6 +1187,47 @@ static void screenshot_step(App *a, float frame_dt) {
                 for (int z = -12; z <= 12; z++)
                     for (int x = -12; x <= 12; x++) scorch += STAIN_SCORCH(chunkmap_stain(&g->map, x0 + x, y0 + y, z0 + z)) > 0;
             SDL_Log("blast: %d cells scorched", scorch);
+        }
+    }
+    if (g->opt.demo && a->demo_done && !strcmp(kind, "farm")) {
+        /* farming (docs/SIMULATION.md): six crops sown on earth by a channel of water with a torch,
+         * flowers by three of them; growth sped up; then all of it reaped */
+        static int stage, bx, by, bz;
+        static float logged;
+        if (stage == 0 && a->shot_wait > 0.4f) {
+            vec3 f = v3(cosf(p1->pl.yaw), 0, sinf(p1->pl.yaw));
+            bx = (int)floorf(p1->pl.pos.x + f.x * 6); by = (int)floorf(p1->pl.pos.y); bz = (int)floorf(p1->pl.pos.z + f.z * 6);
+            int n = 0;
+            for (int z = -3; z <= 3; z++)
+                for (int x = -2; x <= 2; x++) n += chunkmap_edit(&g->map, bx + x, by - 1, bz + z, x == 0 ? B_WATER : B_DIRT, 0, x == 0 ? 8 : 0);
+            for (int k = 0; k < 6; k++) chunkmap_edit_stain(&g->map, bx + (k < 3 ? -1 : 1), by, bz - 2 + (k % 3) * 2, B_CROP, 0, 0, 1 << 6);
+            for (int z = -3; z <= 3; z += 2) chunkmap_edit(&g->map, bx + 2, by, bz + z, B_FLOWER, 0, 0);
+            chunkmap_edit(&g->map, bx - 2, by, bz + 3, B_TORCH, 0, 0);
+            chunkmap_edit(&g->map, bx + 2, by, bz - 2, B_TORCH, 0, 0);
+            if (n > 25) stage = 1;
+        }
+        if (stage == 1) for (int k = 0; k < 40; k++) bio_update(g, 0.125f);
+        if (stage == 1 && a->shot_wait > 8.0f) {
+            /* reap: a blow on each crop */
+            p1->pick_out = true;
+            int seeds = p1->st.seeds;
+            for (int k = 0; k < 6; k++) world_break_sphere(g, p1, v3(bx + (k < 3 ? -1 : 1) + 0.5f, by + 0.5f, bz - 2 + (k % 3) * 2 + 0.5f), 0.4f, HARD_SOFT);
+            int food = 0;
+            for (int i = 0; i < MAX_PICKUPS; i++) food += g->pickups[i].alive && g->pickups[i].kind == PK_FOOD && v3_len(v3_sub(g->pickups[i].pos, v3(bx + 0.5f, (float)by, bz + 0.5f))) < 5;
+            SDL_Log("farm: reaped: %d food lying there, seeds %d -> %d", food, seeds, p1->st.seeds);
+            stage = 2;
+        }
+        if (stage && a->shot_wait > logged + 1.5f) {
+            logged = a->shot_wait;
+            int shoot = 0, young = 0, ripe = 0;
+            for (int k = 0; k < 6; k++) {
+                int x = bx + (k < 3 ? -1 : 1), z = bz - 2 + (k % 3) * 2;
+                bool known;
+                if (chunkmap_block(&g->map, x, by, z, &known) != B_CROP) continue;
+                int age = STAIN_AGE(chunkmap_stain(&g->map, x, by, z));
+                shoot += age == 1; young += age == 2; ripe += age == 0;
+            }
+            SDL_Log("farm: t %.1f  crops: %d shoots, %d young, %d ripe", a->shot_wait, shoot, young, ripe);
         }
     }
     if (g->opt.demo && a->demo_done && !strcmp(kind, "hunt")) {

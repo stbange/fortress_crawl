@@ -826,6 +826,14 @@ static void update_player(Game *g, PlayerSlot *ps, const PlayerInput *in, float 
         }
         player_update(&ps->pl, &pin, dt, player_solid, g);
         utility_physics_player(NULL);
+        /* running water carries you */
+        if (!ps->pl.fly && ps->pl.water > 0.3f) {
+            vec3 cur = sim_current(g, ps->pl.pos);
+            for (int a = 0; a < 3; a++) {
+                float d = (a == 0 ? cur.x : a == 1 ? cur.y * 0.3f : cur.z) * dt * 0.8f;
+                if (d != 0) phys_move_axis(&ps->pl.pos, a, d, PLAYER_HALF_W, player_height(ps->pl.stance), player_solid, g);
+            }
+        }
         /* temperature and wetness (docs/SIMULATION.md): the cold gets into you slowly (a fur cloak
          * slows it, warmth stops it), a fire or a brazier near warms you through, water soaks you
          * and the warmth dries you. The cold slows; it does not hurt. */

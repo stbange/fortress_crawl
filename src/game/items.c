@@ -172,6 +172,7 @@ void items_give_start(Stats *s) {
     s->pick = 1; /* everyone carries an iron pickaxe */
     s->bombs = 2;
     s->firewood = 2;
+    s->seeds = 3;
     s->potions_hp = 2;
     s->potions_mp = 1;
     s->formulae = ELIXIRS_START; /* two formulae every alchemist knows */
@@ -618,7 +619,9 @@ void pickups_update(Game *g, float dt) {
                 float top = floorf(p->pos.y) + wl / 8.0f;
                 bool above = sim_fluid(g, (int)floorf(p->pos.x), (int)floorf(p->pos.y) + 1, (int)floorf(p->pos.z)) > 0;
                 p->vel.y = above || p->pos.y < top - 0.1f ? 1.5f : 0.0f;
-                p->vel.x *= 0.9f; p->vel.z *= 0.9f;
+                vec3 cur = sim_current(g, p->pos); /* drifting with the water */
+                p->vel.x = p->vel.x * 0.9f + cur.x * 0.1f;
+                p->vel.z = p->vel.z * 0.9f + cur.z * 0.1f;
             } else if (wl) p->vel.y = fmaxf(p->vel.y - 6.0f * dt, -2.0f); /* the heavy sink, slowly */
             else p->vel.y -= 18.0f * dt;
             vec3 np = v3_add(p->pos, v3_scale(p->vel, dt));

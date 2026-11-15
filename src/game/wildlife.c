@@ -264,8 +264,9 @@ static void move_ground(Game *g, Critter *c, vec3 want, float dt) {
     const CritterDef *d = &DEFS[c->kind];
     float depth = sim_water_depth(g, c->pos);
     bool swim = depth > d->h * 0.6f && c->kind != CR_CRAB;
-    c->vel.x = want.x * (swim ? 0.5f : 1.0f);
-    c->vel.z = want.z * (swim ? 0.5f : 1.0f);
+    vec3 cur = depth > 0.1f ? sim_current(g, c->pos) : v3(0, 0, 0); /* running water carries it */
+    c->vel.x = want.x * (swim ? 0.5f : 1.0f) + cur.x * 0.8f;
+    c->vel.z = want.z * (swim ? 0.5f : 1.0f) + cur.z * 0.8f;
     if (swim) c->vel.y += ((depth > d->h * 0.85f ? 1.2f : -0.3f) - c->vel.y) * fminf(1.0f, 4.0f * dt);
     else if (!c->on_ground) c->vel.y -= 18.0f * dt;
     else if (c->vel.y < 0) c->vel.y = 0;

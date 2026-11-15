@@ -92,6 +92,10 @@ typedef struct Monster {
     float air_used;  /* seconds under water (docs/SIMULATION.md): past MON_BREATH it drowns */
     float wet;       /* 0..1 soaked (fire hurts half, lightning twice, frost freezes it)*/
     float dig_t;     /* the big ones break through what blocks them: time to the next blow */
+    /* needs when nobody is about (docs/SIMULATION.md): 1 a drink, 2 a rest by warmth */
+    u8 need;
+    float need_t;    /* until the next need, or how long it stays */
+    vec3 need_at;
     i16 charmer;     /* player slot it fights for */
     u8 alt_kind;     /* this tick's target: 0 a player, 1 a decoy or lure, 2 a monster, 3 follows its charmer */
     i16 alt_idx;     /* that decoy (effect) or monster */
@@ -282,6 +286,7 @@ typedef struct Stats {
     u8 flasks[3];    /* oil, frost salt, growth tonic (THROW_OIL.. - 1) */
     u8 throw_sel;    /* THROW_*: what X throws */
     u8 firewood;     /* bundles: P lights a campfire (docs/SIMULATION.md) */
+    u8 seeds;        /* to sow: crouch and strike the earth with the pickaxe */
     u32 blueprints;
     u16 runes_t, runes_e;
     /* story (per character) */
@@ -912,6 +917,7 @@ int sim_lava(Game *g, int x, int y, int z); /* lava level 1..8, 0 if none */
 float sim_water_depth(Game *g, vec3 feet);
 int sim_pending(void);
 int sim_flow_near(Game *g, vec3 p, float r); /* cells of water that moved in the last 2 s near p */
+vec3 sim_current(Game *g, vec3 p);           /* the pull of running water at p (m/s) */
 int sim_gas_list(float *out, int max); /* 6 floats each: x, y, z, amount, radius, kind */
 void sim_gas_restore(const float *in);
 enum { GAS_STEAM, GAS_SMOKE, GAS_POISON, GAS_SWAMP, GAS_SPORES, GAS_COUNT };

@@ -39,6 +39,7 @@ const BlockDef BLOCKS[B_COUNT] = {
     [B_OIL]     = { "oil", RENDER_LIQUID, false, false, false, 0, 0, false },
     [B_ACID]    = { "acid", RENDER_LIQUID, false, false, true, 4, LIGHT_FUNGUS, false },
     [B_RUBBLE]  = { "rubble", RENDER_CUBE, true, true, false, 0, 0, false },
+    [B_CROP]    = { "crop", RENDER_CROSS, false, false, false, 0, 0, false },
 };
 
 const u8 BLOCK_HARDNESS[B_COUNT] = {
@@ -51,7 +52,7 @@ const u8 BLOCK_HARDNESS[B_COUNT] = {
     [B_ROOTS] = HARD_SOFT,     [B_FUNGUS] = HARD_SOFT,   [B_LANTERN] = HARD_SOFT,  [B_BONES] = HARD_SOFT,
     [B_GRASS] = HARD_SOFT,     [B_MOSS] = HARD_ROCK,     [B_VINE] = HARD_SOFT,     [B_FLOWER] = HARD_SOFT,
     [B_HIVE] = HARD_SOFT,      [B_ASH] = HARD_SOFT,      [B_OBSIDIAN] = HARD_MASONRY,
-    [B_OIL] = HARD_NEVER,      [B_ACID] = HARD_NEVER,     [B_RUBBLE] = HARD_SOFT,
+    [B_OIL] = HARD_NEVER,      [B_ACID] = HARD_NEVER,     [B_RUBBLE] = HARD_SOFT,     [B_CROP] = HARD_SOFT,
 };
 
 /*                    ignite fuel melt  into     light. dens porous nutrient */
@@ -93,4 +94,5 @@ const Substance SUBSTANCES[B_COUNT] = {
     [B_OIL]      = { 180, 6, 0,   0,       false, 8,  false, false, 0 },
     [B_ACID]     = { 0,   0, 0,   0,       false, 12, false, false, 0 },
     [B_RUBBLE]   = { 0,   0, 0,   0,       false, 18, true,  false, 0 },
+    [B_CROP]     = { 140, 2, 0,   0,       false, 3,  false, false, 0 },
 };

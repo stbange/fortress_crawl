@@ -52,6 +52,7 @@ enum {
     B_OIL,       /* liquid: floats on water, burns hot */
     B_ACID,      /* liquid: eats stone, hurts, water dilutes it */
     B_RUBBLE,    /* cube: what a collapse leaves; loose, it slides off a pile */
+    B_CROP,      /* sprite: what you sowed; grows from a shoot to ripe (docs/SIMULATION.md, farming) */
     B_COUNT
 };
 

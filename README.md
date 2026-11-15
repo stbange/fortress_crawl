@@ -413,7 +413,9 @@ last and shows what is saved; *New characters* (press twice) deletes the save of
 | Left / right mouse button | attack / alternate attack (unlocked by skills) |
 | 1, 2, 3, 4 or mouse wheel | blade, bow, staff, pickaxe (left digs, right throws a bomb) |
 | X | throw a bomb (2.2 s fuse; breaks masonry; the shop sells 3 for 90 gold) or the flask chosen with C |
-| C | choose what X throws: bomb, oil flask, frost salt, growth tonic |
+| C | choose what X throws: bomb, oil flask, frost salt, growth tonic (with the pickaxe out also the d-pad or the touch > button; its alternate attack throws) |
+| P | light a campfire from firewood (gamepad: d-pad down with the pickaxe out) |
+| crouch + attack with the pickaxe | sow a seed in the earth in front of you |
 | Q (or middle mouse button) | cast the selected spell (hold for breath spells) |
 | R / Shift+R | next / previous known spell |
 | H / J | drink a health / mana potion |
@@ -591,7 +593,9 @@ draught keep it off), ice melts by fires, water boils by lava, wood catches from
 soaked keeps fire off you but makes lightning twice as bad. Areas you leave carry on without
 you (come back to find them grown over), blocks bear weight and come down when you cut what holds
 them, oil burns on water and acid eats stone, and every region keeps its own animals: hunt a
-cave empty and the hounds go hungry.
+cave empty and the hounds go hungry. Gas drifts out of rooms and up stairwells, a fire shut in
+smoulders, running water carries you, monsters go to drink and to warm themselves and big ones
+break through walls to get at you, and you can sow seeds and reap what grows.
 Grass and flowers spread in the light, moss on damp stone, fungus in the dark and on
 bones, vines down from wet ceilings, and bees hang hives where flowers bloom; fire leaves ash,
 grazing animals crop the grass, and flies, bees, moths and glowworms gather where they belong.

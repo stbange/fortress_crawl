@@ -20,7 +20,7 @@
 #define SIM_CAP 16384    /* cells waiting */
 
 typedef struct { int x, y, z; } Cell;
-typedef struct Gas { vec3 pos; float amount, r, t; u8 kind; bool alive; } Gas;
+typedef struct Gas { vec3 pos; float amount, r, t; u8 kind; bool alive; vec3 draught; } Gas;
 #define MAX_GAS 96
 static Gas gas[MAX_GAS];
 
@@ -99,7 +99,7 @@ void sim_gas_restore(const float *in) {
     if (k < 0 || k >= GAS_COUNT || !(in[3] > 0.0f)) return;
     for (int i = 0; i < MAX_GAS; i++)
         if (!gas[i].alive) {
-            gas[i] = (Gas){ v3(in[0], in[1], in[2]), fminf(in[3], 1.0f), clampf(in[4], 0.3f, 3.0f), 0, (u8)k, true };
+            gas[i] = (Gas){ v3(in[0], in[1], in[2]), fminf(in[3], 1.0f), clampf(in[4], 0.3f, 3.0f), 0, (u8)k, true, { 0, 0, 0 } };
             return;
         }
 }
@@ -118,6 +118,34 @@ float sim_water_depth(Game *g, vec3 p) {
         top = (float)y + l / 8.0f;
     }
     return top > p.y ? top - p.y : 0.0f;
+}
+
+/* The current at p (m/s): water runs toward lower water and over edges, and falls where nothing
+ * holds it. Still water has none. Players, monsters, animals and things in it are carried. */
+vec3 sim_current(Game *g, vec3 p) {
+    int x = (int)floorf(p.x), y = (int)floorf(p.y + 0.1f), z = (int)floorf(p.z);
+    int l = chunkmap_fluid(&g->map, x, y, z);
+    if (!l) return v3(0, 0, 0);
+    vec3 v = v3(0, 0, 0);
+    static const int D[4][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } };
+    for (int d = 0; d < 4; d++) {
+        int nx = x + D[d][0], nz = z + D[d][1];
+        bool known;
+        Block nb = chunkmap_block_raw(&g->map, nx, y, nz, &known);
+        if (!known) continue;
+        int nl = chunkmap_fluid(&g->map, nx, y, nz);
+        float drop = 0;
+        if (nl) drop = (float)(l - nl);
+        else if (nb == B_AIR && game_solid(g, nx, y - 1, nz) == 0) drop = (float)l; /* an edge it spills over */
+        if (drop > 0) { v.x += D[d][0] * drop * 0.5f; v.z += D[d][1] * drop * 0.5f; }
+    }
+    /* falling water pulls down */
+    bool known;
+    Block below = chunkmap_block_raw(&g->map, x, y - 1, z, &known);
+    if (known && (below == B_AIR || (below == B_WATER && chunkmap_fluid(&g->map, x, y - 1, z) < 8))) v.y -= 2.0f;
+    float m = v3_len(v);
+    if (m > 4.0f) v = v3_scale(v, 4.0f / m);
+    return v;
 }
 
 /* What water can flow into: 1 empty (or a flame it puts out, or ash it washes away), 2 water, 3 lava, 0 nothing. */
@@ -212,6 +240,17 @@ static bool flow(Game *g, int x, int y, int z, int *l, int tx, int ty, int tz, i
         return true;
     }
     if (tk == 1 && tb != B_AIR) hiss(g, tx, ty, tz, false); /* a fire or torch goes out */
+    /* running water wears the earth it runs over away, a few pieces at a time */
+    if (((tick_no ^ cell_hash(tx, ty, tz)) & 31) == 0) {
+        bool known;
+        Block raw = chunkmap_block_raw(&g->map, tx, ty - 1, tz, &known);
+        if (known && (raw & BLOCK_MAT) == B_DIRT && !dig_protected(g, tx, ty - 1, tz) && chunkmap_can_edit(&g->map, tx, ty - 1, tz)) {
+            u64 mask = (raw & BLOCK_CARVED) ? chunkmap_mask(&g->map, tx, ty - 1, tz) : CARVE_FULL;
+            for (int k = 0; k < 4; k++) mask &= ~(1ULL << carve_bit((int)((tick_no >> (k * 2)) & 3), 3, (int)((tick_no >> (k * 2 + 1)) & 3)));
+            if (__builtin_popcountll(mask) <= 6) mask = 0;
+            chunkmap_edit(&g->map, tx, ty - 1, tz, mask ? (Block)(B_DIRT | BLOCK_CARVED) : B_AIR, mask, 0);
+        }
+    }
     if (ty < y && tk == 1 && ((tick_no + (u32)tx) & 3) == 0 && game_nearest_player(g, v3((float)tx, (float)ty, (float)tz), 24.0f))
         particles_burst(g, v3(tx + 0.5f, ty + 0.3f, tz + 0.5f), v3(0.85f, 0.9f, 1.0f), 3, 1.5f, 0.03f, false); /* spray */
     *l -= n;
@@ -247,7 +286,7 @@ void sim_gas(Game *g, int kind, vec3 p, float amount) {
         slot = 0;
         for (int i = 1; i < MAX_GAS; i++) if (gas[i].amount < gas[slot].amount) slot = i;
     }
-    gas[slot] = (Gas){ p, fminf(1.0f, amount), 0.6f, 0, (u8)kind, true };
+    gas[slot] = (Gas){ p, fminf(1.0f, amount), 0.6f, 0, (u8)kind, true, { 0, 0, 0 } };
 }
 
 /* How much of a gas is around p (0..1). */
@@ -301,9 +340,26 @@ static void gas_update(Game *g, float dt) {
                 }
             }
         }
-        /* drift: rise (or sink) and wander, sliding along what is solid */
+        /* drift: rise (or sink) and wander, sliding along what is solid; and the draught: toward
+         * where the way is most open (out of rooms, up stairwells), looked at twice a second */
         float w = q->t * 0.7f + i;
         vec3 v = v3(sinf(w) * 0.25f, GAS_DEF[q->kind].rise, cosf(w * 1.3f) * 0.25f);
+        if (fmodf(q->t + i * 0.13f, 0.5f) < dt) {
+            static const int D[5][3] = { { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 }, { 0, 1, 0 } };
+            int best = -1, most = 2;
+            for (int d = 0; d < 5; d++) {
+                int open = 0;
+                for (int k = 1; k <= 8; k++) {
+                    vec3 p2 = v3_add(q->pos, v3((float)(D[d][0] * k), (float)(D[d][1] * k), (float)(D[d][2] * k)));
+                    if (!open_at(g, p2)) break;
+                    open++;
+                }
+                if (d == 4 && GAS_DEF[q->kind].rise <= 0) open /= 2; /* (heavy gas is slow to climb) */
+                if (open > most) { most = open; best = d; }
+            }
+            q->draught = best >= 0 ? v3(D[best][0] * 0.35f, D[best][1] * 0.35f, D[best][2] * 0.35f) : v3(0, 0, 0);
+        }
+        v = v3_add(v, q->draught);
         for (int ax = 0; ax < 3; ax++) {
             vec3 n = q->pos;
             if (ax == 0) n.x += v.x * dt; else if (ax == 1) n.y += v.y * dt; else n.z += v.z * dt;
@@ -400,6 +456,24 @@ static bool ignite(Game *g, int x, int y, int z) {
 
 static void fire_step(Game *g, Cell c, int fuel) {
     u64 h = mix64(cell_hash(c.x, c.y, c.z) * 0x9E3779B97F4A7C15ull + tick_no);
+    /* a fire needs air: shut in it smoulders (it does not spread, it smokes, it burns slowly);
+     * with air all round it burns fiercer (and a door opened on a smouldering room lets it flare) */
+    int air = 0;
+    for (int dy = -1; dy <= 1; dy++)
+        for (int dz = -1; dz <= 1; dz++)
+            for (int dx = -1; dx <= 1; dx++) {
+                bool known;
+                Block b = chunkmap_block(&g->map, c.x + dx, c.y + dy, c.z + dz, &known);
+                air += known && (b == B_AIR || b == B_FIRE || b == B_ASH);
+            }
+    bool smoulder = air < 5;
+    if (smoulder) {
+        if ((h >> 50 & 7) == 0) sim_gas(g, GAS_SMOKE, v3(c.x + 0.5f, c.y + 0.8f, c.z + 0.5f), 0.3f);
+        if ((h >> 56 & 31) == 0 && fuel > 1) chunkmap_edit(&g->map, c.x, c.y, c.z, B_FIRE, 0, fuel - 1);
+        push(c.x, c.y, c.z);
+        return;
+    }
+    int fierce = air >= 16 ? 2 : 1;
     /* it spreads to what burns around it, and warms what melts */
     for (int k = 0; k < 6; k++) {
         int x = c.x + N6[k][0], y = c.y + N6[k][1], z = c.z + N6[k][2];
@@ -411,7 +485,7 @@ static void fire_step(Game *g, Cell c, int fuel) {
             sim_gas(g, GAS_STEAM, v3(x + 0.5f, y + 0.8f, z + 0.5f), 0.3f);
         }
         /* fire climbs faster than it creeps */
-        int chance = k == 2 ? 5 : 10;
+        int chance = (k == 2 ? 5 : 10) / fierce;
         if (flammable(nb) && (int)((h >> (k * 7 + 3)) % (u64)chance) == 0) ignite(g, x, y, z);
     }
     if ((h >> 50 & 15) == 0) sim_gas(g, GAS_SMOKE, v3(c.x + 0.5f, c.y + 1.2f, c.z + 0.5f), 0.25f);

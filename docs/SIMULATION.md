@@ -405,6 +405,60 @@ water under a rock wall, a torch, bones and a burning wooden post; you walk 80 m
 passes, you come back. Before: 1 tuft of grass, 5 fires. After: 31 grass, 20 flowers, 18 moss
 on the wall, the bones turned to fungus, the fire out.
 
+## Filling the gaps
+
+What the first pass left undone:
+
+- **Heat by material:** each 2 m cell passes heat on by what it is made of: air quickly, stone
+  and earth slowly, wood more slowly still, metal fastest.
+- **Swarms are saved** (save version 22), angry bees still after you included.
+- **Throwing with a gamepad or a touch screen:** with the pickaxe out, the d-pad left and right
+  (or the > button on a touch screen) choose what to throw, and the pickaxe's alternate attack
+  throws it (on a keyboard too, besides C and X).
+- **Animals swim:** hares, goats and the rest swim with their heads out, climb out at the edge,
+  and drown when held under for eight seconds; crabs and salamanders are at home where they are.
+- **Monsters dig:** a brute or troll chasing you breaks through rock in its way, a golem through
+  masonry too (never what is protected); worms burrow as before.
+- **Water in broken blocks:** a block broken open enough (8 of its 64 pieces or more, of stone,
+  earth or wood) holds water in among its pieces: water flows in and out of it, is swum in and
+  drawn as a surface inside it, and stays when the block is broken further. A cracked floor
+  under a pool fills and drains on through.
+- **Campfires:** P (or the d-pad down with the pickaxe out) lights a campfire from a bundle of
+  firewood on the ground in front of you; it burns about two minutes, warms you and cooks. Wood
+  and roots give firewood when chopped; the shop sells it; you start with two (save version 23).
+- **Bots:** when COLD they go to a fire in sight, or light their own campfire when there is none
+  they can reach; at a shop they buy firewood, a warming draught in the cold, a fur cloak once
+  they can afford it and frost salt and oil flasks; in a fight they throw frost salt into a crowd
+  and oil before a fire spell; and they harvest flowers, vines, fungus and moss on their way. (In
+  the frozen north a bot that could not reach a fire lit its own and was warm two seconds later.)
+
+## Air, currents, needs and farming
+
+The ideas left for later in the plan:
+
+- **Draughts:** gas clouds drift toward where the way is most open (out of rooms, up
+  stairwells), looked at twice a second; heavy gas is slow to climb.
+- **A fire needs air:** shut in (fewer than five open cells round it) it smoulders: it does not
+  spread, it smokes and it burns slowly; with air all round it burns fiercer and spreads twice as
+  fast, so a door opened on a smouldering room lets it flare.
+- **Currents:** water runs toward lower water and over edges and falls where nothing holds it;
+  that current carries players, monsters, animals and floating things. Running water wears the
+  earth under it away, a few pieces at a time.
+- **Monsters' needs:** with nobody to fight, those that breathe now and then go and drink at water
+  or rest where it is warm (by a brazier or a fire), stay a while and come back. Whatever walks a
+  way often tramples a path through the grass. Fungus that takes a body in the dark sometimes
+  gets up: a **fungal slime** rises from the bones (never next to you).
+- **Farming:** cut flowers for seeds (the shop sells them too; you start with three). With the
+  pickaxe out, crouch and strike the earth (or moss, or ash) to sow: a **crop** (new block) grows
+  from a shoot to young to ripe where it has light, water within a few cells and mild air (in the
+  Sanctum's garden it is watered for you; frost kills it). Strike a ripe crop for grain, peppers,
+  onions or melons, and two seeds back; flowers or a hive near it mean the bees reached it, and the
+  harvest is doubled. Dig a channel from water to your field and the water runs to it (save
+  version 24).
+
+`--demo farm`: six crops by a channel of water with flowers near, growth sped up: all ripe in a
+moment, reaped for 12 food (the bees doubled it) and ten more seeds.
+
 ## Cost
 
 The whole simulation (water, fire, gases, growth, insects) costs 0.003 ms a frame on average
@@ -461,14 +515,10 @@ quester's corridors full of the dead it left have carrion 8.7 and insects to mat
 
 ## Not done yet
 
-- Critters (hares, goats, fish) do not swim or drown; monsters do.
-- Water inside a broken block (in among its pieces) is not kept: it passes through or not.
-- Swarms are not saved (they gather again).
-- Monsters do not dig.
-- Bots do not seek warmth in the cold, buy cloaks or throw flasks, and do not harvest.
-- Heat spreads the same through stone and air (the cells are 2 m; the table's materials do not
-  change how fast).
-- Gamepads and touch screens cannot choose what X throws (only bombs, with the pickaxe's
-  alternate attack).
-- The ideas under "Later" in [SIMULATION_PLAN.md](SIMULATION_PLAN.md): draughts, currents,
-  monsters' needs, farming.
+- Bots do not farm.
+- Touch screens have no button for a campfire (keyboard P, gamepad d-pad down with the pickaxe
+  out).
+- Currents move water only; oil, acid and lava are not carried, and draughts move gas clouds,
+  not heat.
+- An emptied lair grows over only where plants can grow (earth, damp stone); bare masonry stays
+  bare.

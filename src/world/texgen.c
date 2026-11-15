@@ -534,6 +534,18 @@ static void tex_obsidian(u8 *p, u64 seed, RGB base) {
         }
 }
 
+/* What was sown: stalks with heavy heads (grain gold, or a red or green fruit by the variant). */
+static void spr_crop(u8 *p, u64 seed, RGB stalk, int v) {
+    static const RGB HEAD[4] = { { 225, 190, 80 }, { 200, 60, 40 }, { 230, 200, 90 }, { 120, 170, 60 } };
+    clear(p);
+    for (int i = 0; i < 5; i++) {
+        int x = 1 + i * 3 + (int)(hash3f(seed, i, 0, 0, 57) * 2), hgt = 8 + (int)(hash3f(seed, i, 1, 0, 57) * 5);
+        for (int k = 0; k < hgt; k++) put(p, CLAMPI(x + (k > hgt - 3 ? 1 : 0), 0, N - 1), N - 1 - k, rgb_scale(stalk, 0.75f + 0.03f * k), 1);
+        RGB c = HEAD[v & 3];
+        for (int k = 0; k < 3; k++) put(p, CLAMPI(x + 1, 0, N - 1), N - 1 - hgt - k + 2, rgb_scale(c, 0.85f + 0.1f * k), 1);
+    }
+}
+
 /* Basalt columns: tall narrow stones, joints staggered. */
 static void tex_basalt(u8 *p, u64 seed, RGB base, RGB mortar) {
     for (int x = 0; x < N; x++) {
@@ -681,6 +693,7 @@ void texgen_theme(int theme, u8 *out) {
             case B_OBSIDIAN: tex_obsidian(p, seed, base); break;
             case B_OIL: case B_ACID: tex_water(p, seed, base); break;
             case B_RUBBLE: tex_dirt(p, seed, base); cracks(p, seed, 6, 0.5f); break;
+            case B_CROP: spr_crop(p, seed, base, v); break;
             default: fill_noise(p, seed, base, 0.2f); break;
             }
         }

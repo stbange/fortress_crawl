@@ -1,6 +1,7 @@
 #include "game/game.h"
 #include "render/batch.h"
 #include "world/support.h"
+#include "world/pocket.h"
 
 /* Breaking the world (docs/DESTRUCTION.md). Blocks stay on their 1 m grid; one that is hit
  * breaks into 4x4x4 pieces of 25 cm (world/carve.h) and loses the pieces the blow reaches.
@@ -69,6 +70,7 @@ static void drop_for(Game *g, PlayerSlot *ps, Block b, int x, int y, int z, u64 
         break;
     case B_FLOWER:
         if ((h & 1) == 0) pickup_spawn(g, PK_FOOD, at, FD_HERB, NULL, 0, 0);
+        if (ps && ps->st.seeds < 99 && (h & 2)) ps->st.seeds++; /* (gone to seed) */
         break;
     case B_VINE:
         if ((h & 3) == 0) pickup_spawn(g, PK_FOOD, at, FD_HERB, NULL, 0, 0);
@@ -87,6 +89,27 @@ static void drop_for(Game *g, PlayerSlot *ps, Block b, int x, int y, int z, u64 
         break;
     default: break;
     }
+}
+
+/* A crop struck: ripe, it gives food (twice as much where bees reached it from flowers or a
+ * hive near) and seeds; not yet ripe, only its seed back. */
+static void reap(Game *g, PlayerSlot *ps, int x, int y, int z, int age) {
+    vec3 at = v3(x + 0.5f, y + 0.5f, z + 0.5f);
+    if (age != 0) { if (ps && ps->st.seeds < 99) ps->st.seeds++; return; }
+    bool bees = false;
+    for (int dy = -2; dy <= 3 && !bees; dy++)
+        for (int dz = -4; dz <= 4 && !bees; dz++)
+            for (int dx = -4; dx <= 4 && !bees; dx++) {
+                bool known;
+                Block b = chunkmap_block(&g->map, x + dx, y + dy, z + dz, &known);
+                bees = b == B_FLOWER || b == B_HIVE;
+            }
+    static const int CROPS[4] = { FD_GRAIN, FD_PEPPER, FD_ONION, FD_MELON };
+    u64 h = mix64((u64)(x * 73856093) ^ (u64)(z * 19349663) ^ (u64)y);
+    int n = bees ? 2 : 1;
+    for (int k = 0; k < n; k++) pickup_spawn(g, PK_FOOD, v3_add(at, v3(0, 0.2f * k, 0)), CROPS[h & 3], NULL, 0, 0);
+    if (ps) ps->st.seeds = (u8)MINI(99, ps->st.seeds + 1 + (int)((h >> 8) & 1));
+    if (ps && bees && ps->banner_time <= 0) game_banner(ps, "A GOOD HARVEST - THE BEES FOUND IT");
 }
 
 /* A campfire from a bundle of firewood, on the ground in front of you: it burns two minutes or
@@ -268,11 +291,13 @@ static int break_cell(Game *g, PlayerSlot *ps, int x, int y, int z, vec3 p, floa
     Block b = raw & BLOCK_MAT;
     if (!known || b == B_AIR) return 0;
     int hard = BLOCK_HARDNESS[b];
-    if (hard == HARD_NEVER || hard > power || dig_protected(g, x, y, z)) return 0;
+    if (hard == HARD_NEVER || hard > power || (dig_protected(g, x, y, z) && b != B_CROP)) return 0; /* (what you sowed you reap, at home too) */
     if (BLOCKS[b].render == RENDER_CROSS || BLOCKS[b].render == RENDER_LIQUID) {
         /* a sprite (grass, web, a torch) goes at once if the blow reaches its middle */
         if (v3_len(v3_sub(v3(x + 0.5f, y + 0.5f, z + 0.5f), p)) > r + 0.45f) return 0;
+        int age = STAIN_AGE(chunkmap_stain(&g->map, x, y, z));
         if (!chunkmap_edit(&g->map, x, y, z, B_AIR, 0, 0)) return 0;
+        if (b == B_CROP) reap(g, ps, x, y, z, age);
         particles_burst(g, v3(x + 0.5f, y + 0.4f, z + 0.5f), mat_color(b), 5, 1.5f, 0.04f, false);
         drop_for(g, ps, b, x, y, z, mix64(((u64)(u32)x << 32) ^ (u64)(u32)z ^ (u64)(u32)y * 0x9E37));
         return 1;
@@ -587,9 +612,44 @@ void dig_swing(Game *g, PlayerSlot *ps) {
     if (b == B_ORE && n) forge_mine(g, ps, x, y, z); /* ore gives ore to the pick, too */
 }
 
+/* Sowing: the earth looked at (within 3 m) gets a seed in the cell above it. Allowed in the
+ * Sanctum too (its garden is yours to sow). */
+static bool sow(Game *g, PlayerSlot *ps) {
+    Stats *s = &ps->st;
+    if (!s->seeds) { if (ps->banner_time <= 0) game_banner(ps, "NO SEEDS - CUT FLOWERS FOR THEM, OR THE SHOP SELLS THEM"); return false; }
+    vec3 eye = player_eye(&ps->pl), look = dir_from_angles(ps->pl.yaw, ps->pl.pitch);
+    for (float t = 0.3f; t < 3.0f; t += 0.1f) {
+        vec3 q = v3_add(eye, v3_scale(look, t));
+        int x = (int)floorf(q.x), y = (int)floorf(q.y), z = (int)floorf(q.z);
+        bool known;
+        Block b = chunkmap_block(&g->map, x, y, z, &known);
+        if (!known) return false;
+        if (!block_solid(b) && b != B_ASH && b != B_GRASS) continue;
+        /* the cell to sow into: this one if it is ash or grass on earth, else the one above */
+        int sy = block_solid(b) ? y + 1 : y;
+        Block below = chunkmap_block(&g->map, x, sy - 1, z, &known), at = chunkmap_block(&g->map, x, sy, z, &known);
+        bool home = world_is_pocket(floordiv(x, CHUNK), floordiv(sy, CHUNK), floordiv(z, CHUNK));
+        if (!(SUBSTANCES[below].nutrient && block_solid(below)) || !(at == B_AIR || at == B_ASH || at == B_GRASS) ||
+            (dig_protected(g, x, sy, z) && !home)) {
+            if (ps->banner_time <= 0) game_banner(ps, "SEEDS NEED EARTH (OR MOSS, OR ASH) TO GROW IN");
+            return false;
+        }
+        if (!chunkmap_edit_stain(&g->map, x, sy, z, B_CROP, 0, 0, 1 << 6)) return false;
+        s->seeds--;
+        s->cooldown = 0.4f;
+        particles_burst(g, v3(x + 0.5f, sy + 0.1f, z + 0.5f), v3(0.45f, 0.35f, 0.2f), 6, 1.0f, 0.04f, false);
+        char buf[64];
+        snprintf(buf, sizeof buf, "SOWN (%d SEEDS LEFT) - IT NEEDS LIGHT AND WATER NEAR", s->seeds);
+        game_banner(ps, buf);
+        return true;
+    }
+    return false;
+}
+
 void dig_update(Game *g, PlayerSlot *ps, bool attack, bool alt) {
     Stats *s = &ps->st;
     if (ps->bomb_cd > 0) ps->bomb_cd -= 1.0f / 60.0f;
-    if (attack && s->cooldown <= 0) dig_swing(g, ps);
+    if (attack && s->cooldown <= 0 && ps->pl.stance == STANCE_CROUCH) sow(g, ps); /* crouching: sow */
+    else if (attack && s->cooldown <= 0) dig_swing(g, ps);
     else if (alt) throw_selected(g, ps); /* (what C, the d-pad or the > button chose with the pickaxe out) */
 }

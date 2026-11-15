@@ -739,6 +739,11 @@ static void monster_physics(Game *g, Monster *m, vec3 want, float dt) {
         want.x *= 0.5f;
         want.z *= 0.5f;
     }
+    if (depth > h * 0.3f) { /* running water carries it */
+        vec3 cur = sim_current(g, m->pos);
+        want.x += cur.x * 0.8f;
+        want.z += cur.z * 0.8f;
+    }
     if (d->flies) {
         m->vel = v3_lerp(m->vel, want, fminf(1.0f, 4.0f * dt));
         for (int a = 0; a < 3; a++) {
@@ -774,6 +779,13 @@ static void monster_physics(Game *g, Monster *m, vec3 want, float dt) {
             blocked = true;
             if (a == 0) m->vel.x = 0; else m->vel.z = 0;
         }
+    }
+    /* what walks a way often tramples a path through the grass */
+    if (m->on_ground && (fabsf(m->vel.x) + fabsf(m->vel.z)) > 1.0f && hash_unit(mix64((u64)(m->pos.x * 977.0f) ^ (u64)(g->time * 1000.0f))) < 0.15f * dt) {
+        int tx = (int)floorf(m->pos.x), ty = (int)floorf(m->pos.y + 0.1f), tz = (int)floorf(m->pos.z);
+        bool known;
+        Block b = chunkmap_block(&g->map, tx, ty, tz, &known);
+        if ((b == B_GRASS || b == B_FLOWER) && !dig_protected(g, tx, ty, tz)) chunkmap_edit(&g->map, tx, ty, tz, B_AIR, 0, 0);
     }
     bool falling = m->vel.y < 0;
     m->on_ground = false;
@@ -1516,6 +1528,37 @@ void monsters_update(Game *g, float dt) {
                 }
                 break;
             }
+            }
+        }
+        /* with nobody to fight, those that breathe go to drink at water and rest by warmth now and
+         * then (docs/SIMULATION.md) */
+        if (!m->awake && !m->charm_t && v3_len(want) < 0.1f && breathes(m->type) && !MONSTERS[m->type].flies && m->type != MON_MIMIC &&
+            m->type != MON_WORM) {
+            m->need_t -= dt;
+            if (!m->need && m->need_t <= 0) {
+                u64 hh = mix64((u64)(m - g->mons) * 0x9E37 + (u64)(g->time * 100));
+                int want_kind = (hh & 3) ? 1 : 2;
+                m->need_t = 40.0f + (float)(hh % 60);
+                for (int k = 0; k < 40; k++) {
+                    u64 q = mix64(hh + (u64)k);
+                    int x = (int)floorf(m->pos.x) + (int)(q % 25) - 12, z = (int)floorf(m->pos.z) + (int)((q >> 8) % 25) - 12;
+                    int y = (int)floorf(m->pos.y) + (int)((q >> 16) % 5) - 2;
+                    bool ok = false, known;
+                    if (want_kind == 1) ok = sim_fluid(g, x, y, z) > 0 && chunkmap_block(&g->map, x, y + 1, z, &known) == B_AIR;
+                    else ok = chunkmap_block(&g->map, x, y, z, &known) == B_AIR && game_solid(g, x, y - 1, z) == 1 && heat_cell(g, x, y, z) >= 24.0f;
+                    if (ok) { m->need = (u8)want_kind; m->need_at = v3(x + 0.5f, (float)y, z + 0.5f); break; }
+                }
+            }
+            if (m->need) {
+                vec3 to = v3_sub(m->need_at, m->pos);
+                to.y = 0;
+                float d = v3_len(to);
+                if (d > 1.6f && m->need_t > 0) {
+                    want = v3_scale(to, MONSTERS[m->type].speed * m->scale * 0.4f / d);
+                    m->yaw = atan2f(to.z, to.x);
+                    m->need_t = fminf(m->need_t, 30.0f); /* (it gives up after a while) */
+                } else if (d <= 1.6f && m->need_t > 12.0f) m->need_t = 8.0f; /* there: it stays a while */
+                else if (m->need_t <= 0) { m->need = 0; m->need_t = 60.0f; }
             }
         }
         /* a hound or a bat with nobody to fight hunts the animals near (docs/SIMULATION.md) */

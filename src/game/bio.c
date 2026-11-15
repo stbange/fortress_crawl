@@ -10,6 +10,7 @@
  * Growth goes through chunkmap_edit, so it is saved and regrows what was cut. */
 #include "game/game.h"
 #include "game/food.h"
+#include "world/pocket.h"
 
 #define BIO_SAMPLES 48     /* cells looked at per player per tick (8 ticks a second) */
 #define BIO_RANGE 16       /* metres around each player */
@@ -86,7 +87,7 @@ static void marks(Game *g, int x, int y, int z, Block b, float r) {
     if (!st) return;
     u8 n = st;
     int age = STAIN_AGE(st);
-    if (age && r < 0.5f) n = (u8)((n & 0x3F) | (age == 2 ? 0 : (2 << 6))); /* shoot, young, grown */
+    if (age && r < 0.5f && b != B_CROP) n = (u8)((n & 0x3F) | (age == 2 ? 0 : (2 << 6))); /* shoot, young, grown */
     if (STAIN_WET(st) && r < 0.35f) {
         bool water = false;
         for (int k = 0; k < 6 && !water; k++)
@@ -170,10 +171,24 @@ static bool growing_weather(Game *g, int x, int y, int z) {
     return t > 2.0f && t < 45.0f;
 }
 
+/* A crop grows a stage (shoot, young, ripe) when it has light, water near and mild air; in the
+ * Sanctum's garden it is watered for you. Frost kills it. */
+static void crop_grows(Game *g, int x, int y, int z, float r) {
+    u8 st = chunkmap_stain(&g->map, x, y, z);
+    int age = STAIN_AGE(st);
+    float t = heat_cell(g, x, y, z);
+    if (t < -2.0f && r < 0.3f) { wither(g, x, y, z, B_AIR); return; }
+    if (!age) return; /* ripe */
+    bool home = world_is_pocket(floordiv(x, CHUNK), floordiv(y, CHUNK), floordiv(z, CHUNK));
+    if (light_at(g, x, y, z) < 5 || t < 2.0f || t > 40.0f || !(home || damp(g, x, y - 1, z)) || r > 0.4f) return;
+    chunkmap_set_stain(&g->map, x, y, z, (u8)((st & 0x3F) | (age == 2 ? 0 : (2 << 6))));
+}
+
 static void bio_cell(Game *g, int x, int y, int z, u64 h) {
     Block b = blk(g, x, y, z);
     float r = hash_unit(h);
     marks(g, x, y, z, b, hash_unit(h >> 40));
+    if (b == B_CROP) { crop_grows(g, x, y, z, r); return; }
     if (heat_rules(g, x, y, z, b, hash_unit(h >> 20))) return;
     if ((b == B_AIR || b == B_ASH || b == B_GRASS || b == B_ROCK || b == B_BONES) && !growing_weather(g, x, y, z)) return;
     if (b == B_AIR || b == B_ASH) {
@@ -250,8 +265,17 @@ static void bio_cell(Game *g, int x, int y, int z, u64 h) {
         return;
     }
     if (b == B_BONES) {
-        /* the dead feed the fungus */
-        if (r < 0.04f && !dig_protected(g, x, y, z)) grow(g, x, y, z, B_FUNGUS);
+        /* the dead feed the fungus; now and then what grows on them in the dark gets up and walks */
+        if (r < 0.04f && !dig_protected(g, x, y, z)) {
+            grow(g, x, y, z, B_FUNGUS);
+            vec3 at = v3(x + 0.5f, (float)y, z + 0.5f);
+            PlayerSlot *near = game_nearest_player(g, at, 30.0f);
+            if (near && v3_len(v3_sub(near->pl.pos, at)) > 10.0f && light_at(g, x, y, z) <= 4 && hash_unit(h >> 24) < 0.08f) {
+                Chunk *c = chunkmap_get(&g->map, floordiv(x, CHUNK), floordiv(y, CHUNK), floordiv(z, CHUNK));
+                Monster *m = monster_spawn(g, MON_SLIME, at, c ? c->info.level : 1, false, v3(0.35f, 0.8f, 0.3f), mix64(h) | 1);
+                if (m) { m->color = v3(0.35f, 0.75f, 0.3f); SDL_Log("bio: a fungal slime rises from bones at %d %d %d", x, y, z); }
+            }
+        }
         return;
     }
 }

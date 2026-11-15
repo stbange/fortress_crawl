@@ -289,7 +289,7 @@ step 1).
 
 ## Later
 
-Ideas that build on these and can be taken up afterwards:
+Built afterwards, too (SIMULATION.md, "Filling the gaps" and "Air, currents, needs and farming"):
 
 - **Air and draughts:** gases drift toward openings and up stairwells; fire needs air and chokes
   in a sealed room, then flares when the door opens.
