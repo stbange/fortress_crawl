@@ -55,6 +55,8 @@ typedef struct Bot {
     vec3 goal;
     vec3 last_pos;
     int stuck_windows, stuck_total, hard_stuck;
+    float dig_until, dig_next; /* stuck: digging toward the goal (docs/DESTRUCTION.md) */
+    int digs, blasts;
     int deaths;
     bool was_dead;
     int last_level, last_chapter;
@@ -900,13 +902,13 @@ static void summary(PlayerSlot *ps) {
     Stats *s = &ps->st;
     logf_("SUMMARY style=%s minutes=%.1f level=%d kills=%d deaths=%d gold=%d max_gate_dist=%.0f max_tier=%d max_depth=%.0f max_height=%.0f "
           "cells=%d stuck=%d hard_stuck=%d realm_trips=%d realm_failed=%d keystones=%d builds=%d chapter=%d missions=%d lore=%d fights=%d avg_fight=%.1f fight_share=%.0f%% "
-          "replans=%d no_goal=%d stalemates=%d close_calls=%d food=%d hunted=%d harvested=%d cooked=%d eaten=%d recipes=%d reagents=%d brewed=%d elixirs=%d formulae=%d forge_mats=%d forged=%d masterworks=%d smithing=%d\n",
+          "replans=%d no_goal=%d stalemates=%d close_calls=%d food=%d hunted=%d harvested=%d cooked=%d eaten=%d recipes=%d reagents=%d brewed=%d elixirs=%d formulae=%d forge_mats=%d forged=%d masterworks=%d smithing=%d digs=%d blasts=%d changed=%d\n",
           STYLE_NAMES[B.style], B.t / 60.0f, s->level, s->kills, B.deaths, s->gold, B.max_dist, B.max_tier, B.max_depth, B.max_height,
           nvisited, B.stuck_total, B.hard_stuck, B.realm_trips, B.realm_failed, G->sanctum.keystones, B.builds, s->chapter + 1, s->nmissions, G->nlore, B.fights,
           B.fights ? B.fight_time_total / B.fights : 0.0f, 100.0f * B.time_in_fight / fmaxf(1.0f, B.t), B.replans, B.no_goal, B.stalemates, B.close_calls,
           g_tele.food, g_tele.hunted, g_tele.harvested, g_tele.cooked, g_tele.eaten, __builtin_popcount(s->recipes),
           g_tele.reagents, g_tele.brewed, g_tele.elixirs, __builtin_popcount(s->formulae), g_tele.forge_mats, g_tele.forged, g_tele.masterworks,
-          smith_level(s->smith_xp));
+          smith_level(s->smith_xp), B.digs, B.blasts, G->map.edits_total);
     float total = 0;
     for (int i = 0; i < HS_COUNT; i++) total += g_tele.taken[i];
     logf_("DAMAGE_TAKEN total=%.0f", total);
@@ -1143,6 +1145,35 @@ bool bot_step(Game *g, PlayerInput *in, float dt) {
     if (B.goal_kind == 2) B.npath = 0;
     if (bot_food(g, ps, in, dt)) return true;
 
+    /* stuck: dig (or blast) a way toward the goal for a moment */
+    if (B.t < B.dig_until) {
+        vec3 to = v3(B.goal.x, ps->pl.pos.y + 1.4f, B.goal.z);
+        face(ps, to, 8.0f, dt);
+        ps->pl.pitch = -8.0f * PI_F / 180.0f;
+        ps->pick_out = true;
+        in->move_z = 0.6f;
+        if (B.t >= B.dig_next) {
+            B.dig_next = B.t + 0.35f;
+            /* masonry in the way and bombs in the bag: one bomb, then back off */
+            vec3 eye = player_eye(&ps->pl), f = dir_from_angles(ps->pl.yaw, ps->pl.pitch);
+            vec3 hit = v3_add(eye, v3_scale(f, 1.2f));
+            bool known;
+            Block b = chunkmap_block(&G->map, (int)floorf(hit.x), (int)floorf(hit.y), (int)floorf(hit.z), &known);
+            if (BLOCK_HARDNESS[b] == HARD_MASONRY && s->bombs > 0 && ps->bomb_cd <= 0 && !dig_protected(G, (int)floorf(hit.x), (int)floorf(hit.y), (int)floorf(hit.z))) {
+                bomb_throw(G, ps);
+                B.blasts++;
+                logf_("%7.1f BLAST at %.1f %.1f %.1f\n", B.t, p.x, p.y, p.z);
+                B.dig_until = B.t + 0.1f;
+                B.avoid_until = B.t + 3.0f;
+            } else {
+                s->cooldown = 0;
+                dig_swing(G, ps);
+            }
+        }
+        if (B.t >= B.dig_until - 0.05f) ps->pick_out = false;
+        return true;
+    }
+
     /* stuck? */
     if (B.t >= B.stuck_check) {
         float moved = v3_len(v3_sub(p, B.last_pos));
@@ -1152,6 +1183,11 @@ bool bot_step(Game *g, PlayerInput *in, float dt) {
             int *gv = visits((int)floorf(B.goal.x), (int)floorf(B.goal.y), (int)floorf(B.goal.z), true);
             if (gv) *gv += 50; /* that goal is not reachable this way */
             B.npath = 0;
+            if (B.stuck_windows == 2 || B.stuck_windows == 4) {
+                B.dig_until = B.t + 2.5f;
+                B.digs++;
+                logf_("%7.1f DIG toward %.1f %.1f %.1f\n", B.t, B.goal.x, B.goal.y, B.goal.z);
+            }
             if (B.stuck_windows == 6) {
                 B.hard_stuck++;
                 /* the whole area round that goal is out of reach this way: forget it */

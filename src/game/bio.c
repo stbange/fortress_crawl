@@ -55,6 +55,8 @@ static int count_near(Game *g, int x, int y, int z, int r, int ry, Block what) {
     return n;
 }
 
+static bool damp(Game *g, int x, int y, int z) { return water_near(g, x, y, z, 3) || count_near(g, x, y, z, 2, 2, B_WATER) > 0; }
+
 static bool neighbour_is(Game *g, int x, int y, int z, Block what) {
     static const int D[6][3] = { { 1, 0, 0 }, { -1, 0, 0 }, { 0, 1, 0 }, { 0, -1, 0 }, { 0, 0, 1 }, { 0, 0, -1 } };
     for (int d = 0; d < 6; d++)
@@ -74,6 +76,26 @@ static int g_grown[B_COUNT]; /* growth since start, for the demo and the tests *
 static void grow(Game *g, int x, int y, int z, Block b) {
     if (chunkmap_edit(&g->map, x, y, z, b, 0, 0)) g_grown[b]++;
 }
+
+/* Whether the cell is one the game changed (grown, not generated): only those wither, so the
+ * world's own scenery stays as it was made. */
+static bool grown_here(Game *g, int x, int y, int z) {
+    int cx = floordiv(x, CHUNK), cy = floordiv(y, CHUNK), cz = floordiv(z, CHUNK), n;
+    const BlockEdit *e = chunkmap_chunk_edits(&g->map, cx, cy, cz, &n);
+    u16 idx = (u16)cidx(x - cx * CHUNK, y - cy * CHUNK, z - cz * CHUNK);
+    for (int i = 0; i < n; i++)
+        if (e[i].idx == idx) return true;
+    return false;
+}
+
+static int g_withered;
+static void wither(Game *g, int x, int y, int z, Block to) {
+    if (chunkmap_edit(&g->map, x, y, z, to, 0, 0)) {
+        g_withered++;
+        particles_burst(g, v3(x + 0.5f, y + 0.4f, z + 0.5f), v3(0.45f, 0.4f, 0.25f), 3, 0.6f, 0.03f, false);
+    }
+}
+int bio_withered(void) { return g_withered; }
 
 int bio_grown(int b) { return b >= 0 && b < B_COUNT ? g_grown[b] : 0; }
 
@@ -117,16 +139,39 @@ static void bio_cell(Game *g, int x, int y, int z, u64 h) {
         return;
     }
     if (b == B_GRASS) {
+        int light = light_at(g, x, y, z);
         /* flowers open where it is bright */
-        if (light_at(g, x, y, z) >= 9 && r < 0.12f && count_near(g, x, y, z, 1, 0, B_FLOWER) < 2 && !dig_protected(g, x, y, z))
+        if (light >= 9 && r < 0.12f && count_near(g, x, y, z, 1, 0, B_FLOWER) < 2 && !dig_protected(g, x, y, z))
             grow(g, x, y, z, B_FLOWER);
+        /* grown grass whose light went out (a torch taken, a hole filled) dies back */
+        else if (light <= 2 && r < 0.15f && grown_here(g, x, y, z)) wither(g, x, y, z, B_AIR);
+        return;
+    }
+    if (b == B_FLOWER) {
+        if (light_at(g, x, y, z) < 6 && r < 0.15f && grown_here(g, x, y, z)) wither(g, x, y, z, B_GRASS);
+        return;
+    }
+    if (b == B_MOSS) {
+        /* moss dries back to stone once its water is gone */
+        if (r < 0.06f && grown_here(g, x, y, z) && !damp(g, x, y, z))
+            wither(g, x, y, z, B_ROCK);
+        return;
+    }
+    if (b == B_FUNGUS) {
+        /* fungus brought into the light dries up */
+        if (light_at(g, x, y, z) >= 11 && r < 0.2f && grown_here(g, x, y, z)) wither(g, x, y, z, B_AIR);
+        return;
+    }
+    if (b == B_VINE) {
+        /* a vine cut above falls */
+        Block above = blk(g, x, y + 1, z);
+        if (above != B_VINE && !block_solid(above) && grown_here(g, x, y, z)) wither(g, x, y, z, B_AIR);
         return;
     }
     if (b == B_ROCK) {
         /* moss: on stone open to the air, in the shade, with water near or moss beside */
-        /* (damp: water in the box of 2 around, straight below or out to 3) */
-        if (r < 0.3f && exposed(g, x, y, z) &&
-            ((neighbour_is(g, x, y, z, B_MOSS) && r < 0.15f) || water_near(g, x, y, z, 3) || count_near(g, x, y, z, 2, 2, B_WATER) > 0)) {
+        /* (damp: water in the box of 2 around, or straight out to 3); moss beside it spreads faster */
+        if (r < (neighbour_is(g, x, y, z, B_MOSS) ? 0.3f : 0.12f) && exposed(g, x, y, z) && damp(g, x, y, z)) {
             int light = MAXI(light_at(g, x, y + 1, z), light_at(g, x, y - 1, z));
             if (light <= 8 && !dig_protected(g, x, y, z)) grow(g, x, y, z, B_MOSS);
         }
@@ -254,4 +299,5 @@ void bio_update(Game *g, float dt) {
 void bio_reset(void) {
     memset(swarms, 0, sizeof swarms);
     memset(g_grown, 0, sizeof g_grown);
+    g_withered = 0;
 }

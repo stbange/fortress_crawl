@@ -13,12 +13,21 @@ int game_solid(void *user, int x, int y, int z) {
     bool known;
     Block b = chunkmap_block_raw(&g->map, x, y, z, &known);
     if (!known) return -1;
+    if (b == B_LAVA) { int l = chunkmap_level(&g->map, x, y, z); return l && l < 8 ? 2 : 1; } /* a thin flow: as high as it is */
     if (block_solid(b)) return block_carved(b) ? 2 : 1; /* 2: broken, only its pieces are solid */
     return mech_solid(g, x, y, z) ? 1 : 0;
 }
 
 /* The pieces left of a broken block (physics.h). */
-static u64 game_pieces(void *user, int x, int y, int z) { return chunkmap_mask(&((Game *)user)->map, x, y, z); }
+static u64 game_pieces(void *user, int x, int y, int z) {
+    Game *g = user;
+    bool known;
+    if (chunkmap_block_raw(&g->map, x, y, z, &known) == B_LAVA) {
+        int l = chunkmap_level(&g->map, x, y, z), layers = l ? (l + 1) / 2 : 4; /* the lowest layers of 25 cm */
+        return layers >= 4 ? CARVE_FULL : (1ULL << (16 * layers)) - 1;
+    }
+    return chunkmap_mask(&g->map, x, y, z);
+}
 
 
 void (*g_note_hook)(int player, const char *kind, const char *text);
@@ -1049,6 +1058,15 @@ static void draw_hud(Game *g, PlayerSlot *ps, int W, int H) {
     bool touch = ps->keyboard && g->touch.active;
     float bw = small ? fminf(80.0f, W * 0.35f) : 110.0f;
     batch2d_begin(W, H);
+    /* in a cloud you see little: smoke greys the view, steam whitens it, poison tints it (docs/SIMULATION.md) */
+    {
+        float sm = sim_gas_at(eye, GAS_SMOKE), st = sim_gas_at(eye, GAS_STEAM), po = sim_gas_at(eye, GAS_POISON);
+        if (sm > 0.05f) batch2d_rect(0, 0, (float)W, (float)H, 0.12f, 0.11f, 0.1f, fminf(0.8f, sm * 0.85f));
+        if (st > 0.05f) batch2d_rect(0, 0, (float)W, (float)H, 0.85f, 0.87f, 0.9f, fminf(0.7f, st * 0.7f));
+        if (po > 0.05f) batch2d_rect(0, 0, (float)W, (float)H, 0.3f, 0.55f, 0.15f, fminf(0.35f, po * 0.4f));
+        /* and under water the light turns green-blue */
+        if (sim_water_depth(g, ps->pl.pos) > eye.y - ps->pl.pos.y) batch2d_rect(0, 0, (float)W, (float)H, 0.08f, 0.22f, 0.3f, 0.45f);
+    }
     if (s->hurt > 0) batch2d_rect(0, 0, (float)W, (float)H, 0.6f, 0.0f, 0.0f, s->hurt * 0.35f);
     if (s->dead) batch2d_rect(0, 0, (float)W, (float)H, 0.25f, 0.0f, 0.0f, fminf(0.75f, s->dead_t * 0.4f));
     bar(6, H - 24.0f, bw, 5, s->hp / s->maxhp, 0.85f, 0.15f, 0.12f);

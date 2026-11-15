@@ -40,6 +40,25 @@ it drains through the hole until it is level again, and then sleeps.
   each changed cell's level). After loading, water lies still until something wakes it.
 - Nothing flows in the Sanctum.
 
+## Seeping
+
+Water seeps through a broken block into the cell beyond it (below or to the side) where the
+block is hollow enough (at least 8 of its 64 pieces gone) and open on both the side the water
+touches and the far side: one eighth every other tick, so a cracked floor under a pool drips
+into the room below instead of holding or emptying at once.
+
+## Lava
+
+Lava flows too, but thickly: it moves only every third tick, falls into what is below like
+water, and runs sideways only where it stands three eighths above its neighbour, so it stops
+in a short tongue instead of a film. Where a tongue is two eighths thin or less it crusts over
+into obsidian after a while. It burns away grass, flowers, vines, webs, roots, bones and fungus
+in its way, sets wood alight beside it and melts ice. Water quenches it: lava touching water
+turns to obsidian and the water to steam. A thin flow is only as high as it is: you collide with
+its top, and it is drawn at its height. Lava the world was generated with lies still until
+something beside it changes (`--demo lava`: 18 cells let loose spread to about 30, set a
+wooden post alight and leave 14 cells of obsidian where they cooled or met the pool).
+
 ## Swimming and breath
 
 - In water deeper than 0.3 m you wade (75% speed); deeper than 0.9 m you swim: 55% speed, no
@@ -48,6 +67,19 @@ it drains through the hole until it is level again, and then sleeps.
 - With your eyes under water you have 15 seconds of breath, shown as ten bubbles over the
   health bar. Then "OUT OF BREATH - GET TO THE SURFACE", and you lose 8% of your health every
   second. Breath comes back four times as fast as it went.
+
+## Monsters in water, fire and smoke
+
+- Monsters swim like players: slower, floating with the head out, and they climb out at
+  edges. Golems, knights, skeletons and mimics are too heavy: they sink and wade along the
+  bottom. Those that breathe drown after 12 seconds under water (8% of their health a second);
+  skeletons, wraiths, golems, mimics and wisps do not breathe. A monster lured into a lake can
+  drown.
+- They will not step into fire, lava or a thick cloud of poison or steam: they turn aside, and
+  one standing in it gets out.
+- In thick smoke or steam you cannot be seen beyond 3.5 metres: smoke is cover.
+- And you see little in it either: smoke greys the view, steam whitens it, poison tints it
+  green, and under water the light turns green-blue.
 
 ## Fire
 
@@ -127,6 +159,23 @@ Growth is slow on purpose: a patch of grass by a torch spreads about a metre a m
 grass, a channel of water along a rock wall under an overhang, bones and two torches): in ten
 seconds, about twenty minutes of growth, 48 grass, 17 flowers, 38 moss, 28 vines and 2 hives.
 
+## Withering
+
+Plants that grew in play wither when what they need goes away; the plants the world was
+generated with stay as made. Grass in the dark (light 2 or less) dies, flowers in dim light
+close back to grass, moss whose water is gone dries back to stone, fungus brought into bright
+light dries up, and a vine cut above falls. Moss grows and dries by the same test of dampness,
+so it does not flicker. (`--demo grow` puts the torches out and drains the channel after six
+seconds: the 18 cells of moss dry back to stone; the grass stays, because the vestibule's
+braziers still light it.)
+
+## Saving and waking
+
+Every changed cell is saved (save version 15), and the clouds of gas too (version 16). Water,
+lava and fires that were moving when the game was saved, or when their chunk was unloaded,
+move on as soon as their chunk is loaded again: a fire saved half-way burns on after loading
+and goes out by itself. Insect swarms are not saved; they gather again around what draws them.
+
 ## Cost
 
 The whole simulation (water, fire, gases, growth, insects) costs 0.003 ms a frame on average
@@ -138,7 +187,11 @@ the remeshing of the chunks it touches, as any other edit.
 - `--demo flood`: a block of water let loose in the vestibule; the log follows its cells,
   volume and the cells waiting. `--cast 1` puts lava in its way, `--cast 2` drops you into a
   walled shaft of water (the log follows your height, depth and breath), `--cast 3` freezes
-  the pool and then strikes it with lightning.
+  the pool and then strikes it with lightning, `--cast 4` breaks the floor under it through
+  its core above a hollow (the water seeps through), `--cast 5` shuts a crawler and a golem in
+  a lidded shaft of water.
+- `--demo lava`: a block of lava let loose beside a wooden post and a pool; the log counts lava,
+  obsidian, fire and water.
 - `--demo burn`: a wooden wall with grass in front, set alight; the log counts wood, fire and
   smoke. `--cast 1` hangs a cloud of swamp gas beside it, which explodes when the fire reaches
   it ("swamp gas explodes at ...").
@@ -148,7 +201,8 @@ the remeshing of the chunks it touches, as any other edit.
 ## Bots
 
 Bots do not path through water over their heads, through fire or onto lava; in deep water or on
-a vine they swim or climb up and out.
+a vine they swim or climb up and out. When they are stuck they dig toward their goal with the
+pickaxe for a few seconds, and throw a bomb at masonry in the way if they carry one.
 
 ## In play
 
@@ -156,15 +210,21 @@ Four bot runs of 15 minutes after all four stages (Edhold 1337 quester, Gerhold 
 Aldburg 8080 caster, Ulwall 9001 archer): no crashes, no drownings, one death in all (the
 quester, at level 10 in chapter 3). Between 31 and 95 cells of each world changed (bones
 where monsters fell, grass and moss spreading, fungus on bones), far below the 60000 kept.
-Bots do not dig, blast or harvest, so the pickaxe, bombs, hives and swimming were checked with
-the demos rather than in these runs. The simulation's cost stays under a tenth of a millisecond
-a frame at its worst.
+The simulation's cost stays under a tenth of a millisecond a frame at its worst.
+
+The same four runs again after lava, seeping, monsters in water, withering and digging bots:
+no crashes, three deaths in all (the quester twice, in melee). The bots dug toward their goal
+23 times and threw 5 bombs at masonry when stuck; they had to give up a goal and go home 4 times
+instead of 10. Between 90 and 187 cells of each world changed. Bots still do not harvest, so
+hives were checked with the demos.
+
+In `--demo flood --cast 5` a crawler and a golem are shut in a lidded shaft of water: the
+crawler floats up against the lid, runs out of air after 12 seconds and drowns at 24; the golem
+sinks, walks the bottom and is unharmed (it does not breathe).
 
 ## Not done yet
 
-- Lava does not flow; it stays as generated.
-- Monsters and critters do not swim or drown.
-- Water does not seep through the gaps in broken blocks.
-- Gases and swarms are not saved.
-- Plants do not die back in the dark or for want of water; nothing withers.
-- Smoke does not hide anything yet, and monsters do not avoid fire or clouds.
+- Critters (hares, goats, fish) do not swim or drown; monsters do.
+- Water inside a broken block (in among its pieces) is not kept: it passes through or not.
+- Swarms are not saved (they gather again).
+- Monsters do not dig.

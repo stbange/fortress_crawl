@@ -89,6 +89,7 @@ typedef struct Monster {
      * how long it then leaves you alone */
     float giveup_t, giveup_d, sulk_t;
     float close_t;   /* brute: how long you have stood within its reach */
+    float air_used;  /* seconds under water (docs/SIMULATION.md): past MON_BREATH it drowns */
     i16 charmer;     /* player slot it fights for */
     u8 alt_kind;     /* this tick's target: 0 a player, 1 a decoy or lure, 2 a monster, 3 follows its charmer */
     i16 alt_idx;     /* that decoy (effect) or monster */
@@ -193,6 +194,7 @@ typedef struct LoreEntry {
 } LoreEntry;
 
 #define BREATH_MAX 15.0f
+#define MON_BREATH 12.0f
 #define MAX_BOMBS 16
 typedef struct Bomb {
     bool alive;
@@ -879,8 +881,11 @@ void sim_reset(void);
 void sim_wake(int x, int y, int z);
 void sim_update(Game *g, float dt);
 int sim_fluid(Game *g, int x, int y, int z);
+int sim_lava(Game *g, int x, int y, int z); /* lava level 1..8, 0 if none */
 float sim_water_depth(Game *g, vec3 feet);
 int sim_pending(void);
+int sim_gas_list(float *out, int max); /* 6 floats each: x, y, z, amount, radius, kind */
+void sim_gas_restore(const float *in);
 enum { GAS_STEAM, GAS_SMOKE, GAS_POISON, GAS_SWAMP, GAS_SPORES, GAS_COUNT };
 void sim_gas(Game *g, int kind, vec3 p, float amount);
 float sim_gas_at(vec3 p, int kind);
@@ -895,6 +900,7 @@ void bio_reset(void);
 void bio_on_death(Game *g, vec3 p, u64 h);   /* bones where something died */
 void bio_hive_broken(Game *g, vec3 p);       /* angry bees */
 int bio_grown(int block);                    /* cells grown since start (demo, tests) */
+int bio_withered(void);
 bool forge_start(Game *g, PlayerSlot *ps, bool reforge);
 void forge_strike(Game *g, PlayerSlot *ps);
 void forge_bellows(Game *g, PlayerSlot *ps);

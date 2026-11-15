@@ -707,7 +707,7 @@ static void demo_setup(Game *g) {
                 p1->thread.n, p1->thread.reached, (SDL_GetTicksNS() - t0) / 1e6, t.name, t.cx, t.cy, t.cz, p1->banner);
         return;
     }
-    if (!strcmp(g_demo_kind, "dig") || !strcmp(g_demo_kind, "blast") || !strcmp(g_demo_kind, "flood") || !strcmp(g_demo_kind, "burn") || !strcmp(g_demo_kind, "grow")) {
+    if (!strcmp(g_demo_kind, "dig") || !strcmp(g_demo_kind, "blast") || !strcmp(g_demo_kind, "flood") || !strcmp(g_demo_kind, "burn") || !strcmp(g_demo_kind, "grow") || !strcmp(g_demo_kind, "lava")) {
         /* the pickaxe out at a wall (docs/DESTRUCTION.md); the swings and the bomb come in
          * screenshot_step */
         for (int i = 0; i < MAX_MONSTERS; i++) g->mons[i].alive = false;
@@ -1179,6 +1179,40 @@ static void screenshot_step(App *a, float frame_dt) {
         static bool thrown;
         if (!thrown && a->shot_wait > 0.6f) { thrown = true; bomb_throw(g, p1); }
     }
+    if (g->opt.demo && a->demo_done && !strcmp(kind, "lava")) {
+        /* a block of lava let loose, a wooden post to one side and a pool of water to the
+         * other (docs/SIMULATION.md) */
+        static int stage;
+        static float logged;
+        vec3 f = v3(cosf(p1->pl.yaw), 0, sinf(p1->pl.yaw));
+        int bx = (int)floorf(p1->pl.pos.x + f.x * 7), by = (int)floorf(p1->pl.pos.y), bz = (int)floorf(p1->pl.pos.z + f.z * 7);
+        if (stage == 0 && a->shot_wait > 0.4f) {
+            int n = 0;
+            for (int y = 1; y < 3; y++)
+                for (int z = -1; z <= 1; z++)
+                    for (int x = -1; x <= 1; x++) n += chunkmap_edit(&g->map, bx + x, by + y, bz + z, B_LAVA, 0, 8);
+            for (int y = 0; y < 3; y++) chunkmap_edit(&g->map, bx, by + y, bz - 4, B_WOOD, 0, 0);
+            for (int z = 3; z <= 5; z++)
+                for (int x = -1; x <= 1; x++) chunkmap_edit(&g->map, bx + x, by, bz + z, B_WATER, 0, 8);
+            if (n > 12) { stage = 1; SDL_Log("lava: %d cells at %d %d %d", n, bx, by, bz); }
+        }
+        if (stage && a->shot_wait > logged + 2.0f) {
+            logged = a->shot_wait;
+            int lava = 0, vol = 0, obs = 0, fire = 0, water = 0;
+            for (int y = -1; y < 4; y++)
+                for (int z = -8; z <= 8; z++)
+                    for (int x = -8; x <= 8; x++) {
+                        bool known;
+                        Block b = chunkmap_block(&g->map, bx + x, by + y, bz + z, &known);
+                        int l = sim_lava(g, bx + x, by + y, bz + z);
+                        if (l) { lava++; vol += l; }
+                        obs += b == B_OBSIDIAN;
+                        fire += b == B_FIRE;
+                        water += b == B_WATER;
+                    }
+            SDL_Log("lava: t %.0f  %d cells, %d eighths, obsidian %d, fire %d, water %d, waiting %d", a->shot_wait, lava, vol, obs, fire, water, sim_pending());
+        }
+    }
     if (g->opt.demo && a->demo_done && !strcmp(kind, "grow")) {
         /* a bed of earth with a little grass, a pool, a rock wall, bones and a torch, then
          * growth sped up (docs/SIMULATION.md): --cast n runs n ticks a frame (default 40) */
@@ -1204,14 +1238,23 @@ static void screenshot_step(App *a, float frame_dt) {
             chunkmap_edit(&g->map, bx + 2, by, bz - 1, B_TORCH, 0, 0);
             if (n > 40) { stage = 1; SDL_Log("grow: a garden at %d %d %d", bx, by, bz); }
         }
-        if (stage == 1) {
+        if (stage >= 1) {
             int ticks = g_demo_cast > 0 ? g_demo_cast : 40;
             for (int k = 0; k < ticks; k++) bio_update(g, 0.125f);
+        }
+        /* after 6 s the torches go out and the channel is drained: what needed them withers */
+        if (stage == 1 && a->shot_wait > 6.0f) {
+            stage = 2;
+            chunkmap_edit(&g->map, bx - 3, by, bz + 4, B_AIR, 0, 0);
+            chunkmap_edit(&g->map, bx + 2, by, bz - 1, B_AIR, 0, 0);
+            for (int z = -4; z <= 4; z++) chunkmap_edit(&g->map, bx + 3, by - 1, bz + z, B_DIRT, 0, 0);
+            SDL_Log("grow: the torches out, the channel dry");
         }
         if (stage && a->shot_wait > logged + 2.0f) {
             logged = a->shot_wait;
             SDL_Log("grow: t %.0f  grass %d flower %d moss %d fungus %d vine %d hive %d", a->shot_wait, bio_grown(B_GRASS),
                     bio_grown(B_FLOWER), bio_grown(B_MOSS), bio_grown(B_FUNGUS), bio_grown(B_VINE), bio_grown(B_HIVE));
+            SDL_Log("grow: withered %d", bio_withered());
         }
     }
     if (g->opt.demo && a->demo_done && !strcmp(kind, "burn")) {
@@ -1260,13 +1303,13 @@ static void screenshot_step(App *a, float frame_dt) {
         if (stage == 0 && a->shot_wait > 0.4f) {
             int n = 0;
             /* --cast 2: a deep shaft of water closed by walls, with you in it */
-            int hy = g_demo_cast == 2 ? 6 : 3;
-            if (g_demo_cast == 2)
-                for (int y = 0; y < hy; y++)
+            int hy = g_demo_cast == 2 || g_demo_cast == 5 ? 6 : 3;
+            if (g_demo_cast == 2 || g_demo_cast == 5)
+                for (int y = 0; y <= hy + 1; y++)
                     for (int z = -2; z <= 2; z++)
                         for (int x = -2; x <= 2; x++)
                             if (abs(x) == 2 || abs(z) == 2) chunkmap_edit(&g->map, bx + x, by + y - 1, bz + z, B_WALL, 0, 0);
-            for (int y = 0; y < hy; y++)
+            for (int y = g_demo_cast == 2 || g_demo_cast == 5 ? -1 : 0; y < hy; y++) /* (the shaft from its floor up) */
                 for (int z = -1; z <= 1; z++)
                     for (int x = -1; x <= 1; x++) {
                         bool known;
@@ -1277,6 +1320,25 @@ static void screenshot_step(App *a, float frame_dt) {
             if (n && g_demo_cast == 1)
                 for (int z = -3; z <= 3; z++)
                     for (int x = 2; x <= 3; x++) chunkmap_edit(&g->map, bx + x, by - 1, bz + z, B_LAVA, 0, 0);
+            /* --cast 4: the floor under the middle is broken through its core, with a hollow below */
+            if (n && g_demo_cast == 4) {
+                u64 core = 0;
+                for (int sy = 0; sy < 4; sy++)
+                    for (int sz = 1; sz <= 2; sz++)
+                        for (int sx = 1; sx <= 2; sx++) core |= 1ULL << carve_bit(sx, sy, sz);
+                chunkmap_edit(&g->map, bx, by - 2, bz, B_AIR, 0, 0);
+                SDL_Log("flood: floor %s", chunkmap_edit(&g->map, bx, by - 1, bz, (Block)(B_FLOOR | BLOCK_CARVED), CARVE_FULL & ~core, 0) ? "broken" : "busy");
+            }
+            /* --cast 5: the shaft holds a crawler and a golem instead of you */
+            if (n && g_demo_cast == 5) {
+                /* a lid on the shaft: no air at the top */
+                for (int z = -2; z <= 2; z++)
+                    for (int x = -2; x <= 2; x++) chunkmap_edit(&g->map, bx + x, by + hy - 1, bz + z, B_WALL, 0, 0);
+                Monster *a1 = monster_spawn(g, MON_CRAWLER, v3(bx + 0.5f, (float)by, bz + 0.5f), 3, false, v3(1, 1, 1), 0xD0D0);
+                Monster *a2 = monster_spawn(g, MON_GOLEM, v3(bx - 0.5f, (float)by, bz - 0.5f), 3, false, v3(1, 1, 1), 0xD0D1);
+                g->freeze_monsters = false;
+                SDL_Log("flood: crawler %s, golem %s", a1 ? "in" : "-", a2 ? "in" : "-");
+            }
             if (n && g_demo_cast == 2) { p1->pl.pos = v3(bx + 0.5f, (float)by, bz + 0.5f); p1->pl.vel = v3(0, 0, 0); }
             if (n) { stage = 1; SDL_Log("flood: %d cells of water at %d %d %d", n, bx, by, bz); }
         }
@@ -1307,6 +1369,15 @@ static void screenshot_step(App *a, float frame_dt) {
                 for (int z = -3; z <= 3; z++)
                     for (int x = -3; x <= 3; x++) { bool known; ice += chunkmap_block(&g->map, bx + x, by + y, bz + z, &known) == B_ICE; }
             if (ice) SDL_Log("flood: %d ice", ice);
+            if (g_demo_cast == 4) SDL_Log("flood: below the broken floor %d", sim_fluid(g, bx, by - 2, bz));
+            if (g_demo_cast == 5)
+                for (int k = 0; k < MAX_MONSTERS; k++) {
+                    Monster *m = &g->mons[k];
+                    if ((m->type == MON_CRAWLER || m->type == MON_GOLEM) && (m->chunk_key == 0xD0D0 || m->chunk_key == 0xD0D1) && !m->alive)
+                        SDL_Log("flood: %s is dead", MONSTERS[m->type].name);
+                    if (m->alive && (m->type == MON_CRAWLER || m->type == MON_GOLEM) && (m->chunk_key == 0xD0D0 || m->chunk_key == 0xD0D1))
+                        SDL_Log("flood: %s y %.2f depth %.2f hp %.0f/%.0f air %.1f", MONSTERS[m->type].name, m->pos.y, sim_water_depth(g, m->pos), m->hp, m->maxhp, m->air_used);
+                }
             SDL_Log("flood: t %.1f  %d cells, %d eighths, %d waiting, %d lava; you: y %.2f water %.2f breath %.1f hp %.0f", a->shot_wait,
                     cells, vol, sim_pending(), lava, p1->pl.pos.y, p1->pl.water, p1->breath, p1->st.hp);
         }
@@ -1354,6 +1425,8 @@ static void start_world(App *a) {
     arms_init(g->opt.seed); /* this world's lost arts, materials and legendaries */
     story_game_init(g);
     chunkmap_init(&g->map, &g->world, &g->r, g->opt.radius, g->opt.vradius);
+    sim_reset(); /* no clouds or swarms from another world */
+    bio_reset();
     /* the saved characters of this world (screenshot and test runs start fresh) */
     if ((!g->opt.shot || g->opt.persist) && !g->opt.fresh) game_load(g);
     arms_story_lore(&g->world); /* the legendaries of a world with generated stories tell its history */

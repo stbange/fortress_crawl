@@ -676,9 +676,53 @@ static int monster_solid(void *user, int x, int y, int z) {
     return s == 0 && g->nbarriers && utility_barrier(g, x, y, z) ? 1 : s;
 }
 
+/* Monsters keep out of fire, lava and harmful clouds (docs/SIMULATION.md): true if p is one. */
+static bool hazard_at(Game *g, vec3 p) {
+    int x = (int)floorf(p.x), y = (int)floorf(p.y + 0.1f), z = (int)floorf(p.z);
+    bool known;
+    Block here = chunkmap_block(&g->map, x, y, z, &known);
+    if (here == B_FIRE && chunkmap_level(&g->map, x, y, z)) return true;
+    if (chunkmap_block(&g->map, x, y - 1, z, &known) == B_LAVA || here == B_LAVA) return true;
+    vec3 head = v3_add(p, v3(0, 1.0f, 0));
+    return sim_gas_at(head, GAS_POISON) > 0.3f || sim_gas_at(head, GAS_STEAM) > 0.4f;
+}
+
+/* Those that do not breathe, and those too heavy to swim. */
+static bool breathes(int type) { return type != MON_SKELETON && type != MON_WRAITH && type != MON_GOLEM && type != MON_MIMIC && type != MON_WISP; }
+static bool sinks(int type) { return type == MON_GOLEM || type == MON_KNIGHT || type == MON_SKELETON || type == MON_MIMIC; }
+
 static void monster_physics(Game *g, Monster *m, vec3 want, float dt) {
     const MonsterDef *d = &MONSTERS[m->type];
     float hw = d->hw * m->scale, h = d->h * m->scale;
+    /* a step into fire, lava or a poison cloud: turn aside instead (unless already in one) */
+    float wl = sqrtf(want.x * want.x + want.z * want.z);
+    if (wl > 0.1f && !d->flies && !hazard_at(g, m->pos)) {
+        vec3 dir = v3(want.x / wl, 0, want.z / wl);
+        if (hazard_at(g, v3_add(m->pos, v3_scale(dir, hw + 0.7f)))) {
+            vec3 side = v3(-dir.z, 0, dir.x);
+            if (hazard_at(g, v3_add(m->pos, v3_scale(side, hw + 0.7f)))) side = v3_scale(side, -1.0f);
+            want.x = side.x * wl * 0.6f;
+            want.z = side.z * wl * 0.6f;
+        }
+    } else if (!d->flies && hazard_at(g, m->pos) && wl < 0.1f) {
+        want.x = cosf(m->yaw) * 3.0f; /* standing in it: get out */
+        want.z = sinf(m->yaw) * 3.0f;
+    }
+    /* water: swim (or wade along the bottom), and drown if it lasts */
+    float depth = d->flies ? 0.0f : sim_water_depth(g, m->pos);
+    bool swim = depth > h * 0.6f;
+    if (depth > h * 0.9f && breathes(m->type)) {
+        m->air_used += dt;
+        if (m->air_used > MON_BREATH) {
+            m->hp -= m->maxhp * 0.08f * dt;
+            if (fmodf(m->air_used, 1.0f) < dt) particles_burst(g, v3_add(m->pos, v3(0, h, 0)), v3(0.7f, 0.85f, 1.0f), 4, 1.0f, 0.04f, false);
+            if (m->hp <= 0) { m->hp = 0.01f; monster_damage(g, m, 1.0f, m->pos, 0.0f, m->last_hitter); }
+        }
+    } else m->air_used = fmaxf(0.0f, m->air_used - 3.0f * dt);
+    if (swim) {
+        want.x *= 0.5f;
+        want.z *= 0.5f;
+    }
     if (d->flies) {
         m->vel = v3_lerp(m->vel, want, fminf(1.0f, 4.0f * dt));
         for (int a = 0; a < 3; a++) {
@@ -689,10 +733,17 @@ static void monster_physics(Game *g, Monster *m, vec3 want, float dt) {
         }
         return;
     }
-    float accel = m->on_ground ? 10.0f : 2.0f;
+    float accel = m->on_ground ? 10.0f : swim ? 5.0f : 2.0f;
     m->vel.x += (want.x - m->vel.x) * fminf(1.0f, accel * dt);
     m->vel.z += (want.z - m->vel.z) * fminf(1.0f, accel * dt);
-    m->vel.y -= 25.0f * dt;
+    if (swim && !sinks(m->type)) {
+        /* buoyant: floats with its head just out */
+        float vy = depth > h * 0.85f ? 1.2f : -0.4f;
+        m->vel.y += (vy - m->vel.y) * fminf(1.0f, 4.0f * dt);
+    } else {
+        m->vel.y -= (swim ? 8.0f : 25.0f) * dt; /* the heavy ones sink slowly */
+        if (swim && m->vel.y < -2.0f) m->vel.y = -2.0f;
+    }
     if (m->vel.y < -30.0f) m->vel.y = -30.0f;
     bool blocked = false;
     for (int a = 0; a < 3; a += 2) {
@@ -700,7 +751,7 @@ static void monster_physics(Game *g, Monster *m, vec3 want, float dt) {
         vec3 before = m->pos;
         if (phys_move_axis(&m->pos, a, v * dt, hw, h, monster_solid, g)) continue;
         vec3 up = v3_add(before, v3(0, 1.01f, 0));
-        if (m->on_ground && phys_box_free(up, hw, h, monster_solid, g)) {
+        if ((m->on_ground || (swim && !sinks(m->type))) && phys_box_free(up, hw, h, monster_solid, g)) {
             m->pos = up;
             phys_move_axis(&m->pos, a, v * dt, hw, h, monster_solid, g);
         } else {
@@ -726,7 +777,10 @@ static void monster_physics(Game *g, Monster *m, vec3 want, float dt) {
 /* An invisible player is only found by bumping into them. */
 static bool can_see_player(const PlayerSlot *ps, vec3 c) {
     if (!ps->active || ps->st.dead) return false;
-    return ps->st.invis_t <= 0 || v3_len(v3_sub(player_eye(&ps->pl), c)) < 1.6f;
+    float d = v3_len(v3_sub(player_eye(&ps->pl), c));
+    /* thick smoke or steam hides you beyond a few metres (docs/SIMULATION.md) */
+    if (d > 3.5f && (sim_gas_at(player_eye(&ps->pl), GAS_SMOKE) > 0.45f || sim_gas_at(player_eye(&ps->pl), GAS_STEAM) > 0.6f)) return false;
+    return ps->st.invis_t <= 0 || d < 1.6f;
 }
 
 static PlayerSlot *monster_target(Game *g, Monster *m, vec3 c) {

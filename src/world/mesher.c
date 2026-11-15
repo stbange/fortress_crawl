@@ -310,6 +310,11 @@ static int fluid_level(const MeshInput *in, int px, int py, int pz) {
     return level ? level : 8;
 }
 
+/* A cell of lava that does not fill its cell (a flow): drawn like a liquid, at its height. */
+static bool thin_lava(const MeshInput *in, const MeshScratch *s, int px, int py, int pz) {
+    return s->blocks[pidx(px, py, pz)] == B_LAVA && fluid_level(in, px, py, pz) < 8;
+}
+
 /* How far a liquid's top sits below the top of its cell, in 1/8 m (sim.c's levels). */
 static int liquid_drop(const MeshInput *in, const MeshScratch *s, int x, int y, int z) {
     /* a liquid with liquid above it fills its cell */
@@ -343,10 +348,10 @@ void mesh_build(const MeshInput *in, MeshScratch *s, MeshOutput *out) {
                     continue;
                 }
                 float tint = 0.93f + 0.1f * hash_unit(h >> 3);
-                bool liquid = bd->render == RENDER_LIQUID;
+                bool liquid = bd->render == RENDER_LIQUID || (b == B_LAVA && thin_lava(in, s, px, py, pz));
                 for (int f = 0; f < 6; f++) {
                     Block nb = s->blocks[pidx(px + FACE_N[f][0], py + FACE_N[f][1], pz + FACE_N[f][2])];
-                    if (block_opaque(nb)) continue;
+                    if (block_opaque(nb) && !(nb == B_LAVA && thin_lava(in, s, px + FACE_N[f][0], py + FACE_N[f][1], pz + FACE_N[f][2]))) continue;
                     if (liquid && nb == b) {
                         /* between two cells of the same liquid only a step in the surface shows */
                         if (f == 2 || f == 3 || FACE_N[f][1]) continue;

@@ -581,7 +581,9 @@ and it cools lava to rock and puts out fires on its way. In deep water you swim 
 crouch dives) and have 15 seconds of breath. Fire spreads through wood, webs and grass and
 melts ice; frost freezes water into ice you can walk on; lightning runs through water and hurts
 everyone in it; still water by roots and fungus gives off swamp gas that explodes when fire
-reaches it. Grass and flowers spread in the light, moss on damp stone, fungus in the dark and on
+reaches it. Lava flows thickly, sets wood alight and crusts into obsidian; water seeps through
+cracked floors; monsters swim, drown and keep out of fire, and thick smoke hides you from them.
+Grass and flowers spread in the light, moss on damp stone, fungus in the dark and on
 bones, vines down from wet ceilings, and bees hang hives where flowers bloom; fire leaves ash,
 grazing animals crop the grass, and flies, bees, moths and glowworms gather where they belong.
 See [docs/SIMULATION.md](docs/SIMULATION.md).

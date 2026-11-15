@@ -85,7 +85,7 @@ v14 deeds. Older saves load with an iron pick, two bombs and an untouched world.
 
 ## Not done
 
-- Bots neither dig nor throw bombs.
+- Bots dig and blast only when stuck (docs/SIMULATION.md, Bots), never to take a shortcut.
 - Broken metal, and blocks breaking under their own weight beyond the 48-cell islands (no
   structural stress).
 - Monsters do not dig to reach you.

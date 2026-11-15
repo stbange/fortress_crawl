@@ -61,11 +61,46 @@ static void sim_on_edit(int x, int y, int z) {
     push(x, y, z + 1); push(x, y, z - 1);
 }
 
+/* A chunk comes back with changes: what was moving in it (water, lava, fire) moves on. */
+static void sim_on_loaded(int cx, int cy, int cz) {
+    if (!g_sim) return;
+    int n;
+    const BlockEdit *e = chunkmap_chunk_edits(&g_sim->map, cx, cy, cz, &n);
+    for (int i = 0; i < n; i++) {
+        if (!(e[i].raw == B_WATER || e[i].raw == B_LAVA || (e[i].raw == B_FIRE && e[i].level))) continue;
+        int lx = e[i].idx % CHUNK, lz = (e[i].idx / CHUNK) % CHUNK, ly = e[i].idx / (CHUNK * CHUNK);
+        push(cx * CHUNK + lx, cy * CHUNK + ly, cz * CHUNK + lz);
+    }
+}
+
 void sim_init(Game *g) {
     g_sim = g;
-    sim_reset();
-    bio_reset();
+    n_now = n_next = 0;
+    memset(seen, 0, sizeof seen);
     g->map.on_edit = sim_on_edit;
+    g->map.on_loaded = sim_on_loaded;
+}
+
+/* Saving the clouds (the cells are saved as edits). */
+int sim_gas_list(float *out, int max) {
+    int n = 0;
+    for (int i = 0; i < MAX_GAS && n < max; i++) {
+        if (!gas[i].alive) continue;
+        float *o = out + n++ * 6;
+        o[0] = gas[i].pos.x; o[1] = gas[i].pos.y; o[2] = gas[i].pos.z;
+        o[3] = gas[i].amount; o[4] = gas[i].r; o[5] = gas[i].kind;
+    }
+    return n;
+}
+
+void sim_gas_restore(const float *in) {
+    int k = (int)in[5];
+    if (k < 0 || k >= GAS_COUNT || !(in[3] > 0.0f)) return;
+    for (int i = 0; i < MAX_GAS; i++)
+        if (!gas[i].alive) {
+            gas[i] = (Gas){ v3(in[0], in[1], in[2]), fminf(in[3], 1.0f), clampf(in[4], 0.3f, 3.0f), 0, (u8)k, true };
+            return;
+        }
 }
 
 void sim_wake(int x, int y, int z) { sim_on_edit(x, y, z); }
@@ -432,6 +467,142 @@ void sim_element_hit(Game *g, vec3 p, int el, int owner, float dmg) {
     }
 }
 
+/* ---------- seeping ---------- */
+
+/* Free pieces of a broken block on its side facing -d (where water comes in) and on its far
+ * side: water gets through where both are open and the block is at least an eighth hollow. */
+static bool porous(u64 mask, int dx, int dy, int dz) {
+    if (__builtin_popcountll(~mask) < 8) return false;
+    bool near = false, far = false;
+    for (int a = 0; a < 4; a++)
+        for (int b = 0; b < 4; b++) {
+            int sx, sy, sz, fx, fy, fz;
+            if (dx) { sx = dx > 0 ? 0 : 3; fx = 3 - sx; sy = fy = a; sz = fz = b; }
+            else if (dy) { sy = dy > 0 ? 0 : 3; fy = 3 - sy; sx = fx = a; sz = fz = b; }
+            else { sz = dz > 0 ? 0 : 3; fz = 3 - sz; sx = fx = a; sy = fy = b; }
+            near |= !(mask >> carve_bit(sx, sy, sz) & 1);
+            far |= !(mask >> carve_bit(fx, fy, fz) & 1);
+        }
+    return near && far;
+}
+
+/* Water slowly seeps through a broken block into the cell beyond it (one eighth at a time). */
+static void seep(Game *g, Cell c, int l) {
+    static const int D[5][3] = { { 0, -1, 0 }, { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 } };
+    for (int d = 0; d < 5 && l >= 2; d++) {
+        int bx = c.x + D[d][0], by = c.y + D[d][1], bz = c.z + D[d][2];
+        bool known;
+        Block raw = chunkmap_block_raw(&g->map, bx, by, bz, &known);
+        if (!known || !(raw & BLOCK_CARVED) || !porous(chunkmap_mask(&g->map, bx, by, bz), D[d][0], D[d][1], D[d][2])) continue;
+        int tx = bx + D[d][0], ty = by + D[d][1], tz = bz + D[d][2];
+        Block tb;
+        int tk = kind_of(g, tx, ty, tz, &tb);
+        if (tk != 1 && tk != 2) continue;
+        int tl = tk == 2 ? chunkmap_fluid(&g->map, tx, ty, tz) : 0;
+        if (tl >= 8 || (d > 0 && l - tl < 2)) continue;
+        if ((cell_hash(c.x, c.y, c.z) ^ tick_no) & 1) { push(c.x, c.y, c.z); return; } /* slowly */
+        if (!flow(g, c.x, c.y, c.z, &l, tx, ty, tz, tk, tl, 1, tb)) { push(c.x, c.y, c.z); return; }
+        particles_burst(g, v3(bx + 0.5f, by + 0.5f, bz + 0.5f), v3(0.4f, 0.55f, 0.7f), 2, 0.5f, 0.03f, false);
+    }
+}
+
+/* ---------- lava ---------- */
+
+/* The level of a lava cell, 1..8 (generated lava is full), 0 if it is not lava. */
+int sim_lava(Game *g, int x, int y, int z) {
+    bool known;
+    if (chunkmap_block_raw(&g->map, x, y, z, &known) != B_LAVA) return 0;
+    int l = chunkmap_level(&g->map, x, y, z);
+    return l ? l : 8;
+}
+
+static bool set_lava(Game *g, int x, int y, int z, int level) {
+    if (level <= 0) return chunkmap_edit(&g->map, x, y, z, B_AIR, 0, 0);
+    return chunkmap_edit(&g->map, x, y, z, B_LAVA, 0, MINI(level, 8));
+}
+
+/* What lava can run into: 1 empty or something it burns away, 2 lava, 0 nothing. */
+static int lava_kind(Game *g, int x, int y, int z) {
+    Block b;
+    int k = kind_of(g, x, y, z, &b);
+    if (k == 1) return 1;
+    if (k == 3) return 2;
+    switch (b) {
+    case B_GRASS: case B_FLOWER: case B_VINE: case B_WEB: case B_ROOTS: case B_BONES: case B_FUNGUS: return 1;
+    default: return 0;
+    }
+}
+
+/* Lava is slow and thick: it moves on every third tick, runs sideways only where it stands
+ * three eighths above its neighbour, and a thin tongue of it crusts over into obsidian. It
+ * sets what burns alight, melts ice and is quenched by water. */
+static void lava_step(Game *g, Cell c, int l) {
+    u64 h = mix64(cell_hash(c.x, c.y, c.z) + (u64)tick_no * 0x9E3779B97F4A7C15ull);
+    if ((tick_no + (cell_hash(c.x, c.y, c.z) & 3)) % 3) { push(c.x, c.y, c.z); return; }
+    if (!chunkmap_can_edit(&g->map, c.x, c.y, c.z)) { push(c.x, c.y, c.z); return; }
+    /* heat and water around it */
+    for (int k = 0; k < 6; k++) {
+        int x = c.x + N6[k][0], y = c.y + N6[k][1], z = c.z + N6[k][2];
+        bool known;
+        Block nb = chunkmap_block_raw(&g->map, x, y, z, &known);
+        if (!known) continue;
+        if (nb == B_WATER && k != 3) {
+            /* quenched: the lava turns to obsidian, the water to steam */
+            int wl = chunkmap_fluid(&g->map, x, y, z);
+            if (!chunkmap_can_edit(&g->map, x, y, z)) { push(c.x, c.y, c.z); return; }
+            chunkmap_edit(&g->map, c.x, c.y, c.z, B_OBSIDIAN, 0, 0);
+            set_water(g, x, y, z, wl - 3);
+            hiss(g, c.x, c.y, c.z, true);
+            sim_gas(g, GAS_STEAM, v3(c.x + 0.5f, c.y + 1.2f, c.z + 0.5f), 0.6f);
+            return;
+        }
+        if (flammable(nb) && (h >> (k * 4) & 3) == 0) ignite(g, x, y, z);
+        if (nb == B_ICE && !dig_protected(g, x, y, z)) {
+            chunkmap_edit(&g->map, x, y, z, B_WATER, 0, 8);
+            sim_gas(g, GAS_STEAM, v3(x + 0.5f, y + 1.0f, z + 0.5f), 0.4f);
+        }
+    }
+    /* down */
+    int k = lava_kind(g, c.x, c.y - 1, c.z);
+    if (k) {
+        int tl = k == 2 ? sim_lava(g, c.x, c.y - 1, c.z) : 0;
+        int n = MINI(l, 8 - tl);
+        if (n > 0 && chunkmap_can_edit(&g->map, c.x, c.y - 1, c.z)) {
+            l -= n;
+            set_lava(g, c.x, c.y, c.z, l);
+            set_lava(g, c.x, c.y - 1, c.z, tl + n);
+            if (l <= 0) return;
+        }
+    }
+    /* sideways, thickly */
+    if (l >= 3) {
+        int best = -1, best_l = 99;
+        for (int s = 0; s < 4; s++) {
+            int d = (s + (int)(h & 3)) & 3;
+            int nx = c.x + SIDE[d][0], nz = c.z + SIDE[d][1];
+            int nk = lava_kind(g, nx, c.y, nz);
+            if (!nk) continue;
+            int nl = nk == 2 ? sim_lava(g, nx, c.y, nz) : 0;
+            if (nl < best_l) { best_l = nl; best = d; }
+        }
+        if (best >= 0 && l - best_l >= 3) {
+            int nx = c.x + SIDE[best][0], nz = c.z + SIDE[best][1];
+            if (chunkmap_can_edit(&g->map, nx, c.y, nz)) {
+                l--;
+                set_lava(g, c.x, c.y, c.z, l);
+                set_lava(g, nx, c.y, nz, best_l + 1);
+            } else push(c.x, c.y, c.z);
+        }
+    }
+    /* a thin tongue cools and crusts over */
+    if (l <= 2 && (h >> 40) % 24 == 0) {
+        chunkmap_edit(&g->map, c.x, c.y, c.z, B_OBSIDIAN, 0, 0);
+        particles_burst(g, v3(c.x + 0.5f, c.y + 0.4f, c.z + 0.5f), v3(0.4f, 0.4f, 0.4f), 4, 1.0f, 0.05f, false);
+        return;
+    }
+    if (l <= 2) push(c.x, c.y, c.z); /* keeps cooling */
+}
+
 /* ---------- the tick ---------- */
 
 static void step_cell(Game *g, Cell c) {
@@ -439,10 +610,11 @@ static void step_cell(Game *g, Cell c) {
     int l = chunkmap_fluid(&g->map, c.x, c.y, c.z);
     if (!l) {
         bool known;
-        if (chunkmap_block_raw(&g->map, c.x, c.y, c.z, &known) == B_FIRE) {
+        Block b = chunkmap_block_raw(&g->map, c.x, c.y, c.z, &known);
+        if (b == B_FIRE) {
             int fuel = chunkmap_level(&g->map, c.x, c.y, c.z);
             if (fuel) fire_step(g, c, fuel);
-        }
+        } else if (b == B_LAVA && !dig_protected(g, c.x, c.y, c.z)) lava_step(g, c, sim_lava(g, c.x, c.y, c.z));
         return;
     }
     Block tb;
@@ -485,6 +657,7 @@ static void step_cell(Game *g, Cell c) {
             return;
         }
     }
+    if (l >= 2) seep(g, c, l);
 }
 
 /* Still water with something growing at its edge rots, and sends up bubbles of swamp gas. */

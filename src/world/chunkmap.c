@@ -208,6 +208,12 @@ static void apply_edits(ChunkMap *m, Chunk *c) {
     for (int i = 0; i < ce->n; i++) apply_edit(c, &ce->e[i]);
 }
 
+const BlockEdit *chunkmap_chunk_edits(ChunkMap *m, int cx, int cy, int cz, int *n) {
+    ChunkEdits *ce = edits_find(m, cx, cy, cz, false);
+    *n = ce ? ce->n : 0;
+    return ce ? ce->e : NULL;
+}
+
 void chunkmap_edits_clear(ChunkMap *m) {
     for (int i = 0; i < m->nedits; i++) free(m->edits[i].e);
     m->nedits = 0;
@@ -225,6 +231,7 @@ static void gen_done(Job *j) {
     GenJob *g = (GenJob *)j;
     apply_edits(g_map, g->c); /* (main thread: the edits are only touched here) */
     g->c->state = CH_READY;
+    if (g_map->on_loaded) g_map->on_loaded(g->c->cx, g->c->cy, g->c->cz);
     free(g);
 }
 

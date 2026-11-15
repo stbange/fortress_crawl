@@ -59,6 +59,7 @@ typedef struct ChunkMap {
     ChunkEdits *edits;
     int nedits, edits_cap, edits_total;
     void (*on_edit)(int wx, int wy, int wz); /* told of every lasting change (sim.c wakes the cells around) */
+    void (*on_loaded)(int cx, int cy, int cz); /* a chunk with changes is ready (sim.c wakes what moves in it) */
 } ChunkMap;
 
 void chunkmap_init(ChunkMap *m, const World *w, Renderer *r, int rh, int rv);
@@ -96,6 +97,8 @@ bool chunkmap_can_edit(ChunkMap *m, int wx, int wy, int wz);
 bool chunkmap_edit(ChunkMap *m, int wx, int wy, int wz, Block raw, u64 mask, int level);
 /* Saving and loading the edits. */
 void chunkmap_edits_clear(ChunkMap *m);
+/* The recorded changes of one chunk (NULL, *n = 0 if none). */
+const BlockEdit *chunkmap_chunk_edits(ChunkMap *m, int cx, int cy, int cz, int *n);
 void chunkmap_edit_restore(ChunkMap *m, int cx, int cy, int cz, const BlockEdit *e);
 /* True once every chunk within the mesh radius has a mesh. */
 bool chunkmap_settled(ChunkMap *m, vec3 pos);
