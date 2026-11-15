@@ -153,7 +153,9 @@ static int walk(int x, int y, int z) {
         bool known;
         Block b = chunkmap_block(&G->map, x, y - 1, z, &known);
         Block here_b = chunkmap_block(&G->map, x, y, z, &known);
-        if (b != B_LAVA && b != B_BRAZIER && here_b != B_FIRE) r = game_solid(G, x, y + 1, z) == 0 ? 1 : 2;
+        /* not into lava, fire or water over the head (docs/SIMULATION.md) */
+        bool deep = here_b == B_WATER && chunkmap_block(&G->map, x, y + 1, z, &known) == B_WATER;
+        if (b != B_LAVA && b != B_BRAZIER && here_b != B_FIRE && !deep) r = game_solid(G, x, y + 1, z) == 0 ? 1 : 2;
     }
     walk_cache[i] = (u8)r;
     return r;
@@ -560,6 +562,7 @@ static void follow_path(PlayerSlot *ps, PlayerInput *in, float dt, bool sprint) 
     int nx, ny, nz;
     cell_of(B.path[B.pidx], &nx, &ny, &nz);
     if (ny > (int)floorf(f.y + 0.05f) && ps->pl.on_ground) in->jump = true;
+    if (ps->pl.water > 0.9f || ps->pl.on_vine) in->jump = true; /* swim up (or climb) and out */
 }
 
 static Monster *pick_enemy(PlayerSlot *ps) {

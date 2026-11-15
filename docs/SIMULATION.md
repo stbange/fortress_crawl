@@ -145,10 +145,24 @@ the remeshing of the chunks it touches, as any other edit.
 - `--demo grow` (`--cast n`: n growth ticks a frame, default 40): the garden above; the log
   counts what grew.
 
+## Bots
+
+Bots do not path through water over their heads, through fire or onto lava; in deep water or on
+a vine they swim or climb up and out.
+
+## In play
+
+Four bot runs of 15 minutes after all four stages (Edhold 1337 quester, Gerhold 2025 explorer,
+Aldburg 8080 caster, Ulwall 9001 archer): no crashes, no drownings, one death in all (the
+quester, at level 10 in chapter 3). Between 31 and 95 cells of each world changed (bones
+where monsters fell, grass and moss spreading, fungus on bones, a hive broken for honey by the
+quester), far below the 60000 kept. The simulation's cost stays under a tenth of a millisecond
+a frame at its worst.
+
 ## Not done yet
 
 - Lava does not flow; it stays as generated.
-- Monsters and critters do not swim or drown, and bots do not yet avoid deep water.
+- Monsters and critters do not swim or drown.
 - Water does not seep through the gaps in broken blocks.
 - Gases and swarms are not saved.
 - Plants do not die back in the dark or for want of water; nothing withers.
