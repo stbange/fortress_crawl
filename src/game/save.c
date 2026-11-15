@@ -1,4 +1,5 @@
 #include "game/game.h"
+#include "world/eco.h"
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
@@ -11,7 +12,7 @@
  * user's preference folder. The world itself never needs saving: the seed rebuilds it. */
 
 #define SAVE_MAGIC 0x56534346u /* "FCSV" */
-#define SAVE_VERSION 20 /* 20: the marks on cells (wet, soot, scorch, plants' age); 19: flasks to throw; 18: the fur cloak, warmth and cold of each character; 17: when each chunk was last seen (the world goes on while you are away); 16: the clouds of gas in the air; 15: what was broken in the world, the pickaxe and bombs; 14: the ledger of deeds (choices); 13: the story generator of the world; 12: the forge (materials, smithing, blueprints, runes); 11: the Sanctum's decorations, keystones bought; 10: meal variety, toxicity, torn formulae; 9: alchemy (reagents, elixirs, formulae, the elixir working); 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms;
+#define SAVE_VERSION 21 /* 21: the numbers of animals and plants per chunk; 20: the marks on cells (wet, soot, scorch, plants' age); 19: flasks to throw; 18: the fur cloak, warmth and cold of each character; 17: when each chunk was last seen (the world goes on while you are away); 16: the clouds of gas in the air; 15: what was broken in the world, the pickaxe and bombs; 14: the ledger of deeds (choices); 13: the story generator of the world; 12: the forge (materials, smithing, blueprints, runes); 11: the Sanctum's decorations, keystones bought; 10: meal variety, toxicity, torn formulae; 9: alchemy (reagents, elixirs, formulae, the elixir working); 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms;
                           6: weapons with materials, powers, legendaries and memory; 7: the Sanctum per world (written by one
                           build still marked 6); 8: food (the larder, dishes, recipes, the meal) */
 #define EXPLORED_BUDGET (1200 * 1024)
@@ -297,11 +298,15 @@ bool game_save(Game *g) {
     {
         static int xyz[4096 * 3];
         static float ts[4096];
-        int nr = away_list(xyz, ts, 4096);
+        static Eco eco[4096];
+        int nr = away_list(xyz, ts, eco, 4096);
         w16(&b, (u16)nr);
         for (int i = 0; i < nr; i++) {
             w32(&b, (u32)xyz[i * 3]); w32(&b, (u32)xyz[i * 3 + 1]); w32(&b, (u32)xyz[i * 3 + 2]);
             wf(&b, ts[i]);
+            /* v21: its animals */
+            w8(&b, eco[i].init);
+            if (eco[i].init) { wf(&b, eco[i].grazers); wf(&b, eco[i].predators); wf(&b, eco[i].insects); wf(&b, eco[i].carrion); }
         }
     }
     char key[64];
@@ -597,7 +602,12 @@ bool game_load(Game *g) {
             for (int i = 0; i < nr && !r.bad; i++) {
                 int cx = (int)r32(&r), cy = (int)r32(&r), cz = (int)r32(&r);
                 float t = rf(&r);
-                if (!r.bad) away_restore(cx, cy, cz, t);
+                Eco e = { 0 };
+                if (r.ver >= 21 && r8(&r)) {
+                    e.grazers = rf(&r); e.predators = rf(&r); e.insects = rf(&r); e.carrion = rf(&r);
+                    e.init = !r.bad && e.grazers >= 0 && e.grazers < 1000 && e.predators >= 0 && e.predators < 1000;
+                }
+                if (!r.bad) away_restore(cx, cy, cz, t, e.init ? &e : NULL);
             }
         }
         if (r.bad) { /* a broken tail: the Sanctum as a new world has it */

@@ -588,7 +588,10 @@ Every spell acts on the world by its element: meteors and fire bolts set meadows
 lightning storm over a lake shocks everything in it, a frost aura lets you walk across water.
 Temperature runs through it all: the frozen north is cold (a fire, a fur cloak or a warming
 draught keep it off), ice melts by fires, water boils by lava, wood catches from heat, and being
-soaked keeps fire off you but makes lightning twice as bad.
+soaked keeps fire off you but makes lightning twice as bad. Areas you leave carry on without
+you (come back to find them grown over), blocks bear weight and come down when you cut what holds
+them, oil burns on water and acid eats stone, and every region keeps its own animals: hunt a
+cave empty and the hounds go hungry.
 Grass and flowers spread in the light, moss on damp stone, fungus in the dark and on
 bones, vines down from wet ceilings, and bees hang hives where flowers bloom; fire leaves ash,
 grazing animals crop the grass, and flies, bees, moths and glowworms gather where they belong.

@@ -19,6 +19,7 @@
 #include "world/history.h"
 #include "game/bot.h"
 #include "render/batch.h"
+#include "world/eco.h"
 
 static const char *g_demo_kind;
 /* --weapon base[:rarity[:affix[:affix]]], e.g. greatsword:epic:fire:keen (screenshots of weapons) */
@@ -707,7 +708,7 @@ static void demo_setup(Game *g) {
                 p1->thread.n, p1->thread.reached, (SDL_GetTicksNS() - t0) / 1e6, t.name, t.cx, t.cy, t.cz, p1->banner);
         return;
     }
-    if (!strcmp(g_demo_kind, "dig") || !strcmp(g_demo_kind, "blast") || !strcmp(g_demo_kind, "flood") || !strcmp(g_demo_kind, "burn") || !strcmp(g_demo_kind, "grow") || !strcmp(g_demo_kind, "lava") || !strcmp(g_demo_kind, "elements") || !strcmp(g_demo_kind, "away") || !strcmp(g_demo_kind, "thaw") || !strcmp(g_demo_kind, "matter") || !strcmp(g_demo_kind, "collapse")) {
+    if (!strcmp(g_demo_kind, "dig") || !strcmp(g_demo_kind, "blast") || !strcmp(g_demo_kind, "flood") || !strcmp(g_demo_kind, "burn") || !strcmp(g_demo_kind, "grow") || !strcmp(g_demo_kind, "lava") || !strcmp(g_demo_kind, "elements") || !strcmp(g_demo_kind, "away") || !strcmp(g_demo_kind, "thaw") || !strcmp(g_demo_kind, "matter") || !strcmp(g_demo_kind, "collapse") || !strcmp(g_demo_kind, "hunt")) {
         /* the pickaxe out at a wall (docs/DESTRUCTION.md); the swings and the bomb come in
          * screenshot_step */
         for (int i = 0; i < MAX_MONSTERS; i++) g->mons[i].alive = false;
@@ -1186,6 +1187,36 @@ static void screenshot_step(App *a, float frame_dt) {
                 for (int z = -12; z <= 12; z++)
                     for (int x = -12; x <= 12; x++) scorch += STAIN_SCORCH(chunkmap_stain(&g->map, x0 + x, y0 + y, z0 + z)) > 0;
             SDL_Log("blast: %d cells scorched", scorch);
+        }
+    }
+    if (g->opt.demo && a->demo_done && !strcmp(kind, "hunt")) {
+        /* the food chain (docs/SIMULATION.md): hares on a patch of grass, a hound near, you away
+         * out of its sight; the log follows the hares and the region's numbers */
+        static int stage, bx, by, bz;
+        static float logged;
+        if (stage == 0 && a->shot_wait > 0.4f) {
+            vec3 f = v3(cosf(p1->pl.yaw), 0, sinf(p1->pl.yaw));
+            bx = (int)floorf(p1->pl.pos.x + f.x * 8); by = (int)floorf(p1->pl.pos.y); bz = (int)floorf(p1->pl.pos.z + f.z * 8);
+            for (int z = -3; z <= 3; z++)
+                for (int x = -3; x <= 3; x++) chunkmap_edit(&g->map, bx + x, by, bz + z, B_GRASS, 0, 0);
+            /* you walk off first, out of sight (the region stays near enough to keep its numbers) */
+            p1->pl.pos = v3(p1->pl.pos.x - 30.0f, p1->pl.pos.y, p1->pl.pos.z);
+            stage = 1;
+        }
+        if (stage == 1 && a->shot_wait > 1.0f) {
+            for (int k = 0; k < 4; k++) wildlife_spawn(g, CR_HARE, v3(bx + 0.5f + (k & 1) * 2 - 1, (float)by, bz + 0.5f + (k & 2) - 1));
+            monster_spawn(g, MON_HOUND, v3(bx - 6.5f, (float)by, bz + 0.5f), 3, false, v3(1, 1, 1), 0x4D00);
+            g->freeze_monsters = false;
+            stage = 2;
+        }
+        if (stage && a->shot_wait > logged + 2.0f) {
+            logged = a->shot_wait;
+            int hares = 0, hounds = 0;
+            for (int i = 0; i < MAX_CRITTERS; i++) hares += g->critters[i].alive && g->critters[i].kind == CR_HARE && fabsf(g->critters[i].pos.x - bx) < 20;
+            for (int i = 0; i < MAX_MONSTERS; i++) hounds += g->mons[i].alive && g->mons[i].chunk_key == 0x4D00;
+            const Eco *e = eco_at(floordiv(bx, CHUNK), floordiv(by, CHUNK), floordiv(bz, CHUNK));
+            SDL_Log("hunt: t %.0f  hares %d hound %d | region: grazers %.2f predators %.2f carrion %.2f plants %.0f", a->shot_wait, hares, hounds,
+                    e ? e->grazers : -1.0f, e ? e->predators : -1.0f, e ? e->carrion : -1.0f, e ? e->plants : -1.0f);
         }
     }
     if (g->opt.demo && a->demo_done && !strcmp(kind, "collapse")) {

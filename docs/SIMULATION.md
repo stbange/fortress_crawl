@@ -352,6 +352,36 @@ Resting on something held is always held; each step sideways or down costs one.
 two on the east side cut, one cell of the slab falls; the third, five more; the last, the other
 19, which land as a mound of rubble.
 
+## Populations and the food chain
+
+Each region (chunk) a player has been near keeps numbers, not animals (`src/world/eco.c`,
+kept with the last-seen times in `src/game/away.c`, saved in version 21): its plants and
+flowers (counted in the world), grazers (hares, goats, rams, grouse, quail, hens), predators
+(hounds, bats), insects and carrion. Only the animals near the players are real, and they are
+made from these numbers. Ten minutes of play are an hour for them.
+
+- **Grazers** grow toward what the plants feed (one for every 25 plant cells, and a few wander
+  in) and are eaten by predators. Too many of them eat the grass and flowers down faster than
+  they grow: those cells go from the world.
+- **Predators** live on the grazers (bats on insects too) and starve without them; a few always
+  wander in. **Insects** follow the flowers and the dead; **carrion** (what died there) rots.
+- **Neighbouring regions** even out: animals wander to where there is more to eat.
+- **They are the world's animals:** grazers spawn by the numbers (none where they are hunted
+  out, up to twice as many where they thrive); hunting one, or a hound catching one, takes it
+  from the numbers; a monster's death adds carrion.
+- **Hounds and bats hunt:** with nobody to fight, they run down the grazing animals near them.
+  They come in packs as big as their prey allows: from half to one and a half times the usual
+  (decided).
+- **Catching up** (time away) moves the numbers on for the time away too: come back to a cave
+  you hunted empty and the grass has grown, and the hares are coming back from next door.
+- `test_worldgen` checks the numbers alone: without predators the grazers settle at what the
+  plants feed (4.4 of 4.5); with predators both live on and stay within bounds; too many grazers
+  eat the plants down and fall back. The bot log prints the numbers of the region the bot is in
+  (`ECO`).
+
+`--demo hunt`: hares on a patch of grass and a hound, you out of sight: the hound runs them down,
+four hares in three seconds.
+
 ## Time away
 
 The simulation runs only near the players, so the world would freeze wherever nobody is. It
@@ -427,3 +457,10 @@ sinks, walks the bottom and is unharmed (it does not breathe).
 - Water inside a broken block (in among its pieces) is not kept: it passes through or not.
 - Swarms are not saved (they gather again).
 - Monsters do not dig.
+- Bots do not seek warmth in the cold, buy cloaks or throw flasks, and do not harvest.
+- Heat spreads the same through stone and air (the cells are 2 m; the table's materials do not
+  change how fast).
+- Gamepads and touch screens cannot choose what X throws (only bombs, with the pickaxe's
+  alternate attack).
+- The ideas under "Later" in [SIMULATION_PLAN.md](SIMULATION_PLAN.md): draughts, currents,
+  monsters' needs, farming.

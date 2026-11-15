@@ -945,8 +945,18 @@ bool sim_catch_up_fires(Game *g, int cx, int cy, int cz, float dt);
 void away_reset(void);
 void away_update(Game *g, float dt);
 int away_pending(void);
-int away_list(int *xyz, float *t, int max);
-void away_restore(int cx, int cy, int cz, float t);
+struct Eco;
+int away_list(int *xyz, float *t, struct Eco *eco, int max);
+void away_restore(int cx, int cy, int cz, float t, const struct Eco *eco);
+/* populations (away.c, eco.c; docs/SIMULATION.md) */
+enum { ECO_GRAZER_TAKEN, ECO_BODY };
+struct Eco *eco_at(int cx, int cy, int cz);
+void eco_note(vec3 p, int what);
+float eco_prey_factor(int cx, int cy, int cz);
+float eco_grazer_factor(int cx, int cy, int cz);
+bool monster_hunts_here(int stratum);        /* hounds or bats live in this stratum */
+bool critter_grazes(int kind);
+void wildlife_taken(Game *g, Critter *c);    /* a hound or bat caught it */
 void away_pretend(float seconds);
 bool forge_start(Game *g, PlayerSlot *ps, bool reforge);
 void forge_strike(Game *g, PlayerSlot *ps);

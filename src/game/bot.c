@@ -1,4 +1,5 @@
 #include "game/bot.h"
+#include "world/eco.h"
 
 #include "game/skills.h"
 #include "world/layout.h"
@@ -894,6 +895,12 @@ static void status(PlayerSlot *ps) {
           B.t, p.x, p.y, p.z, gate_dist(p), tier_at(p), s->level, s->hp, s->maxhp, s->mana, s->maxmana, s->kills, B.deaths, s->gold,
           s->potions_hp, s->potions_mp, bag, weapon_score(&s->equipped[0]), weapon_score(&s->equipped[1]), weapon_score(&s->equipped[2]),
           known, s->chapter + 1, s->nmissions, G->nlore, awake, alive, nvisited, B.stuck_total, 100.0f * B.time_in_fight / fmaxf(1.0f, B.t));
+    {
+        /* the numbers of the region it is in (docs/SIMULATION.md) */
+        const Eco *e = eco_at(floordiv((int)floorf(p.x), CHUNK), floordiv((int)floorf(p.y), CHUNK), floordiv((int)floorf(p.z), CHUNK));
+        if (e) logf_("%7.1f ECO plants %.0f flowers %.0f grazers %.1f predators %.1f insects %.1f carrion %.1f\n", B.t, e->plants, e->flowers, e->grazers,
+                     e->predators, e->insects, e->carrion);
+    }
 }
 
 static const char *SRC_NAMES[HS_COUNT] = { "melee", "projectile", "blast", "trap", "lava", "fall", "burn/poison", "other" };

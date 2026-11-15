@@ -16,6 +16,7 @@
 #include "world/carve.h"
 #include "game/physics.h"
 #include "world/support.h"
+#include "world/eco.h"
 #include "world/mech.h"
 #include "world/mesher.h"
 #include "world/texgen.h"
@@ -656,6 +657,36 @@ int main(int argc, char **argv) {
         printf("collapse: beams fall beyond their span (masonry 5, wood 4); a slab with half its pillars cut loses %d of 25 cells, with all of them all 25\n",
                falls[1]);
         #undef GSET
+    }
+
+    /* 6e. populations (eco.c): the numbers alone */
+    {
+        Eco a = { 0 }, b = { 0 }, c = { 0 };
+        eco_start(&a, 100, 10, false);
+        a.predators = 0;
+        eco_step(&a, 200.0f);
+        float ka = eco_capacity(&a);
+        CHECK(a.grazers > 0.8f * ka && a.grazers < 1.2f * ka, "without predators grazers settle at what the plants feed (%.2f of %.2f)", a.grazers, ka);
+        eco_start(&b, 300, 30, true);
+        b.predators = 1.0f;
+        float gmin = 1e9f, gmax = 0, pmin = 1e9f, pmax = 0;
+        for (int t = 0; t < 1000; t++) {
+            eco_step(&b, 0.5f);
+            if (t > 400) {
+                gmin = fminf(gmin, b.grazers); gmax = fmaxf(gmax, b.grazers);
+                pmin = fminf(pmin, b.predators); pmax = fmaxf(pmax, b.predators);
+            }
+        }
+        CHECK(gmin > 0.2f && pmin > 0.05f, "with predators neither dies out (grazers %.2f, predators %.2f at least)", gmin, pmin);
+        CHECK(gmax < 3.0f * eco_capacity(&b) && pmax < 20.0f, "and neither grows without bound (%.2f, %.2f at most)", gmax, pmax);
+        eco_start(&c, 100, 0, false);
+        c.grazers = 12.0f;
+        c.predators = 0;
+        float eaten = eco_step(&c, 10.0f);
+        CHECK(eaten > 5.0f, "too many grazers eat the plants down (%.1f cells)", eaten);
+        CHECK(c.grazers < 12.0f, "and fall back toward what is left (%.2f)", c.grazers);
+        printf("populations: alone the grazers settle at %.1f (plants feed %.1f); with predators they live on (grazers %.1f-%.1f, predators %.1f-%.1f); overgrazing eats %.0f cells\n",
+               a.grazers, ka, gmin, gmax, pmin, pmax, eaten);
     }
 
     /* 6c. the table of substances (docs/SIMULATION.md): sane values for every block */

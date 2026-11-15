@@ -217,6 +217,9 @@ void wildlife_spawn_chunk(Game *g, Chunk *c) {
         case CR_SNAIL: n = rng_range(&r, 2, 4); break;
         default: n = 1; break;
         }
+        /* grazers by the numbers of the region: fewer where they are hunted out or starve */
+        if (critter_grazes(kind)) n = (int)lroundf((float)n * eco_grazer_factor(c->cx, c->cy, c->cz));
+        if (n <= 0) continue;
         vec3 anchor;
         bool ok = kind == CR_FISH ? water_spot(g, c, &r, &anchor) : kind == CR_SALAMANDER ? lava_spot(g, c, &r, &anchor) : spot_near(g, c, &r, v3(0, 0, 0), true, &anchor);
         if (!ok) continue;
@@ -478,6 +481,19 @@ static void die(Game *g, Critter *c, int owner) {
     particles_burst(g, v3_add(c->pos, v3(0, d->h * 0.5f, 0)), c->kind == CR_FISH ? v3(0.6f, 0.7f, 0.9f) : v3(0.55f, 0.1f, 0.08f), 8, 2.0f, 0.04f, false);
     if (d->meat >= 0) pickup_spawn(g, PK_FOOD, v3_add(c->pos, v3(0, 0.3f, 0)), d->meat, NULL, 0, 0);
     if (owner >= 0) g_tele.hunted++;
+    if (critter_grazes(c->kind)) eco_note(c->pos, ECO_GRAZER_TAKEN);
+}
+
+/* Animals that eat the plants (the numbers of a region count them, docs/SIMULATION.md). */
+bool critter_grazes(int kind) { return kind == CR_HARE || kind == CR_GOAT || kind == CR_RAM || kind == CR_GROUSE || kind == CR_QUAIL || kind == CR_HEN; }
+
+/* A hound or bat caught it: gone, and a little left of it. */
+void wildlife_taken(Game *g, Critter *c) {
+    c->alive = false;
+    looted_mark(g, epoch_key(g, c->key, 0x4B11, EPOCH_HUNT));
+    particles_burst(g, v3_add(c->pos, v3(0, 0.3f, 0)), v3(0.55f, 0.1f, 0.08f), 8, 2.0f, 0.04f, false);
+    sfx_at(g, SFX_CRITTER_DEATH, c->pos, 0.7f);
+    eco_note(c->pos, ECO_GRAZER_TAKEN);
 }
 
 static PlayerSlot *owner_slot(Game *g, int owner) { return owner >= 0 && owner < MAX_PLAYERS && g->players[owner].active ? &g->players[owner] : NULL; }

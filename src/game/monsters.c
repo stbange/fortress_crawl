@@ -66,6 +66,10 @@ u64 chunk_spawn_key(int cx, int cy, int cz) {
 
 #define TOMBSTONE 1ULL
 
+bool monster_hunts_here(int stratum) {
+    return stratum >= 0 && stratum < ST_COUNT && (FAMILY[stratum][MON_HOUND] > 0 || FAMILY[stratum][MON_BAT] > 0);
+}
+
 static bool spawned_has(Game *g, u64 k) {
     if (!g->spawned_cap) return false;
     for (int i = (int)(mix64(k) & (u64)(g->spawned_cap - 1));; i = (i + 1) & (g->spawned_cap - 1)) {
@@ -270,6 +274,8 @@ static void spawn_chunk(Game *g, Chunk *c) {
     int tier;
     world_region(&g->world, c->cx, c->cy, c->cz, &tier);
     if (main_type == MON_BAT) n += 3; /* bats come in swarms */
+    /* hounds and bats follow their prey (docs/SIMULATION.md): more where there is plenty */
+    if (main_type == MON_HOUND || main_type == MON_BAT) n = MAXI(1, (int)lroundf((float)n * eco_prey_factor(c->cx, c->cy, c->cz)));
     ThemeInfo ti;
     theme_info(ci->theme, &ti);
     vec3 tint = v3(ti.mat[B_ACCENT].r / 255.0f, ti.mat[B_ACCENT].g / 255.0f, ti.mat[B_ACCENT].b / 255.0f);
@@ -617,6 +623,7 @@ void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int 
             }
         }
         bio_on_death(g, m->pos, mix64((u64)(m - g->mons) * 0x9E37 + (u64)(g->time * 1000)));
+        eco_note(m->pos, ECO_BODY);
         /* the killer gets the full XP, everyone else nearby half of it */
         int killer = m->last_hitter;
         for (int i = 0; i < MAX_PLAYERS; i++) {
@@ -1497,6 +1504,24 @@ void monsters_update(Game *g, float dt) {
                 }
                 break;
             }
+            }
+        }
+        /* a hound or a bat with nobody to fight hunts the animals near (docs/SIMULATION.md) */
+        if ((m->type == MON_HOUND || m->type == MON_BAT) && !m->awake && !m->charm_t && v3_len(want) < 0.1f) {
+            Critter *prey = NULL;
+            float bd = 12.0f;
+            for (int k = 0; k < MAX_CRITTERS; k++) {
+                Critter *c = &g->critters[k];
+                if (!c->alive || !critter_grazes(c->kind)) continue;
+                float d = v3_len(v3_sub(c->pos, m->pos));
+                if (d < bd) { bd = d; prey = c; }
+            }
+            if (prey) {
+                vec3 to = v3_sub(prey->pos, m->pos);
+                to.y = MONSTERS[m->type].flies ? to.y + 0.5f : 0.0f;
+                want = v3_scale(v3_norm(to), MONSTERS[m->type].speed * m->scale * 0.9f);
+                m->yaw = atan2f(to.z, to.x);
+                if (bd < 1.0f) wildlife_taken(g, prey);
             }
         }
         monster_physics(g, m, want, dt);

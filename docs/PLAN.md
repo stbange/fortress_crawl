@@ -490,7 +490,7 @@ Known gaps:
 | M13 | Stories: S3 camps and people, S4 consequences, S5 choices | done ([STORY_CHOICES.md](STORY_CHOICES.md)) |
 | M15 | World simulation 1: breakable blocks, pickaxe, bombs ([DESTRUCTION.md](DESTRUCTION.md)) | done |
 | M16 | World simulation 2-4: fluids; fire, heat and gases; plants, fungus and insects | done ([SIMULATION.md](SIMULATION.md)) |
-| M17 | The living world: time away, temperature, materials, sound and sight, collapse, food chain | planned ([SIMULATION_PLAN.md](SIMULATION_PLAN.md)) |
+| M17 | The living world: time away, temperature, materials, sound and sight, collapse, food chain | done ([SIMULATION_PLAN.md](SIMULATION_PLAN.md)) |
 
 ---
 
