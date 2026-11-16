@@ -102,40 +102,72 @@ The tracker shows the nearest open step; the STORY tab shows all the open ones.
 
 ### Kinds of steps (the pool)
 
+The steps are built from what the fortress already has: the towns and their peoples, the
+Sanctum, the realms behind the Gate, the dragons, the forge, alchemy, the kitchen, vaults and
+their puzzles, named enemies and domains, the history and its traces. A way of ten uses many of
+them, so reaching the king takes you all over the game.
+
+**Finding out** (steps 1-3, in any order)
+
 | Step | What you do | Built on | Gives |
 |---|---|---|---|
-| **Herald** | find someone who knows: a town's elder, a dying knight, a resident of the Sanctum | towns, traces | the next places |
-| **True name** | read pages in a library, a stele, the Library of Ash | traces, realms | the word ending; a weakness |
-| **Lieutenant** | kill (or spare) one of his named servants | named enemies, parley | a key, his orders |
+| **Herald** | hear of him from someone who knows: a town's elder, a resident of the Sanctum, a dying knight | towns, Sanctum residents, traces | where the other first steps are |
+| **Witness** | find the one who saw him last: lost in the halls, guarded | towns' lost folk | what he is (his kind) |
+| **True name** | read his name in a library, on a stele, in the Library of Ash, or in the Sanctum's library | traces, realms, Sanctum library | his name: the word ending, a weakness |
+| **Chronicle** | finish a chapter of a chronicle: its target turns out to have served him | the motive chapters | his orders: where his seals are |
+| **Sanctum vision** | sleep in the Sanctum's bed, or read at its shrine, and dream of him | Sanctum | a sight of his throne: where the way leads |
+
+**Gathering the means** (steps 4-7, in any order)
+
+| Step | What you do | Built on | Gives |
+|---|---|---|---|
+| **Dragon** | slay a named great dragon in its lair (for the Dragon-King: his brood) | dragons | its heart, scales or a key from its hoard |
+| **Hoard** | take one thing from a sleeping dragon's hoard without waking it, or by killing it | dragons, sneaking | an artefact piece |
+| **Allegiance** | win a people's help: friend of a town, their elder's tasks | towns, reputation | allies at the throne: their soldiers fight beside you |
+| **Alliance of peoples** | make two towns of different peoples friends (a task for each) | towns | a road through their halls; a shared gift |
+| **Forge** | make the king-breaker at the Sanctum's forge from dragon scales and rare metal | forge, dragons | a weapon that ignores his ward |
+| **Brew** | brew an elixir (the cure, the poison, the antidote) from realm plants and dragon blood | alchemy, realms, dragons | the cure or poison ending |
+| **Feast** | cook his own forgotten dish in the Sanctum's dining hall for a guest who knew him | food, Sanctum | a memory: a word for the word ending |
+| **Realm** | go through the Gate and bring back what he lost: a ruler's crown, a moon flower, a page | realms, rulers, realm flora | a key or a material |
 | **Relic** | take an artefact piece from a vault behind a puzzle | vaults, mechanisms | the artefact ending |
-| **Allegiance** | win a people's help: friend of a town, their task chain | towns, reputation | allies at the throne: soldiers fight beside you |
-| **Forge** | make the king-breaker at the Sanctum's forge from rare metal | forge | a weapon that ignores his ward |
-| **Brew** | brew an elixir or antidote (the cure, the poison) | alchemy | the cure or poison ending |
-| **Realm** | go through the Gate and bring something back: a ruler's crown, a moon flower | realms | a key or a material |
-| **Dragon** | slay a dragon in its lair | dragons | its heart, scales or a key from its hoard |
-| **Trial** | survive an arena of waves in a sealed hall | arenas | a key |
-| **Seal** | open one of his seals: a gate at the end of a dungeon | portals, vaults | the way on |
-| **Rescue** | bring back someone he holds: lost, guarded | towns' lost folk | a witness, an ally |
+| **Build** | raise a part of the Sanctum to hold what is needed (a shrine, an armory, a library) | Sanctum building | a place where the artefact is made whole |
 | **War** | choose a side between two factions in a domain, and win their war | domains, choices | a faction's road |
+
+**The approach** (steps 8-9, in order)
+
+| Step | What you do | Built on | Gives |
+|---|---|---|---|
+| **Lieutenant** | kill (or spare) one of his named servants, perhaps a chronicle's target | named enemies, parley | a key, his orders |
+| **Seal** | open one of his seals: a gate at the end of a dungeon, with a puzzle | portals, vaults | the way on |
+| **Trial** | survive waves in a sealed hall | arenas | a key |
+| **Rift** | walk his own rift: a realm he made for himself, with its own ruler | realms, Gate | the way to the throne |
 | **Descent** | reach a place: the deepest layer, the highest spire | strata | the way on, and a sight |
+| **Wyrm** | his guardian: an ancient wyrm before his throne | dragons | the throne's door |
+
+**The throne** (step 10): him, with the allies you won beside you.
 
 ### How a way is made
 
 1. The kind of king picks **required steps**:
    - the Necromancer: a *Relic* step for the phylactery
-   - the Dragon-King: two *Dragon* steps (slaying his brood)
+   - the Dragon-King: a *Dragon* step (his brood) and the *Wyrm* before his throne
    - the Beast-King: a *Brew* step for the cure
-2. The rest are filled from the pool by weight, with these rules:
+   - the Clockwork King: an *Alliance of peoples* that includes a gnomish town
+   - the Hollow King: a *Feast* or a *Sanctum vision* step
+2. **Variety**: the steps of a way come from at least four different parts of the game (towns,
+   Sanctum, realms, dragons, crafting, dungeons). At least one dragon, one town and one Sanctum step
+   are on every way.
+3. The rest are filled from the pool by weight, with these rules:
    - no kind twice in a row and at most two of a kind
    - one of the first three steps is always a *Herald*
-   - step 9 is always a *Lieutenant* or a *Trial*
+   - each step comes from its group above
    - step 10 is the throne
-3. Places are picked like the chapter targets today: rings of distance and danger outward, and
+4. Places are picked like the chapter targets today: rings of distance and danger outward, and
    for kings of the depths downward, or of the heights upward. Each place is a real
    chunk with room for what happens there.
-4. Steps 1-3 lie at about the same danger, and so do steps 4-7; each group is a ring farther out.
-5. The texts come from grammars with the history's names, the king's name and the peoples.
-6. The validator throws a way away and makes another if it fails any of these:
+5. Steps 1-3 lie at about the same danger, and so do steps 4-7; each group is a ring farther out.
+6. The texts come from grammars with the history's names, the king's name and the peoples.
+7. The validator throws a way away and makes another if it fails any of these:
    - every place exists and can be reached
    - every ending's needs are met by some step
    - the danger rises
@@ -156,6 +188,10 @@ of seeds.
   today. A town task stays on the third line.
 
 ## 3. Dragons
+
+**Built** (see [DRAGONS.md](DRAGONS.md)): 25 kinds in five sizes, lairs with hoards, three-phase
+boss fights, breath through the simulation, and their sounds. What follows is the design they were
+built from. The *Dragon*, *Hoard*, *Forge*, *Brew* and *Wyrm* steps use them.
 
 **Enemies only, and the hardest in the game**: huge, terrifying bosses of every kind, with tons
 of loot. No companions, no eggs, no mounts, no allies, no bargains.
@@ -309,7 +345,7 @@ In five phases, each one playable on its own, with tests and a bot batch after e
 - The ending page and the credits, then *explore on* or *to the start screen*; the victory record,
   the changed world after, the realm gates rewired, and a hall of victories in the Sanctum.
 
-### Phase 4: dragons
+### Phase 4: dragons (done)
 
 - The monster family:
   - species and sizes in a table
@@ -340,6 +376,6 @@ dependence; dragons could also come first, since phase 4 does not depend on 1-3 
 
 ## 5. Still open
 
-- **Sounds**: the dragon sounds and the Old King's voice need your go-ahead before they are generated.
-- **Where to start**: phase 1 (the king and his way) is planned first; the dragons (phase 4) could
-  come first instead, as they do not depend on the story except for the *Dragon* steps.
+- **Sounds**: the go-ahead is given; the dragon sounds are made, the kings' roars, spells and
+  voices come with phase 3.
+- The dragons are done. Next is phase 1 (the king and his way), then phases 2, 3 and 5.
