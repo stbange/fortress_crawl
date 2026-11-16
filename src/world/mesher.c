@@ -1,5 +1,6 @@
 #include "world/mesher.h"
 #include "world/realms.h"
+#include "world/dragons.h"
 
 #include "world/texgen.h"
 
@@ -96,8 +97,13 @@ static void compute_light(const MeshInput *in, MeshScratch *s) {
         if (block_opaque(s->blocks[i])) continue;
         int px = i % MESH_P, pz = (i / MESH_P) % MESH_P, py = i / (MESH_P * MESH_P);
         const ChunkInfo *ci = in->info[chunk_of(px) + chunk_of(py) * 3 + chunk_of(pz) * 9];
-        if (!ci || !ci->has_struct || ci->st.type != STRUCT_HALL || ci->st.variant != 3) continue;
+        if (!ci || !ci->has_struct || ci->st.type != STRUCT_HALL || (ci->st.variant != 3 && ci->st.variant != 4)) continue;
         u8 *l = &s->light[i * 4];
+        if (ci->st.variant == 4) { /* a dragon's lair: the glow of its hoard and its breath's marks (dragons.h), unless it lives in the dark */
+            if (ci->st.people == DK_SHADOW || ci->st.people == DK_BLACK_MOON) continue;
+            l[0] = (u8)MAXI(l[0], 8); l[1] = (u8)MAXI(l[1], 7); l[2] = (u8)MAXI(l[2], 6);
+            continue;
+        }
         l[0] = (u8)MAXI(l[0], 12); l[1] = (u8)MAXI(l[1], 10); l[2] = (u8)MAXI(l[2], 8);
     }
 

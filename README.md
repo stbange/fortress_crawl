@@ -619,6 +619,21 @@ follows you in. Strike at someone to talk to them:
 Help a town and its people call you friend, then honoured, and it costs you less and at last
 nothing. See [docs/TOWNS.md](docs/TOWNS.md); `--demo town` puts you in the first town.
 
+## Dragons
+
+![Dragons of every size](docs/screenshots/dragon_sizes.png)
+
+Twenty-five kinds of dragon in five sizes:
+- swarms of dragonets, packs of drakes and diving wyverns
+- great dragons and ancient wyrms asleep on their hoards in lairs of their own
+
+They breathe fire, frost, lightning, poison, acid, magma, rot, force, shadow, the void or chaos,
+and the breath changes the world. A great dragon wakes with a roar that shakes the ground and
+fights in three phases: in the air, grounded and furious, then desperate while its lair comes
+down. Its hoard and its body are the richest loot in the fortress: gold, chests, the world's
+legendaries, a dragon-slayer's blade, its heart, scales, teeth and blood. See
+[docs/DRAGONS.md](docs/DRAGONS.md); `--demo dragons` shows them.
+
 ## The realms behind the Gate
 
 ![The Garden of the First Seed](docs/screenshots/realm_garden.png)

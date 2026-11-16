@@ -156,6 +156,11 @@ shot town_elves       --pos 629.5 200 -35.5 --look -110 -12
 SEED=42 shot town_orcs --demo town
 wait
 
+# ---- dragons (docs/DRAGONS.md), in the lair nearest the gate ----
+shot dragon_sizes     --demo dragons --cast 0
+shot dragon_kinds     --demo dragonkinds
+wait
+
 # ---- kept from earlier (framed by hand, their features have not changed) ----
 # chasm, vault, puzzle_beam, puzzle_statues, trap_spikes, trap_flames, spell_keep, combat_mines.
 # The demos --demo levers|beam|statues|spikes|flames|cast --cast 16 make

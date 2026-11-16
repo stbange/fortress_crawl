@@ -209,6 +209,7 @@ static void demo_place(Game *g, PlayerSlot *p1) {
 }
 
 /* Scripted setups for screenshots of the combat systems. */
+static bool demo_lair(Game *g, Lair *out);
 static void demo_setup(Game *g) {
     PlayerSlot *p1 = &g->players[0];
     Stats *s = &p1->st;
@@ -227,6 +228,20 @@ static void demo_setup(Game *g) {
     s->mana = s->maxmana;
     if (!strcmp(g_demo_kind, "skills")) { p1->show_skills = true; p1->menu_tab = TAB_SKILLS; p1->skill_sel = skill_id(BR_ARCANE, 2); return; }
     if (!strcmp(g_demo_kind, "map")) { p1->show_map = true; return; }
+    if (!strcmp(g_demo_kind, "lair") || !strcmp(g_demo_kind, "dragons") || !strcmp(g_demo_kind, "dragonkinds") || !strcmp(g_demo_kind, "dragonfight")) {
+        /* the dragons (docs/DRAGONS.md), in the lair nearest the gate: "lair" at its edge looking at
+         * the sleeper on its hoard; "dragons" the sizes in a row (--cast picks the kind); "dragonkinds"
+         * a drake of every kind; "dragonfight" the dragon awake and at you */
+        Lair L;
+        if (!demo_lair(g, &L)) { SDL_Log("no lair near the gate"); return; }
+        SDL_Log("demo: the Lair of %s (%s %s) at %d %d %d", L.name, DRAGON_KINDS[L.kind].name, DRAGON_SIZES[L.size].name, L.cx, L.floor, L.cz);
+        p1->pl.fly = false;
+        p1->pl.pos = v3(L.cx - 30.5f, (float)L.floor + 1.0f, L.cz + 0.5f);
+        p1->pl.yaw = 0;
+        p1->pl.pitch = !strcmp(g_demo_kind, "lair") ? 0.12f : 0.05f;
+        s->hp = s->maxhp = 5000;
+        return;
+    }
     if (!strcmp(g_demo_kind, "town") || !strcmp(g_demo_kind, "towntest")) {
         /* the first town east of the gate (docs/TOWNS.md): in its plaza, looking at the well */
         Town t;
@@ -1232,6 +1247,72 @@ static void screenshot_step(App *a, float frame_dt) {
             SDL_Log("blast: %d cells scorched", scorch);
         }
     }
+    if (g->opt.demo && a->demo_done && (!strcmp(kind, "dragons") || !strcmp(kind, "dragonkinds") || !strcmp(kind, "lair") || !strcmp(kind, "dragonfight"))) {
+        static int stage;
+        p1->st.hp = p1->st.maxhp;
+        if (stage == 0 && a->shot_wait > 0.6f) {
+            stage = 1;
+            Lair L;
+            demo_lair(g, &L);
+            vec3 f = v3(1, 0, 0), r = v3(0, 0, 1);
+            vec3 o = v3(L.cx - 30.5f, (float)L.floor, L.cz + 0.5f);
+            if (!strcmp(kind, "dragons")) {
+                for (int i = 0; i < MAX_MONSTERS; i++) g->mons[i].alive = false;
+                int k = g_demo_cast >= 0 && g_demo_cast < DK_COUNT ? g_demo_cast : L.kind;
+                static const float AT[DSIZE_COUNT][3] = { { 5, -3, 1.6f }, { 8, 3.5f, 0 }, { 12, -6, 3 }, { 24, 4, 0 }, { 0, 0, -99 } };
+                for (int sz = 0; sz < DSIZE_COUNT; sz++) {
+                    if (AT[sz][2] < -50) continue; /* (the ancient does not fit beside the rest) */
+                    vec3 p = v3_add(o, v3_add(v3_scale(f, AT[sz][0]), v3_add(v3_scale(r, AT[sz][1]), v3(0, AT[sz][2], 0))));
+                    Monster *m = dragon_spawn(g, k, sz, p, 10, 0xD000 + (u64)sz);
+                    if (m) { m->awake = true; m->dstate = sz == DS_WYVERN ? 4 /* fly */ : 2; m->yaw = PI_F * 0.8f; m->dhome = p; }
+                }
+                g->freeze_monsters = true;
+            } else if (!strcmp(kind, "dragonkinds")) {
+                for (int i = 0; i < MAX_MONSTERS; i++) g->mons[i].alive = false;
+                for (int k = 0; k < DK_COUNT; k++) {
+                    vec3 p = v3_add(o, v3_add(v3_scale(f, 8.0f + (k / 5) * 5.0f), v3_scale(r, ((k % 5) - 2) * 4.0f)));
+                    Monster *m = dragon_spawn(g, k, DS_DRAKE, p, 10, 0xD100 + (u64)k);
+                    if (m) { m->awake = true; m->dstate = 2; m->yaw = PI_F; }
+                }
+                g->freeze_monsters = true;
+            } else if (!strcmp(kind, "dragonfight")) {
+                for (int i = 0; i < MAX_MONSTERS; i++)
+                    if (g->mons[i].alive && g->mons[i].type == MON_DRAGON && g->mons[i].dsize >= DS_DRAGON) dragon_damage(g, &g->mons[i], 1.0f, p1->pl.pos, 0);
+            }
+        }
+        if (!strcmp(kind, "dragonfight")) /* the camera follows the dragon */
+            for (int i = 0; i < MAX_MONSTERS; i++) {
+                Monster *m = &g->mons[i];
+                if (!m->alive || m->type != MON_DRAGON || m->dsize < DS_DRAGON) continue;
+                vec3 d = v3_sub(v3_add(m->pos, v3(0, m->scale, 0)), player_eye(&p1->pl));
+                p1->pl.yaw = atan2f(d.z, d.x);
+                p1->pl.pitch = atan2f(d.y, sqrtf(d.x * d.x + d.z * d.z));
+            }
+        if (!strcmp(kind, "dragonfight") && fmodf(a->shot_wait, 2.0f) < frame_dt) {
+            static bool dead_logged;
+            bool any = false;
+            for (int i = 0; i < MAX_MONSTERS; i++) {
+                Monster *m = &g->mons[i];
+                if (m->alive && m->type == MON_DRAGON && m->dsize >= DS_DRAGON && a->shot_wait > 12.0f) {
+                    monster_damage(g, m, m->maxhp * 0.09f, v3_add(m->pos, v3(0, -2, 0)), 0, 0); /* blows, as from a hero below */
+                    any = true;
+                }
+                if (m->alive && m->type == MON_DRAGON && m->dsize >= DS_DRAGON)
+                    SDL_Log("dragonfight: t %.1f %s state %d phase %d hp %.0f/%.0f pos %.1f %.1f %.1f grounded %d", a->shot_wait, m->name, m->dstate, m->dphase, m->hp, m->maxhp, m->pos.x, m->pos.y, m->pos.z, m->grounded);
+            }
+            if (!any && a->shot_wait > 14.0f && !dead_logged) {
+                dead_logged = true;
+                int gold = 0, weapons = 0, chests = 0, forge = 0, reag = 0;
+                for (int i = 0; i < MAX_PICKUPS; i++) {
+                    Pickup *p = &g->pickups[i];
+                    if (!p->alive) continue;
+                    gold += p->kind == PK_GOLD ? p->amount : 0; weapons += p->kind == PK_WEAPON; chests += p->kind == PK_CHEST; forge += p->kind == PK_FORGE; reag += p->kind == PK_REAGENT;
+                }
+                SDL_Log("dragonfight: slain at t %.1f; lying about: %d gold, %d weapons, %d chests, %d forge materials, %d reagents; slain list %d, tele %d",
+                        a->shot_wait, gold, weapons, chests, forge, reag, g->world.ndragons_slain, g_tele.dragons);
+            }
+        }
+    }
     if (g->opt.demo && a->demo_done && !strcmp(kind, "towntest")) {
         /* talks to everyone in the town, one after the other, and logs it; then a night at the
          * inn, the healer, the market, and the elder's task done by hand */
@@ -1876,6 +1957,21 @@ static void screenshot_step(App *a, float frame_dt) {
         save_screenshot(g, g->opt.shot);
         a->running = false;
     }
+}
+
+/* The dragon's lair nearest the gate (dragons.h). */
+static bool demo_lair(Game *g, Lair *out) {
+    float best = 1e9f;
+    for (int cy = -3; cy <= 3; cy++)
+        for (int cz = -24; cz <= 24; cz += 2)
+            for (int cx = -24; cx <= 24; cx += 2) {
+                Structure st;
+                Lair L;
+                if (!world_structure_at(&g->world, cx, cy, cz, &st) || !lair_from_structure(&st, &L)) continue;
+                float d = sqrtf((float)(L.cx * L.cx + L.cz * L.cz)) + fabsf((float)L.floor) * 2.0f;
+                if (d < best) { best = d; *out = L; }
+            }
+    return best < 1e8f;
 }
 
 /* Generates the world for the chosen seed and puts the players in front of the gate. */

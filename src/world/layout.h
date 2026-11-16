@@ -68,6 +68,9 @@ typedef struct World {
     } towns[32];
     int ntowns;
     u32 town_seq;
+    /* the great dragons slain (their lairs' keys): they do not come back (saved) */
+    u64 dragons_slain[64];
+    int ndragons_slain;
 } World;
 enum { TQ_NONE, TQ_HUNT, TQ_FETCH, TQ_LOST, TQ_PEST, TQ_COUNT };
 #define MAX_TOWN_RECS 32

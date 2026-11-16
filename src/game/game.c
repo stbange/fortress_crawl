@@ -1326,6 +1326,10 @@ void game_view_rect(const Game *g, const PlayerSlot *ps, int *x, int *y, int *w,
 
 static void render_view(Game *g, PlayerSlot *ps, int vx, int vy, int vw, int vh) {
     vec3 eye = game_view_eye(ps);
+    if (ps->shake > 0) { /* a dragon's tread, its roar (dragon.c) */
+        float k = fminf(ps->shake, 1.0f) * 0.18f, t = g->time * 40.0f;
+        eye = v3_add(eye, v3(sinf(t * 1.3f) * k, sinf(t * 1.7f + 1.0f) * k, cosf(t * 1.1f) * k));
+    }
     g->draw_viewer = ps;
     SceneParams sp;
     memset(&sp, 0, sizeof sp);

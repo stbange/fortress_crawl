@@ -3,6 +3,7 @@
 #include "world/pocket.h"
 #include "world/realms.h"
 #include "world/towns.h"
+#include "world/dragons.h"
 
 #include "core/noise.h"
 
@@ -116,6 +117,13 @@ static bool cell_structure(const World *w, int gx, int gy, int gz, Structure *s)
     bool first = gx == 1 && gy == 0 && gz == 0;
     bool town = first || ((type == STRUCT_HALL || type == STRUCT_CAVERN) && hash_unit(mix64(h ^ 0x70F7)) < 0.3f);
     if (town) type = STRUCT_HALL;
+    /* a dragon's lair (dragons.h): a fifth of the one-layer structures that are not towns, from
+     * the second ring of danger out, where a kind of dragon lives */
+    int st_here = world_stratum(w, ccx, ccy, ccz);
+    int dkind = dragon_kind_for(st_here, h);
+    bool lair = !town && (type == STRUCT_HALL || type == STRUCT_CAVERN) && dkind >= 0 && hash_unit(mix64(h ^ 0x1A1F)) < 0.2f &&
+                world_difficulty(ccx, ccy, ccz) >= 9.0f;
+    if (lair) type = STRUCT_HALL;
     if (type <= STRUCT_VESTIBULE) return false;
     memset(s, 0, sizeof *s);
     s->type = (u8)type;
@@ -125,6 +133,7 @@ static bool cell_structure(const World *w, int gx, int gy, int gz, Structure *s)
         s->sx = rng_range(&r, 2, 3); s->sz = rng_range(&r, 2, 3); s->sy = 1;
         s->variant = (u8)pick_weighted(rng_float(&r), (const float[]){ 5, 3, 2 }, 3);
         if (town) { s->sx = s->sz = 3; s->variant = HALL_TOWN; s->people = (u8)town_people(world_stratum(w, ccx, ccy, ccz), h); }
+        if (lair) { s->sx = s->sz = 3; s->variant = HALL_LAIR; s->people = (u8)dkind; }
         break;
     case STRUCT_CAVERN:
         s->sx = rng_range(&r, 2, 3); s->sz = rng_range(&r, 2, 3); s->sy = 1;
@@ -353,7 +362,11 @@ void world_place_name(const ChunkInfo *ci, char *buf, int n) {
         snprintf(buf, (size_t)n, "%c%s", toupper((unsigned char)nm[0]), nm + 1);
     }
     else if (ci->has_struct && ci->st.type == STRUCT_VESTIBULE) snprintf(buf, (size_t)n, "The Grand Vestibule");
-    else if (ci->has_struct && ci->st.type == STRUCT_HALL && ci->st.variant == HALL_TOWN) {
+    else if (ci->has_struct && ci->st.type == STRUCT_HALL && ci->st.variant == HALL_LAIR) {
+        Lair L;
+        if (lair_from_structure(&ci->st, &L)) snprintf(buf, (size_t)n, "The Lair of %s", L.name);
+        else snprintf(buf, (size_t)n, "A dragon's lair");
+    } else if (ci->has_struct && ci->st.type == STRUCT_HALL && ci->st.variant == HALL_TOWN) {
         Town t;
         if (town_from_structure(&ci->st, &t)) snprintf(buf, (size_t)n, "%c%s", toupper((unsigned char)t.name[0]), t.name + 1);
         else snprintf(buf, (size_t)n, "A town");

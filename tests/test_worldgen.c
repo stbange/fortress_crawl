@@ -13,6 +13,7 @@
 #include "world/layout.h"
 #include "world/realms.h"
 #include "world/towns.h"
+#include "world/dragons.h"
 #include "world/story.h"
 #include "world/history.h"
 #include "world/carve.h"
@@ -858,6 +859,34 @@ int main(int argc, char **argv) {
             CHECK(doors == 6, "a building of the first town is closed or full");
         }
         realm_cache_clear();
+    }
+
+    /* dragons' lairs (dragons.h): some within reach, each a cave with room to fly over its hoard */
+    {
+        int nlairs = 0, ancient = 0, roomy = 0;
+        u64 seen[64];
+        for (int cy = -8; cy <= 8; cy++)
+            for (int cz = -24; cz <= 24; cz++)
+                for (int cx = -24; cx <= 24; cx++) {
+                    Structure st;
+                    Lair L;
+                    if (!world_structure_at(&g_world, cx, cy, cz, &st) || !lair_from_structure(&st, &L)) continue;
+                    bool dup = false;
+                    for (int k = 0; k < nlairs && k < 64; k++) dup |= seen[k] == L.key;
+                    if (dup) continue;
+                    if (nlairs < 64) seen[nlairs] = L.key;
+                    nlairs++;
+                    ancient += L.size == DS_ANCIENT;
+                    /* air above the hoard for a dragon to rise: 12 cells clear */
+                    int clear = 0;
+                    for (int y = L.floor + 3; y < L.floor + 15; y++) clear += r_open(L.cx + 12, y, L.cz);
+                    roomy += clear >= 12;
+                    if (getenv("LAIR_LIST")) printf("  the Lair of %s (%s %s) at %d %d %d\n", L.name, DRAGON_KINDS[L.kind].name, DRAGON_SIZES[L.size].name, L.cx, L.floor, L.cz);
+                    realm_cache_clear();
+                }
+        printf("lairs: %d within 24 chunks and 8 layers (%d of ancient wyrms), %d with room to fly\n", nlairs, ancient, roomy);
+        CHECK(nlairs >= 3, "too few dragons' lairs");
+        CHECK(roomy == nlairs, "a lair without room to fly");
     }
 
     /* realms behind the Gate: every one has ground to arrive on, a keep, its plants, and a

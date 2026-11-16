@@ -351,4 +351,22 @@ export const SOUNDS = [
   { id: "oil_ignite", dur: 1.2, text: "a pool of oil catching fire with a sudden whoosh, flames spreading fast" },
   { id: "acid_sizzle", dur: 1.2, text: "acid eating into stone, bubbling corrosive fizz and sizzle" },
   { id: "flask_break", dur: 0.6, v: 2, text: "small glass flask shattering on stone, liquid splashing" },
+
+  // ---------------- dragons (docs/DRAGONS.md) ----------------
+  { id: "dragon_roar_small", dur: 1.4, v: 2, text: "a young drake or wyvern screeches and roars, reptilian, sharp and aggressive" },
+  { id: "dragon_roar_great", dur: 3.5, v: 2, text: "a huge dragon roars, enormous deep reptilian bellow echoing through a vast cavern, terrifying" },
+  { id: "dragon_roar_ancient", dur: 5.0, text: "an ancient colossal dragon lets out a world-shaking roar, deep rumbling bass, stone trembling, echoes for seconds" },
+  { id: "dragon_wings", dur: 2.0, v: 2, text: "giant leathery dragon wings beating heavily, powerful whooshing gusts of wind" },
+  { id: "dragon_tread", dur: 1.2, v: 2, text: "the heavy footstep of a gigantic dragon on stone, deep thud and ground shaking, small stones rattling" },
+  { id: "dragon_tail", dur: 1.0, text: "a massive dragon tail sweeping through the air and smashing into stone, heavy whoosh and crash" },
+  { id: "dragon_bite", dur: 0.9, text: "huge dragon jaws snapping shut, deep crunch and a snarl" },
+  { id: "dragon_inhale", dur: 1.2, text: "a dragon draws a deep rumbling breath, throat glowing, building pressure before breathing fire" },
+  { id: "dragon_breath_fire", dur: 2.5, text: "a dragon breathes a roaring torrent of fire, intense whooshing flames and crackling" },
+  { id: "dragon_breath_frost", dur: 2.5, text: "a dragon breathes a blast of freezing frost, icy hissing wind and crackling ice forming" },
+  { id: "dragon_breath_storm", dur: 2.5, text: "a dragon breathes a crackling lightning storm, electric arcs buzzing and thunder snaps" },
+  { id: "dragon_breath_gas", dur: 2.5, text: "a dragon exhales a hissing cloud of poisonous gas, a long venomous hiss" },
+  { id: "dragon_breath_acid", dur: 2.5, text: "a dragon spits a gushing stream of acid that sizzles and bubbles on stone" },
+  { id: "dragon_hurt", dur: 1.2, v: 2, text: "a huge dragon snarls and shrieks in pain, deep reptilian cry" },
+  { id: "dragon_death", dur: 4.0, text: "a huge dragon lets out a long dying roar and crashes heavily to the ground, rumble and settling dust" },
+  { id: "dragonet_screech", dur: 0.8, v: 2, text: "a small cat-sized dragonet screeches and chirps angrily, flapping small wings" },
 ];

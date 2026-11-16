@@ -12,7 +12,7 @@
  * user's preference folder. The world itself never needs saving: the seed rebuilds it. */
 
 #define SAVE_MAGIC 0x56534346u /* "FCSV" */
-#define SAVE_VERSION 26 /* 26: the towns of the friendly peoples (reputation, tasks), company at an inn; 25: the realms behind the Gate (attuned, rulers fallen, plants and animals met; where you went through from); 24: seeds; 23: firewood; 22: insect swarms; 21: the numbers of animals and plants per chunk; 20: the marks on cells (wet, soot, scorch, plants' age); 19: flasks to throw; 18: the fur cloak, warmth and cold of each character; 17: when each chunk was last seen (the world goes on while you are away); 16: the clouds of gas in the air; 15: what was broken in the world, the pickaxe and bombs; 14: the ledger of deeds (choices); 13: the story generator of the world; 12: the forge (materials, smithing, blueprints, runes); 11: the Sanctum's decorations, keystones bought; 10: meal variety, toxicity, torn formulae; 9: alchemy (reagents, elixirs, formulae, the elixir working); 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms;
+#define SAVE_VERSION 27 /* 27: the great dragons slain; 26: the towns of the friendly peoples (reputation, tasks), company at an inn; 25: the realms behind the Gate (attuned, rulers fallen, plants and animals met; where you went through from); 24: seeds; 23: firewood; 22: insect swarms; 21: the numbers of animals and plants per chunk; 20: the marks on cells (wet, soot, scorch, plants' age); 19: flasks to throw; 18: the fur cloak, warmth and cold of each character; 17: when each chunk was last seen (the world goes on while you are away); 16: the clouds of gas in the air; 15: what was broken in the world, the pickaxe and bombs; 14: the ledger of deeds (choices); 13: the story generator of the world; 12: the forge (materials, smithing, blueprints, runes); 11: the Sanctum's decorations, keystones bought; 10: meal variety, toxicity, torn formulae; 9: alchemy (reagents, elixirs, formulae, the elixir working); 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms;
                           6: weapons with materials, powers, legendaries and memory; 7: the Sanctum per world (written by one
                           build still marked 6); 8: food (the larder, dishes, recipes, the meal) */
 #define EXPLORED_BUDGET (1200 * 1024)
@@ -332,6 +332,9 @@ bool game_save(Game *g) {
         w8(&b, t->got); w8(&b, t->need); w16(&b, (u16)t->item); w16(&b, (u16)t->tx); w16(&b, (u16)t->ty); w16(&b, (u16)t->tz);
         w16(&b, t->done); w32(&b, t->qseq); w32(&b, (u32)t->px); w32(&b, (u32)t->py); w32(&b, (u32)t->pz);
     }
+    /* v27: the great dragons slain */
+    w8(&b, (u8)g->world.ndragons_slain);
+    for (int i = 0; i < g->world.ndragons_slain; i++) w64(&b, g->world.dragons_slain[i]);
     char key[64];
     save_key(g->opt.seed, key, sizeof key);
     bool ok = store_write(key, b.d, b.n);
@@ -671,6 +674,14 @@ bool game_load(Game *g) {
                 t.done = r16(&r); t.qseq = r32(&r); t.px = (i32)r32(&r); t.py = (i32)r32(&r); t.pz = (i32)r32(&r);
                 bool ok = t.people < PEOPLE_COUNT && t.qtype < TQ_COUNT && t.qstate <= 1 && (t.item < FD_COUNT || (t.item >= 1000 && t.item < 1000 + RG_COUNT));
                 if (!r.bad && ok && g->world.ntowns < MAX_TOWN_RECS) g->world.towns[g->world.ntowns++] = t;
+            }
+        }
+        g->world.ndragons_slain = 0;
+        if (r.ver >= 27) {
+            int nd = r8(&r);
+            for (int i = 0; i < nd && !r.bad; i++) {
+                u64 k = r64(&r);
+                if (!r.bad && g->world.ndragons_slain < 64) g->world.dragons_slain[g->world.ndragons_slain++] = k;
             }
         }
         if (r.bad) { /* a broken tail: the Sanctum as a new world has it */

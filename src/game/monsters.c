@@ -29,6 +29,8 @@ const MonsterDef MONSTERS[MON_TYPE_COUNT] = {
     { "Harpy",      0.35f, 0.9f, 24,  12, 5.5f, 0.9f, 2.8f, 18, true,  { 0.62f, 0.5f, 0.4f },   0.35f, 5, "Harpy Queen" },
     { "Hound",      0.35f, 0.8f, 28,  8,  6.0f, 0.9f, 0.8f, 13, false, { 0.42f, 0.36f, 0.3f },  0.35f, 3, "Pack Alpha" },
     { "Troll",      0.5f,  2.1f, 160, 18, 2.4f, 1.5f, 3.0f, 40, false, { 0.42f, 0.56f, 0.4f },  0.6f,  7, "Troll King" },
+    /* dragons (dragon.c): a drake's numbers; the size scales them, the families never pick it */
+    { "Dragon",     0.6f,  1.0f, 70,  12, 5.5f, 1.4f, 1.2f, 40, false, { 0.6f, 0.2f, 0.15f },   0.5f,  99, "Elder Dragon" },
 };
 
 /* family weights per stratum:
@@ -246,11 +248,13 @@ static void spawn_chunk(Game *g, Chunk *c) {
     gate_spawn_chunk(g, c);     /* rifts to the realms; a realm's ruler in its keep */
     town_spawn_chunk(g, c);     /* the people of a town */
     if (town_chunk(c)) return;  /* nothing hostile is born in a town */
+    if (dragon_spawn_chunk(g, c)) return; /* a dragon's lair: the dragon, its brood, its hoard */
     if (ci->arch == ARCH_EXTERIOR) loot_place_in_chunk(g, c); /* herbs */
     if (ci->arch == ARCH_EXTERIOR || ci->arch == ARCH_POCKET) return; /* nothing hostile outside or at home */
 
     loot_place_in_chunk(g, c);
     story_spawn_lord(g, c);
+    if (dragon_pack(g, c, 0)) return; /* now and then dragons instead of the pack */
     Rng r = rng_make(ci->seed ^ 0x5EED);
     int level = ci->level;
     /* most chunks hold a pack, structures two; packs grow with danger */
@@ -522,6 +526,7 @@ void monsters_alert(Game *g, vec3 p, float radius) {
 void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int attacker) {
     if (!m->alive || m->hidden) return; /* vanished or underground */
     if (m->parley == 1 || m->resident) return; /* yielded, waiting for a choice; or at home in the Sanctum */
+    if (m->type == MON_DRAGON && (dmg = dragon_damage(g, m, dmg, from, attacker)) <= 0) return;
     if (m->rank >= 4) dmg *= 0.85f; /* armoured, far out */
     if (attacker >= 0) g_tele.dealt += fminf(dmg, m->hp);
     if (m->type == MON_KNIGHT && m->state != MS_STUN && !(g_hit_flags & WBF_SHIELDBREAK)) {
@@ -559,6 +564,7 @@ void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int 
     vec3 c = monster_centre(m);
     particles_burst(g, c, v3_scale(m->color, 0.5f), 6, 3.0f, 0.06f, false);
     if (m->hp > 0) sfx_monster(g, m, MSFX_HURT);
+    if (m->hp <= 0 && m->type == MON_DRAGON && dragon_rises(g, m)) return; /* a dracolich */
     if (m->hp <= 0) {
         m->alive = false;
         sfx_monster(g, m, MSFX_DEATH);
@@ -577,6 +583,7 @@ void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int 
         if (m->story_key) story_on_kill(g, m);
         if (m->ruler) gate_ruler_slain(g, m);
         town_on_kill(g, m);
+        if (m->type == MON_DRAGON) dragon_slain(g, m);
         if (m->orders) story_orders_found(g, m);
         if (m->named_kind && m->story_key) sanctum_trophy_named(g, m->story_key);
         if (m->named_kind && m->story_key && m->level >= 6.0f) {
@@ -1306,6 +1313,7 @@ void monsters_update(Game *g, float dt) {
     for (int i = 0; i < MAX_MONSTERS; i++) {
         Monster *m = &g->mons[i];
         if (!m->alive) continue;
+        if (m->type == MON_DRAGON) { dragon_update(g, m, dt); continue; } /* (dragon.c) */
         if (m->parley == 1 || m->resident) {
             /* waiting: still, facing the nearest player */
             PlayerSlot *np = game_nearest_player(g, m->pos, 30.0f);

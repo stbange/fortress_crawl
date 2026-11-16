@@ -18,6 +18,7 @@
 #include "world/pocket.h"
 #include "world/realms.h"
 #include "world/towns.h"
+#include "world/dragons.h"
 #include "game/tele.h"
 /* WBF_* of the weapon landing the current blow (monster_damage reads it: a flail ignores shields) */
 extern unsigned g_hit_flags;
@@ -52,6 +53,7 @@ enum {
     MON_HARPY,   /* circles high and dives */
     MON_HOUND,   /* circles in packs, lunges from the side */
     MON_TROLL,   /* throws boulders */
+    MON_DRAGON,  /* every dragon, by its kind and size (dragon.c, dragons.h) */
     MON_TYPE_COUNT
 };
 /* Monster grade: the same kind as a normal monster, an elite or a boss. */
@@ -118,6 +120,11 @@ typedef struct Monster {
     char name[STORY_NAME];
     u8 ruler;        /* the ruler of a realm behind the Gate: 1 + RM_* */
     u8 townq;        /* a pest a town asked you to kill: 1 + its record (town.c) */
+    /* a dragon (dragon.c): its kind and size, what it is doing, its fight's phase */
+    u8 dkind, dsize, dstate, dphase, heads, revived, grounded;
+    float dtimer, dbreath, dwing, dalt, dheal, dstep;
+    vec3 dhome, dgoal, dbreath_dir;
+    u64 lair_key;
 } Monster;
 
 typedef struct Projectile {
@@ -438,6 +445,7 @@ typedef struct PlayerSlot {
     vec3 scry_pos;          /* Clairvoyance: where your sight is */
     float gate_cd;          /* just went through a gate or door */
     float realm_note_t;     /* the realms: until the next warning of the same kind */
+    float shake;            /* the view shakes (a dragon's tread, its roar) */
     u8 realm_notes;         /* the realms: warnings already given this visit (bits) */
     float ritual_t;         /* opening the Sanctum Door: seconds left of the ritual */
     float story_quiet;      /* seconds without a chapter finished (the story sends hunters) */
@@ -837,6 +845,16 @@ void game_thread_key(Game *g, PlayerSlot *ps);
 
 /* gate.c: the realms behind the Gate (realms.h, docs/REALMS.md) */
 void monsters_alert(Game *g, vec3 p, float radius);
+/* dragon.c: dragons (dragons.h, docs/DRAGONS.md) */
+Monster *dragon_spawn(Game *g, int kind, int size, vec3 pos, int level, u64 key);
+bool dragon_spawn_chunk(Game *g, Chunk *c);     /* a lair's dragon and hoard; true: nothing else spawns here */
+bool dragon_pack(Game *g, Chunk *c, u32 seed);  /* now and then a pack of drakes, dragonets or wyverns */
+void dragon_update(Game *g, Monster *m, float dt);
+float dragon_damage(Game *g, Monster *m, float dmg, vec3 from, int attacker);
+bool dragon_rises(Game *g, Monster *m);         /* a dracolich at no health: it rises again */
+void dragon_slain(Game *g, Monster *m);
+void dragon_draw(Game *g, const Monster *m, vec3 light);
+void dragons_shake(Game *g, vec3 p, float amount, float radius);
 /* town.c: the towns of the friendly peoples (towns.h, docs/TOWNS.md) */
 #define MAX_FOLK 48
 typedef struct Folk Folk;

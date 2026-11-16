@@ -197,11 +197,16 @@ static const int MON_SFX[MON_TYPE_COUNT][4] = {
     { SFX_HARPY_ALERT, SFX_HARPY_ATTACK, SFX_HARPY_HURT, SFX_HARPY_DEATH },
     { SFX_HOUND_ALERT, SFX_HOUND_ATTACK, SFX_HOUND_HURT, SFX_HOUND_DEATH },
     { SFX_TROLL_ALERT, SFX_TROLL_ATTACK, SFX_TROLL_HURT, SFX_TROLL_DEATH },
+    { SFX_DRAGON_ROAR_GREAT, SFX_DRAGON_BITE, SFX_DRAGON_HURT, SFX_DRAGON_DEATH },
 };
 
 void sfx_monster(Game *g, const Monster *m, int what) {
     if (m->type >= MON_TYPE_COUNT || what < 0 || what > 3) return;
     int id = MON_SFX[m->type][what];
+    if (m->type == MON_DRAGON && m->dsize <= DS_WYVERN) { /* the small ones screech */
+        static const int SMALL[4] = { SFX_DRAGON_ROAR_SMALL, SFX_DRAGON_BITE, SFX_DRAGONET_SCREECH, SFX_DRAGONET_SCREECH };
+        id = SMALL[what];
+    }
     if (!ready(id)) return;
     vec3 c = v3_add(m->pos, v3(0, MONSTERS[m->type].h * m->scale * 0.5f, 0));
     float pan, v = best_listener(g, c, 48.0f, &pan);

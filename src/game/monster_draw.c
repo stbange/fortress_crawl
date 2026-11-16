@@ -104,6 +104,7 @@ void monsters_draw(Game *g, vec3 eye) {
         Body B = { p, f, r, s, y };
         Body *b = &B;
         switch (m->type) {
+        case MON_DRAGON: dragon_draw(g, m, light); break;
         case MON_CRAWLER: {
             vec3 body = v3_add(p, v3(0, 0.28f * s + bob, 0));
             batch3d_box(body, v3(0.34f * s, 0.24f * s, 0.26f * s), y, col, false);
