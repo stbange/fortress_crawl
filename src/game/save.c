@@ -12,7 +12,7 @@
  * user's preference folder. The world itself never needs saving: the seed rebuilds it. */
 
 #define SAVE_MAGIC 0x56534346u /* "FCSV" */
-#define SAVE_VERSION 25 /* 25: the realms behind the Gate (attuned, rulers fallen, plants and animals met; where you went through from); 24: seeds; 23: firewood; 22: insect swarms; 21: the numbers of animals and plants per chunk; 20: the marks on cells (wet, soot, scorch, plants' age); 19: flasks to throw; 18: the fur cloak, warmth and cold of each character; 17: when each chunk was last seen (the world goes on while you are away); 16: the clouds of gas in the air; 15: what was broken in the world, the pickaxe and bombs; 14: the ledger of deeds (choices); 13: the story generator of the world; 12: the forge (materials, smithing, blueprints, runes); 11: the Sanctum's decorations, keystones bought; 10: meal variety, toxicity, torn formulae; 9: alchemy (reagents, elixirs, formulae, the elixir working); 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms;
+#define SAVE_VERSION 26 /* 26: the towns of the friendly peoples (reputation, tasks), company at an inn; 25: the realms behind the Gate (attuned, rulers fallen, plants and animals met; where you went through from); 24: seeds; 23: firewood; 22: insect swarms; 21: the numbers of animals and plants per chunk; 20: the marks on cells (wet, soot, scorch, plants' age); 19: flasks to throw; 18: the fur cloak, warmth and cold of each character; 17: when each chunk was last seen (the world goes on while you are away); 16: the clouds of gas in the air; 15: what was broken in the world, the pickaxe and bombs; 14: the ledger of deeds (choices); 13: the story generator of the world; 12: the forge (materials, smithing, blueprints, runes); 11: the Sanctum's decorations, keystones bought; 10: meal variety, toxicity, torn formulae; 9: alchemy (reagents, elixirs, formulae, the elixir working); 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms;
                           6: weapons with materials, powers, legendaries and memory; 7: the Sanctum per world (written by one
                           build still marked 6); 8: food (the larder, dishes, recipes, the meal) */
 #define EXPLORED_BUDGET (1200 * 1024)
@@ -190,6 +190,7 @@ static void write_player(Buf *b, const Stats *s, const Player *pl) {
     w8(b, s->firewood); /* v23 */
     w8(b, s->seeds); /* v24 */
     w8(b, s->gate_from_set); wv(b, s->gate_from); wf(b, s->gate_from_yaw); wf(b, s->sunward_t); wf(b, s->gills_t); /* v25 */
+    wf(b, s->company_t); /* v26 */
 }
 
 /* Explored cells: per chunk a 512-byte mask of the non-zero bytes, then those bytes. */
@@ -322,6 +323,15 @@ bool game_save(Game *g) {
     /* v25: the realms behind the Gate */
     w32(&b, g->world.realm_attuned); w32(&b, g->world.realm_beaten); w32(&b, g->world.realm_seen);
     w64(&b, g->world.flora_seen); w64(&b, g->world.fauna_seen);
+    /* v26: the towns */
+    w8(&b, (u8)g->world.ntowns);
+    w32(&b, g->world.town_seq);
+    for (int i = 0; i < g->world.ntowns; i++) {
+        const TownRec *t = &g->world.towns[i];
+        w64(&b, t->key); w8(&b, (u8)t->rep); w8(&b, t->people); w8(&b, t->level); w8(&b, t->qtype); w8(&b, t->qstate);
+        w8(&b, t->got); w8(&b, t->need); w16(&b, (u16)t->item); w16(&b, (u16)t->tx); w16(&b, (u16)t->ty); w16(&b, (u16)t->tz);
+        w16(&b, t->done); w32(&b, t->qseq); w32(&b, (u32)t->px); w32(&b, (u32)t->py); w32(&b, (u32)t->pz);
+    }
     char key[64];
     save_key(g->opt.seed, key, sizeof key);
     bool ok = store_write(key, b.d, b.n);
@@ -481,6 +491,7 @@ static void read_player(Rd *r, SavedPlayer *sp) {
         s->sunward_t = clampf(rf(r), 0, 3600);
         s->gills_t = clampf(rf(r), 0, 3600);
     }
+    if (r->ver >= 26) s->company_t = clampf(rf(r), 0, 3600);
     if (!s->blueprints) s->blueprints = (1u << WB_DAGGER) | (1u << WB_SWORD) | (1u << WB_SHORTBOW) | (1u << WB_STAFF);
     /* sanity: a save from a broken build must not crash the game */
     if (s->level < 1 || s->level > 999) s->level = 1;
@@ -647,6 +658,20 @@ bool game_load(Game *g) {
             g->world.realm_seen = r32(&r) & mask;
             g->world.flora_seen = r64(&r);
             g->world.fauna_seen = r64(&r);
+        }
+        g->world.ntowns = 0;
+        if (r.ver >= 26) {
+            int nt = r8(&r);
+            g->world.town_seq = r32(&r);
+            for (int i = 0; i < nt && !r.bad; i++) {
+                TownRec t;
+                memset(&t, 0, sizeof t);
+                t.key = r64(&r); t.rep = (i8)r8(&r); t.people = r8(&r); t.level = r8(&r); t.qtype = r8(&r); t.qstate = r8(&r);
+                t.got = r8(&r); t.need = r8(&r); t.item = (i16)r16(&r); t.tx = (i16)r16(&r); t.ty = (i16)r16(&r); t.tz = (i16)r16(&r);
+                t.done = r16(&r); t.qseq = r32(&r); t.px = (i32)r32(&r); t.py = (i32)r32(&r); t.pz = (i32)r32(&r);
+                bool ok = t.people < PEOPLE_COUNT && t.qtype < TQ_COUNT && t.qstate <= 1 && (t.item < FD_COUNT || (t.item >= 1000 && t.item < 1000 + RG_COUNT));
+                if (!r.bad && ok && g->world.ntowns < MAX_TOWN_RECS) g->world.towns[g->world.ntowns++] = t;
+            }
         }
         if (r.bad) { /* a broken tail: the Sanctum as a new world has it */
             u8 gen = r.ver >= 13 ? g->world.story_gen : 0;

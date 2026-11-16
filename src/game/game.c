@@ -133,6 +133,7 @@ float xp_for_level(int level) {
 }
 
 void game_add_xp(Game *g, PlayerSlot *ps, float xp) {
+    if (ps->st.company_t > 0) xp *= 1.15f; /* good company at an inn (town.c) */
     Stats *s = &ps->st;
     s->xp += xp;
     while (s->xp >= s->xp_next) {
@@ -355,6 +356,12 @@ void game_update_atmosphere(Game *g, PlayerSlot *ps, float dt) {
         moons = rd->moons;
         density = rd->fog_density;
         if ((rd->rules & RR_SANDSTORM) && fmodf(g->realm_t, 90.0f) > 65.0f) { density = 0.05f; fog = v3_scale(v3_add(fog, v3(0.4f, 0.3f, 0.2f)), 0.6f); }
+    } else if (ci.has_struct && ci.st.type == STRUCT_HALL && ci.st.variant == HALL_TOWN) {
+        /* a town of a friendly people (town.c): lamplight, a clear warm air */
+        fog = v3(0.09f, 0.07f, 0.05f);
+        amb = v3(0.2f, 0.17f, 0.13f);
+        density = 0.004f;
+        stars = 0.0f;
     } else if (ci.arch == ARCH_POCKET) {
         /* the pocket realm: a clear night, three moons and a sky full of stars */
         fog = v3(0.035f, 0.045f, 0.09f);
@@ -1233,6 +1240,7 @@ static void draw_hud(Game *g, PlayerSlot *ps, int W, int H) {
     for (int i = 0; i < ARRAY_LEN(g->idle_pads); i++) idle_pad |= g->idle_pads[i] != NULL;
     font_end();
     story_draw_tracker(g, ps, W, H, g->hud && ps->index == 0 ? 4 + 8 * FONT_LINE : (touch ? 30 : 4) + (idle_pad ? 10 : 0));
+    town_draw_tracker(g, ps, W, H, (g->hud && ps->index == 0 ? 4 + 8 * FONT_LINE : (touch ? 30 : 4) + (idle_pad ? 10 : 0)) + 10);
     font_begin(W, H);
     if (idle_pad && ps->index == 0 && g->nplayers < MAX_PLAYERS) {
         const char *t = "GAMEPAD READY: PRESS START TO JOIN";
@@ -1345,6 +1353,7 @@ static void render_view(Game *g, PlayerSlot *ps, int vx, int vy, int vw, int vh)
     batch3d_begin();
     monsters_draw(g, eye);
     wildlife_draw(g, ps);
+    town_draw(g, ps);
     players_draw(g, ps);
     combat_draw_world(g, eye);
     pickups_draw(g, eye);

@@ -792,7 +792,7 @@ void combat_update(Game *g, float dt) {
             for (int k = 0; k < MAX_MONSTERS && calm; k++)
                 calm = !(g->mons[k].alive && g->mons[k].awake && g->mons[k].charm_t <= 0 &&
                          v3_len(v3_sub(g->mons[k].pos, ps->pl.pos)) < 12.0f);
-            if (calm) s->hp = fminf(s->maxhp, s->hp + (1.5f + 2.0f * s->ranks[SK_SECOND_WIND]) * (1.0f + food_fx(s, ME_REGEN)) * dt);
+            if (calm) s->hp = fminf(s->maxhp, s->hp + (1.5f + 2.0f * s->ranks[SK_SECOND_WIND]) * (1.0f + food_fx(s, ME_REGEN) + (s->company_t > 0 ? 1.0f : 0.0f)) * dt);
         }
         /* well fed (the feast) and some meals: slowly, even in a fight */
         s->hp = fminf(s->maxhp, s->hp + s->maxhp * food_fx(s, ME_FIGHT_REGEN) * dt);
@@ -800,7 +800,7 @@ void combat_update(Game *g, float dt) {
         bool touch = ps->keyboard && g->touch.active;
         bool attack = (mouse && ps->attack_held) || ps->pad_attack || (touch && g->touch.held[TB_ATTACK]);
         bool alt = (mouse && ps->alt_held) || ps->pad_alt || (touch && g->touch.held[TB_ALT]);
-        if (attack && s->cooldown <= 0 && (mech_use(g, ps) || gate_use(g, ps) || wildlife_use(g, ps))) {
+        if (attack && s->cooldown <= 0 && (mech_use(g, ps) || town_use(g, ps) || gate_use(g, ps) || wildlife_use(g, ps))) {
             /* struck a lever, a statue or a mirror */
             s->cooldown = s->swing_len = s->swing = 0.45f;
             s->swing_kind = 0;

@@ -23,6 +23,7 @@ typedef struct Tele {
     int reagents, brewed, murky, elixirs, formulae;
     int forge_mats, forged, masterworks;
     int realm_trips, rulers;
+    int town_tasks, town_rests, town_heals, town_trades;
 } Tele;
 
 extern Tele g_tele;

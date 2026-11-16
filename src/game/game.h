@@ -17,6 +17,7 @@
 #include "world/layout.h"
 #include "world/pocket.h"
 #include "world/realms.h"
+#include "world/towns.h"
 #include "game/tele.h"
 /* WBF_* of the weapon landing the current blow (monster_damage reads it: a flail ignores shields) */
 extern unsigned g_hit_flags;
@@ -116,6 +117,7 @@ typedef struct Monster {
     u8 resident;     /* a spared one living in the Sanctum: harmless and unharmed */
     char name[STORY_NAME];
     u8 ruler;        /* the ruler of a realm behind the Gate: 1 + RM_* */
+    u8 townq;        /* a pest a town asked you to kill: 1 + its record (town.c) */
 } Monster;
 
 typedef struct Projectile {
@@ -253,6 +255,7 @@ typedef struct Stats {
     vec3 gate_from;
     float gate_from_yaw;
     float sunward_t;  /* a sun-ward: the Sun does not burn */
+    float company_t;  /* a night at an inn in good company (town.c): more XP, faster healing (v26) */
     float gills_t;    /* a gill draught: breath lasts five times as long */
     float refreshed_t, well_fed_t, rest_t, feast_t;
     u8 sanctum;          /* SANCTUM_*: the rooms bought back to life (shop.c) */
@@ -546,6 +549,16 @@ typedef struct Game {
     Pickup pickups[MAX_PICKUPS];
     Effect effects[MAX_EFFECTS];
     Critter critters[MAX_CRITTERS];
+    /* the people of the towns (town.c): townsfolk about, near the players */
+    struct Folk {
+        bool alive;
+        u8 people, role, state, look;
+        vec3 pos, home, goal;
+        float yaw, timer, anim, act_t, talk_t;
+        int rec;                   /* its town's record */
+        u64 key;
+        char name[32];
+    } folk[48];
     /* the realms behind the Gate (gate.c): those joined to this world (from its seed), the one
      * the Gate in the Sanctum shows, rifts seen in the fortress, the orrery's eclipse */
     u32 realms_joined;
@@ -816,7 +829,7 @@ bool shop_open_here(Game *g, const PlayerSlot *ps);
 void shop_nav(Game *g, PlayerSlot *ps, int nav);
 void shop_tap(Game *g, PlayerSlot *ps, int W, int H, int top, float x, float y);
 void shop_draw(Game *g, PlayerSlot *ps, int W, int H, int top);
-enum { SH_SCRAP, SH_POTION_HP, SH_POTION_MP, SH_RANK, SH_REROLL, SH_RELIC, SH_BUILD, SH_SCROLL, SH_STORE, SH_TAKE, SH_MERCHANT, SH_KEYSTONE, SH_PAGE, SH_COMPLETE, SH_RECIPE, SH_SEALED, SH_DECOR, SH_SUPPLY };
+enum { SH_SCRAP, SH_POTION_HP, SH_POTION_MP, SH_RANK, SH_REROLL, SH_RELIC, SH_BUILD, SH_SCROLL, SH_STORE, SH_TAKE, SH_MERCHANT, SH_KEYSTONE, SH_PAGE, SH_COMPLETE, SH_RECIPE, SH_SEALED, SH_DECOR, SH_SUPPLY, SH_TOWN };
 bool shop_buy_kind(Game *g, PlayerSlot *ps, int kind);
 bool shop_buy_arg(Game *g, PlayerSlot *ps, int kind, int arg);
 /* game.c: the Golden Thread key (right after a death: back where you fell) */
@@ -824,6 +837,18 @@ void game_thread_key(Game *g, PlayerSlot *ps);
 
 /* gate.c: the realms behind the Gate (realms.h, docs/REALMS.md) */
 void monsters_alert(Game *g, vec3 p, float radius);
+/* town.c: the towns of the friendly peoples (towns.h, docs/TOWNS.md) */
+#define MAX_FOLK 48
+typedef struct Folk Folk;
+void town_spawn_chunk(Game *g, Chunk *c);       /* its people, when the plaza's chunk comes */
+bool town_chunk(const Chunk *c);                /* a chunk of a town: no monsters, no digging */
+void town_update(Game *g, float dt);
+void town_draw(Game *g, PlayerSlot *viewer);
+bool town_use(Game *g, PlayerSlot *ps);         /* talk to whoever is in front of you */
+void town_on_kill(Game *g, Monster *m);
+void town_draw_tracker(Game *g, PlayerSlot *ps, int W, int H, int y);
+int town_market(Game *g, PlayerSlot *ps, int *discount); /* the people whose market you stand in, or -1 */
+bool town_buy(Game *g, PlayerSlot *ps, int ware);
 void gate_init(Game *g);                       /* the realms joined to this world */
 void gate_update(Game *g, float dt);           /* travel, rifts, each realm's rules */
 void gate_draw(Game *g, PlayerSlot *viewer);   /* the Gate in the Sanctum, the arches home, rifts */

@@ -91,6 +91,16 @@ static void compute_light(const MeshInput *in, MeshScratch *s) {
                 if (!s->inq[i]) { s->queue[tail++] = i; s->inq[i] = 1; }
             }
 
+    /* the towns of the friendly peoples (towns.h): lamps everywhere, a warm light in all the hall */
+    for (int i = 0; i < MESH_PVOL; i++) {
+        if (block_opaque(s->blocks[i])) continue;
+        int px = i % MESH_P, pz = (i / MESH_P) % MESH_P, py = i / (MESH_P * MESH_P);
+        const ChunkInfo *ci = in->info[chunk_of(px) + chunk_of(py) * 3 + chunk_of(pz) * 9];
+        if (!ci || !ci->has_struct || ci->st.type != STRUCT_HALL || ci->st.variant != 3) continue;
+        u8 *l = &s->light[i * 4];
+        l[0] = (u8)MAXI(l[0], 12); l[1] = (u8)MAXI(l[1], 10); l[2] = (u8)MAXI(l[2], 8);
+    }
+
     static const int OFF[6][3] = { { 1, 0, 0 }, { -1, 0, 0 }, { 0, 1, 0 }, { 0, -1, 0 }, { 0, 0, 1 }, { 0, 0, -1 } };
     int count = tail;
     while (count > 0) {

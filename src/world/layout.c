@@ -2,6 +2,7 @@
 #include "world/layout.h"
 #include "world/pocket.h"
 #include "world/realms.h"
+#include "world/towns.h"
 
 #include "core/noise.h"
 
@@ -103,13 +104,18 @@ static bool boxes_overlap(int ax0, int ay0, int az0, int ax1, int ay1, int az1,
 
 static bool cell_structure(const World *w, int gx, int gy, int gz, Structure *s) {
     u64 h = hash3(w->seed, gx, gy, gz, 0x5757);
-    if (hash_unit(h) > STRUCT_CHANCE) return false;
+    if (hash_unit(h) > STRUCT_CHANCE && !(gx == 1 && gy == 0 && gz == 0)) return false;
     Rng r = rng_make(h);
     int ccx = gx * SUPER + SUPER / 2, ccy = gy * SUPER + SUPER / 2, ccz = gz * SUPER + SUPER / 2;
     float wts[STRUCT_TYPE_COUNT];
     memcpy(wts, STRATA[world_stratum(w, ccx, ccy, ccz)].struct_w, sizeof wts);
     wts[STRUCT_CHASM] *= 0.25f; /* the two-layer chasm is a rare showpiece */
     int type = pick_weighted(rng_float(&r), wts, STRUCT_TYPE_COUNT);
+    /* a town of one of the friendly peoples (towns.h): a hall of 3 x 3 chunks; a third of the
+     * one-layer structures, and always one in the cell east of the gate */
+    bool first = gx == 1 && gy == 0 && gz == 0;
+    bool town = first || ((type == STRUCT_HALL || type == STRUCT_CAVERN) && hash_unit(mix64(h ^ 0x70F7)) < 0.3f);
+    if (town) type = STRUCT_HALL;
     if (type <= STRUCT_VESTIBULE) return false;
     memset(s, 0, sizeof *s);
     s->type = (u8)type;
@@ -118,6 +124,7 @@ static bool cell_structure(const World *w, int gx, int gy, int gz, Structure *s)
     case STRUCT_HALL:
         s->sx = rng_range(&r, 2, 3); s->sz = rng_range(&r, 2, 3); s->sy = 1;
         s->variant = (u8)pick_weighted(rng_float(&r), (const float[]){ 5, 3, 2 }, 3);
+        if (town) { s->sx = s->sz = 3; s->variant = HALL_TOWN; s->people = (u8)town_people(world_stratum(w, ccx, ccy, ccz), h); }
         break;
     case STRUCT_CAVERN:
         s->sx = rng_range(&r, 2, 3); s->sz = rng_range(&r, 2, 3); s->sy = 1;
@@ -130,6 +137,7 @@ static bool cell_structure(const World *w, int gx, int gy, int gz, Structure *s)
     s->cx0 = gx * SUPER + rng_range(&r, 0, SUPER - s->sx);
     s->cy0 = gy * SUPER + rng_range(&r, 0, SUPER - s->sy);
     s->cz0 = gz * SUPER + rng_range(&r, 0, SUPER - s->sz);
+    if (first) { s->cx0 = SUPER; s->cy0 = 0; s->cz0 = 0; } /* the first town: on the gate's layer, straight east */
     int x1 = s->cx0 + s->sx - 1, y1 = s->cy0 + s->sy - 1, z1 = s->cz0 + s->sz - 1;
     /* keep the start area and the outside clear */
     if (boxes_overlap(s->cx0, s->cy0, s->cz0, x1, y1, z1, -1, -2, -3, 3, 3, 2)) return false;
@@ -345,6 +353,11 @@ void world_place_name(const ChunkInfo *ci, char *buf, int n) {
         snprintf(buf, (size_t)n, "%c%s", toupper((unsigned char)nm[0]), nm + 1);
     }
     else if (ci->has_struct && ci->st.type == STRUCT_VESTIBULE) snprintf(buf, (size_t)n, "The Grand Vestibule");
+    else if (ci->has_struct && ci->st.type == STRUCT_HALL && ci->st.variant == HALL_TOWN) {
+        Town t;
+        if (town_from_structure(&ci->st, &t)) snprintf(buf, (size_t)n, "%c%s", toupper((unsigned char)t.name[0]), t.name + 1);
+        else snprintf(buf, (size_t)n, "A town");
+    }
     else if (ci->has_struct) snprintf(buf, (size_t)n, "%s - %s", tn, STRUCT_NAMES[ci->st.type]);
     else snprintf(buf, (size_t)n, "%s (%s)", tn, ARCH_NAMES[ci->arch]);
 }

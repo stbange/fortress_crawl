@@ -244,6 +244,8 @@ static void spawn_chunk(Game *g, Chunk *c) {
         }
     wildlife_spawn_chunk(g, c); /* animals, outside and at home too */
     gate_spawn_chunk(g, c);     /* rifts to the realms; a realm's ruler in its keep */
+    town_spawn_chunk(g, c);     /* the people of a town */
+    if (town_chunk(c)) return;  /* nothing hostile is born in a town */
     if (ci->arch == ARCH_EXTERIOR) loot_place_in_chunk(g, c); /* herbs */
     if (ci->arch == ARCH_EXTERIOR || ci->arch == ARCH_POCKET) return; /* nothing hostile outside or at home */
 
@@ -368,7 +370,7 @@ void monsters_spawn_for_chunks(Game *g) {
             if (abs(c->cx - pcx) <= SPAWN_RADIUS_H && abs(c->cz - pcz) <= SPAWN_RADIUS_H && abs(c->cy - pcy) <= SPAWN_RADIUS_V && d <= 70.0f)
                 in_range = true;
             /* never spawn into the chunk a player is standing in */
-            if (d < 20.0f && c->info.arch != ARCH_EXTERIOR) too_close = true;
+            if (d < 20.0f && c->info.arch != ARCH_EXTERIOR && !town_chunk(c)) too_close = true; /* (a town: no monsters come anyway) */
         }
         if (!in_range || too_close) continue;
         u64 key = chunk_spawn_key(c->cx, c->cy, c->cz);
@@ -574,6 +576,7 @@ void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int 
         }
         if (m->story_key) story_on_kill(g, m);
         if (m->ruler) gate_ruler_slain(g, m);
+        town_on_kill(g, m);
         if (m->orders) story_orders_found(g, m);
         if (m->named_kind && m->story_key) sanctum_trophy_named(g, m->story_key);
         if (m->named_kind && m->story_key && m->level >= 6.0f) {

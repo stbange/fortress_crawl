@@ -52,7 +52,26 @@ typedef struct World {
      * rulers are fallen, which were visited, the plants and animals met there (bits): saved */
     u32 realm_attuned, realm_beaten, realm_seen;
     u64 flora_seen, fauna_seen;
+    /* the towns of the friendly peoples (towns.h, docs/TOWNS.md): what each thinks of you and
+     * what it asked of you: saved */
+    struct TownRec {
+        u64 key;            /* the town's structure seed */
+        i8 rep;             /* reputation */
+        u8 people, level;
+        u8 qtype, qstate;   /* TQ_*, 0 none / 1 asked */
+        u8 got, need;       /* progress */
+        i16 item;           /* TQ_FETCH: FD_* or 1000 + RG_* */
+        i16 tx, ty, tz;     /* TQ_LOST, TQ_PEST: the chunk */
+        u16 done;           /* tasks done */
+        u32 qseq;           /* when it was asked (the newest shows) */
+        i32 px, py, pz;     /* the plaza */
+    } towns[32];
+    int ntowns;
+    u32 town_seq;
 } World;
+enum { TQ_NONE, TQ_HUNT, TQ_FETCH, TQ_LOST, TQ_PEST, TQ_COUNT };
+#define MAX_TOWN_RECS 32
+typedef struct TownRec TownRec;
 #define MAX_DEEDS 128
 enum { DK_NONE, DK_CHAPTER, DK_LORD };
 /* what was done with a chapter target that yielded (and, at the end, with the opener) */
@@ -64,6 +83,7 @@ typedef struct DeedRec Deed;
 
 typedef struct Structure {
     u8 type, variant;
+    u8 people;                     /* a town (variant HALL_TOWN): its people (towns.h) */
     int cx0, cy0, cz0, sx, sy, sz; /* chunk box */
     u64 seed;
     int floor_y;                   /* world feet height of the main floor */

@@ -227,6 +227,22 @@ static void demo_setup(Game *g) {
     s->mana = s->maxmana;
     if (!strcmp(g_demo_kind, "skills")) { p1->show_skills = true; p1->menu_tab = TAB_SKILLS; p1->skill_sel = skill_id(BR_ARCANE, 2); return; }
     if (!strcmp(g_demo_kind, "map")) { p1->show_map = true; return; }
+    if (!strcmp(g_demo_kind, "town") || !strcmp(g_demo_kind, "towntest")) {
+        /* the first town east of the gate (docs/TOWNS.md): in its plaza, looking at the well */
+        Town t;
+        for (int cz = 0; cz < 6; cz++)
+            for (int cx = 6; cx < 12; cx++)
+                if (world_town_at(&g->world, cx, 0, cz, &t)) {
+                    p1->pl.pos = v3(t.px + 0.5f, (float)t.floor, t.pz + 9.5f);
+                    p1->pl.yaw = -PI_F * 0.5f;
+                    p1->pl.pitch = -0.1f;
+                    p1->pl.fly = false;
+                    cz = 6;
+                    break;
+                }
+        s->gold = 400;
+        return;
+    }
     if (!strcmp(g_demo_kind, "realm") || !strcmp(g_demo_kind, "keep") || !strcmp(g_demo_kind, "gate") || !strcmp(g_demo_kind, "gatetest")) {
         /* the realms behind the Gate (docs/REALMS.md): --cast n picks the realm (RM_*); "realm" stands
          * by the arch you arrive at, "keep" before the ruler's keep, "gate" at the Sanctum's Gate */
@@ -1214,6 +1230,51 @@ static void screenshot_step(App *a, float frame_dt) {
                 for (int z = -12; z <= 12; z++)
                     for (int x = -12; x <= 12; x++) scorch += STAIN_SCORCH(chunkmap_stain(&g->map, x0 + x, y0 + y, z0 + z)) > 0;
             SDL_Log("blast: %d cells scorched", scorch);
+        }
+    }
+    if (g->opt.demo && a->demo_done && !strcmp(kind, "towntest")) {
+        /* talks to everyone in the town, one after the other, and logs it; then a night at the
+         * inn, the healer, the market, and the elder's task done by hand */
+        static int stage, who;
+        static float next;
+        if (a->shot_wait > 1.0f && a->shot_wait > next && stage == 0) {
+            next = a->shot_wait + 0.4f;
+            while (who < MAX_FOLK && !g->folk[who].alive) who++;
+            if (who >= MAX_FOLK) { stage = 1; SDL_Log("towntest: talked to everyone"); }
+            else {
+                Folk *f = &g->folk[who++];
+                p1->pl.pos = v3_add(f->pos, v3(1.2f, 0, 0));
+                p1->pl.yaw = PI_F;
+                p1->msg[0] = 0;
+                p1->st.hp = p1->st.maxhp * 0.5f;
+                bool ok = town_use(g, p1);
+                p1->show_skills = false;
+                SDL_Log("towntest: %s (%s, role %d): %s | %s  [gold %d hp %.0f/%.0f]", f->name, PEOPLES[f->people].name, f->role, ok ? p1->msg : "(no answer)", p1->msg_next, p1->st.gold, p1->st.hp, p1->st.maxhp);
+            }
+        }
+        if (stage == 1) {
+            int disc;
+            int people = town_market(g, p1, &disc);
+            int gold = p1->st.gold;
+            bool bought = shop_buy_kind(g, p1, SH_TOWN);
+            SDL_Log("towntest: market of the %s: bought %d (gold %d -> %d)", people >= 0 ? PEOPLES[people].plural : "?", bought, gold, p1->st.gold);
+            for (int i = 0; i < g->world.ntowns; i++) {
+                TownRec *r = &g->world.towns[i];
+                SDL_Log("towntest: town %d rep %d task %d state %d got %d/%d", i, r->rep, r->qtype, r->qstate, r->got, r->need);
+                if (r->qstate == 1) { /* done by hand, and back to the elder */
+                    r->got = r->need;
+                    if (r->qtype == TQ_FETCH) { if (r->item >= 1000) p1->st.reag[r->item - 1000] += r->need; else p1->st.food[r->item] += r->need; }
+                    for (int k = 0; k < MAX_FOLK; k++)
+                        if (g->folk[k].alive && g->folk[k].role == FR_ELDER) {
+                            p1->pl.pos = v3_add(g->folk[k].pos, v3(1.2f, 0, 0));
+                            p1->pl.yaw = PI_F;
+                            town_use(g, p1);
+                            SDL_Log("towntest: the elder: %s | %s  [gold %d, rep %d, done %d]", p1->msg, p1->msg_next, p1->st.gold, r->rep, r->done);
+                            break;
+                        }
+                }
+            }
+            stage = 2;
         }
     }
     if (g->opt.demo && a->demo_done && !strcmp(kind, "gatetest")) {

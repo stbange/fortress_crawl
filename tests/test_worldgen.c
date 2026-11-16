@@ -12,6 +12,7 @@
  *     be solved and does not start solved, traps stand on the floor */
 #include "world/layout.h"
 #include "world/realms.h"
+#include "world/towns.h"
 #include "world/story.h"
 #include "world/history.h"
 #include "world/carve.h"
@@ -807,6 +808,57 @@ int main(int argc, char **argv) {
         CHECK(front_reached * 10 >= vaults * 7, "too many vault gates cannot be reached from the gate");
     }
 
+
+    /* towns of the friendly peoples (towns.h): the first one east of the gate, more farther out;
+     * each one's plaza can be walked to from its passages in, and from the gate */
+    {
+        int ntowns = 0, per[PEOPLE_COUNT] = { 0 };
+        u64 seen[64];
+        bool first = false;
+        Town ft;
+        for (int cy = -6; cy <= 6; cy++)
+            for (int cz = -18; cz <= 18; cz++)
+                for (int cx = -18; cx <= 18; cx++) {
+                    Town t;
+                    if (!world_town_at(&g_world, cx, cy, cz, &t)) continue;
+                    bool dup = false;
+                    for (int k = 0; k < ntowns && k < 64; k++) dup |= seen[k] == t.key;
+                    if (dup) continue;
+                    if (ntowns < 64) seen[ntowns] = t.key;
+                    ntowns++;
+                    per[t.people]++;
+                    if (t.cy == 0 && t.cx0 >= 6 && t.cx0 <= 11 && !first) { first = true; ft = t; }
+                }
+        if (getenv("TOWN_LIST"))
+            for (int k = 0; k < ntowns && k < 64; k++)
+                for (int cy = -6; cy <= 6; cy++)
+                    for (int cz = -18; cz <= 18; cz++)
+                        for (int cx = -18; cx <= 18; cx++) {
+                            Town t;
+                            if (world_town_at(&g_world, cx, cy, cz, &t) && t.key == seen[k] && cx == t.cx0 && cz == t.cz0) printf("  %s (%s): plaza %d %d %d\n", t.name, PEOPLES[t.people].plural, t.px, t.floor, t.pz);
+                        }
+        printf("towns: %d within 18 chunks and 6 layers:", ntowns);
+        for (int i = 0; i < PEOPLE_COUNT; i++) printf(" %s %d", PEOPLES[i].plural, per[i]);
+        printf("\n");
+        CHECK(first, "no town east of the gate");
+        if (first) {
+            printf("towns: the first is %s, plaza at %d %d %d\n", ft.name, ft.px, ft.floor, ft.pz);
+            int pb = ft.floor - 1;
+            CHECK(r_stand(ft.px + 4, ft.floor, ft.pz) || r_stand(ft.px + 5, ft.floor, ft.pz + 5), "nowhere to stand in the first town's plaza");
+            CHECK(block_solid(realm_block(ft.px + 3, pb, ft.pz + 3)), "the first town's plaza has no floor");
+            /* every building's door is open, and its keeper has room */
+            int doors = 0;
+            for (int i = 0; i < TOWN_LOTS; i++) {
+                const TownLot *L = &ft.lot[i];
+                if (L->role < TB_INN || L->role > TB_HOUSE) continue;
+                bool ok = r_open(L->door_x, ft.floor, L->door_z) && r_open(L->door_x, ft.floor + 1, L->door_z) && r_stand(L->spot_x, ft.floor, L->spot_z);
+                doors += ok;
+            }
+            printf("towns: %d of 6 buildings have an open door and room for their keeper\n", doors);
+            CHECK(doors == 6, "a building of the first town is closed or full");
+        }
+        realm_cache_clear();
+    }
 
     /* realms behind the Gate: every one has ground to arrive on, a keep, its plants, and a
      * way on foot from the gate to the keep */

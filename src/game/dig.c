@@ -18,6 +18,7 @@ bool dig_protected(Game *g, int x, int y, int z) {
     if (world_is_pocket(cx, cy, cz) || world_is_exterior(cx, cy, cz)) return true;
     Chunk *c = chunkmap_get(&g->map, cx, cy, cz);
     if (!c || c->state != CH_READY) return true;
+    if (town_chunk(c)) return true; /* the towns of the friendly peoples (town.c) */
     int lx = x - cx * CHUNK, ly = y - cy * CHUNK, lz = z - cz * CHUNK;
     const Vault *v = &c->info.vault;
     if (v->puzzle != PZ_NONE && abs(lx - v->x) <= 3 && abs(lz - v->z) <= 3 && ly >= v->y - 1 && ly <= v->y + 4) return true;

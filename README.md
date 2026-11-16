@@ -601,6 +601,24 @@ bones, vines down from wet ceilings, and bees hang hives where flowers bloom; fi
 grazing animals crop the grass, and flies, bees, moths and glowworms gather where they belong.
 See [docs/SIMULATION.md](docs/SIMULATION.md).
 
+## Towns of the friendly peoples
+
+![A halfling town](docs/screenshots/town_plaza.png)
+
+Dwarves, goblins, gnomes, elves, humans, halflings and orcs live in halls of their own in the
+fortress. There is always a town about 200 m east of the gate, and more farther out, with each
+people at its own depths. A town is safe ground: no monster is born there and guards shoot what
+follows you in. Strike at someone to talk to them:
+- the innkeeper gives a night's rest that heals everything and good company (more XP, faster
+  healing)
+- the healer cures what ails you
+- the merchants sell the people's own wares
+- the elder asks for help: beasts to drive off, goods to bring, someone lost, a beast in its lair
+- everyone else talks of their lives and the history
+
+Help a town and its people call you friend, then honoured, and it costs you less and at last
+nothing. See [docs/TOWNS.md](docs/TOWNS.md); `--demo town` puts you in the first town.
+
 ## The realms behind the Gate
 
 ![The Garden of the First Seed](docs/screenshots/realm_garden.png)

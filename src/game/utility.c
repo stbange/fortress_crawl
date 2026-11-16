@@ -682,6 +682,7 @@ void utility_update(Game *g, float dt) {
     edits_update(g);
     realm_update(g, dt);
     gate_update(g, dt);
+    town_update(g, dt);
 }
 
 /* A monster's blow lands on a decoy or the monster it was charmed to fight. */

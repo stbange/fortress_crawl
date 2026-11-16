@@ -1,4 +1,5 @@
 #include "world/gen_common.h"
+#include "world/towns.h"
 
 #include "core/noise.h"
 
@@ -387,7 +388,7 @@ static void gen_chasm(GenCtx *g) {
 void gen_structure(GenCtx *g) {
     switch (g->info.st.type) {
     case STRUCT_VESTIBULE:
-    case STRUCT_HALL: gen_hall(g); break;
+    case STRUCT_HALL: if (g->info.st.variant == HALL_TOWN) gen_town(g); else gen_hall(g); break;
     case STRUCT_CAVERN: gen_cavern(g); break;
     case STRUCT_CHASM: gen_chasm(g); break;
     default: break;

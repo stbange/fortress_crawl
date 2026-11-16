@@ -252,7 +252,7 @@ void gate_spawn_chunk(Game *g, Chunk *c) {
         if (r >= 0) ruler_spawn(g, c, r);
         return;
     }
-    if (ci->arch == ARCH_EXTERIOR || ci->arch == ARCH_POCKET) return;
+    if (ci->arch == ARCH_EXTERIOR || ci->arch == ARCH_POCKET || town_chunk(c)) return;
     Rng rng = rng_make(ci->seed ^ 0x41F7ULL);
     int r = rift_realm(g, ci, &rng);
     if (r < 0) return;

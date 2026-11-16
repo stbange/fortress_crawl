@@ -66,7 +66,7 @@ static int shrine_here(Game *g, const PlayerSlot *ps) {
     return -1;
 }
 
-bool shop_open_here(Game *g, const PlayerSlot *ps) { return realm_has(ps->pl.pos) || shrine_here(g, ps) >= 0; }
+bool shop_open_here(Game *g, const PlayerSlot *ps) { return realm_has(ps->pl.pos) || shrine_here(g, ps) >= 0 || town_market(g, (PlayerSlot *)ps, NULL) >= 0; }
 
 static float score(const Item *it) { return item_damage_mult(it) / fmaxf(0.3f, item_speed_mult(it)); }
 
@@ -156,7 +156,29 @@ static int shop_items(Game *g, PlayerSlot *ps, ShopItem *out) {
     }
     add(out, &n, SH_SCRAP, 0, -gold, worse > 0, worse ? NULL : "NOTHING WORSE IN THE BAG", "SCRAP %d WEAPONS WORSE THAN YOURS", worse);
     bool home = realm_has(ps->pl.pos);
-    if (!home && shrine_here(g, ps) < 0) return n;
+    int disc = 0, people = town_market(g, ps, &disc);
+    if (!home && shrine_here(g, ps) < 0 && people < 0) return n;
+    if (people >= 0) { /* a town's market (town.c): the people's own wares, cheaper for their friends */
+        const PeopleDef *P = &PEOPLES[people];
+        for (int k = 0; k < 5; k++) {
+            const Ware *w = &P->wares[k];
+            char what[64];
+            switch (w->kind) {
+            case WA_FOOD: snprintf(what, sizeof what, "%d %s", w->n, FOODS[w->id].name); break;
+            case WA_REAGENT: snprintf(what, sizeof what, "%d %s", w->n, REAGENTS[w->id].name); break;
+            case WA_FORGE: snprintf(what, sizeof what, "%d %s", w->n, FORGE_MATS[w->id].name); break;
+            case WA_POTION: snprintf(what, sizeof what, "A %s POTION", w->id ? "MANA" : "HEALTH"); break;
+            case WA_WEAPON: snprintf(what, sizeof what, "A WEAPON OF %s CRAFT", P->adj); break;
+            default: {
+                static const char *SUP[] = { [100] = "BOMBS", [103] = "A WARMING DRAUGHT", [104] = "OIL FLASKS", [105] = "FROST SALTS", [106] = "GROWTH TONICS", [107] = "BUNDLES OF FIREWOOD", [108] = "SEEDS" };
+                if (w->id == 103) snprintf(what, sizeof what, "%s", SUP[103]);
+                else snprintf(what, sizeof what, "%d %s", w->n, w->id >= 100 && w->id <= 108 && SUP[w->id] ? SUP[w->id] : "SUPPLIES");
+                break;
+            }
+            }
+            add(out, &n, SH_TOWN, k, w->price * (100 - disc) / 100, true, NULL, "%s MARKET: %s%s", P->adj, what, disc ? " (A FRIEND'S PRICE)" : "");
+        }
+    }
     char why[40];
     add(out, &n, SH_POTION_HP, 0, 40, healing_held(s) < POTION_HP_MAX, healing_held(s) < POTION_HP_MAX ? NULL : "YOU CARRY ALL YOU CAN",
         "HEALTH POTION (%d/%d)", s->potions_hp, POTION_HP_MAX);
@@ -500,6 +522,11 @@ static void buy(Game *g, PlayerSlot *ps, const ShopItem *it) {
         sanctum_add_decor(g, it->arg);
         snprintf(buf, sizeof buf, "FOR BEAUTY: %s", DECOR[it->arg].name);
         sfx_ui(SFX_PICKUP_RELIC, 0.8f);
+        break;
+    case SH_TOWN:
+        if (!town_buy(g, ps, it->arg)) return;
+        snprintf(buf, sizeof buf, "%s", it->label);
+        sfx_ui(SFX_PICKUP_RELIC, 0.7f);
         break;
     case SH_KEYSTONE:
         g->sanctum.keystones++;

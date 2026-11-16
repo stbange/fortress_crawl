@@ -147,6 +147,15 @@ shot realm_garden      --demo realm --cast 17
 shot realm_desert      --demo realm --cast 5
 wait
 
+# ---- the towns of the friendly peoples (docs/TOWNS.md), seed 1337 unless said ----
+shot town_plaza       --demo town
+shot town_dwarves     --pos 53.5 -184 636.5 --look -110 -12
+shot town_goblins     --pos -42.5 -120 -483.5 --look -110 -12
+shot town_gnomes      --pos -106.5 -120 -291.5 --look -110 -12
+shot town_elves       --pos 629.5 200 -35.5 --look -110 -12
+SEED=42 shot town_orcs --demo town
+wait
+
 # ---- kept from earlier (framed by hand, their features have not changed) ----
 # chasm, vault, puzzle_beam, puzzle_statues, trap_spikes, trap_flames, spell_keep, combat_mines.
 # The demos --demo levers|beam|statues|spikes|flames|cast --cast 16 make
