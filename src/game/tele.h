@@ -22,6 +22,7 @@ typedef struct Tele {
     int food, cooked, eaten, hunted, harvested;
     int reagents, brewed, murky, elixirs, formulae;
     int forge_mats, forged, masterworks;
+    int realm_trips, rulers;
 } Tele;
 
 extern Tele g_tele;

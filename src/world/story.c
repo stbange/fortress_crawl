@@ -1,4 +1,5 @@
 #include "world/story.h"
+#include "world/realms.h"
 #include "world/pocket.h"
 #include "world/story_text.h"
 #include "world/history.h"
@@ -1084,6 +1085,11 @@ int story_deed_lines(const World *w, const Personal *p, char lines[][STORY_TEXT]
 /* ---------- directions ---------- */
 
 void story_direction(float fx, float fy, float fz, int cx, int cy, int cz, char *out, int n) {
+    if (realm_at_w(fx, fy, fz) >= 0 && realm_at(cx, cy, cz) < 0) { snprintf(out, (size_t)n, "beyond the Gate, in the fortress"); return; }
+    if (world_is_pocket(floordiv((int)floorf(fx), CHUNK), floordiv((int)floorf(fy), CHUNK), floordiv((int)floorf(fz), CHUNK)) && !world_is_pocket(cx, cy, cz)) {
+        snprintf(out, (size_t)n, "in the fortress, through the door");
+        return;
+    }
     float dx = cx * CHUNK + 16.0f - fx, dz = cz * CHUNK + 16.0f - fz;
     float h = sqrtf(dx * dx + dz * dz);
     /* height in layers: the world is built like floors of a building */

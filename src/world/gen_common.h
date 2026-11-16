@@ -102,6 +102,7 @@ void gen_archetype(GenCtx *g);
 void gen_structure(GenCtx *g);
 void gen_exterior(GenCtx *g);
 void gen_pocket(GenCtx *g);
+void gen_realm(GenCtx *g); /* the realms behind the Gate (realms.h) */
 /* Vaults with their puzzles and traps (archetype chunks; recorded in g->info). */
 void gen_mechanisms(GenCtx *g);
 

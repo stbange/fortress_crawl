@@ -1,4 +1,5 @@
 #include "world/texgen.h"
+#include "world/realms.h"
 
 /* Procedural 16x16 textures. Everything is derived from the theme palette, so a
  * new stratum or flavor gets a full texture set without any art files. */
@@ -616,6 +617,143 @@ static void tex_grate(u8 *p, u64 seed, RGB metal) {
         }
 }
 
+/* ---------- the plants of the realms (realms.h): shape and colours from their species ---------- */
+
+static RGB c3(const u8 c[3]) { RGB o = { c[0], c[1], c[2] }; return o; }
+static void dot(u8 *p, int x, int y, RGB c) { if (x >= 0 && x < N && y >= 0 && y < N) put(p, x, y, c, 1); }
+static void disc(u8 *p, int cx, int cy, float r, RGB c, RGB rim) {
+    for (int y = (int)(cy - r - 1); y <= cy + r + 1; y++)
+        for (int x = (int)(cx - r - 1); x <= cx + r + 1; x++) {
+            float d = sqrtf((float)((x - cx) * (x - cx) + (y - cy) * (y - cy)));
+            if (d <= r) dot(p, x, y, d > r - 1.0f ? rim : c);
+        }
+}
+
+static void spr_realm_flora(u8 *p, u64 seed, const FloraDef *f, int v, int slot) {
+    clear(p);
+    RGB stem = c3(f->stem), col = c3(f->col[v % 3]), dark = rgb_scale(col, 0.65f), light = rgb_mix(col, (RGB){ 255, 255, 255 }, 0.35f);
+    int maxh = slot == 0 ? 8 : N - 1; /* ground cover stays low */
+    float H = (float)maxh;
+    switch (f->shape) {
+    case FS_TUFT:
+        for (int i = 0; i < 9; i++) {
+            int x = (int)(hash3f(seed, i, 0, 0, 301) * N), h = 2 + (int)(hash3f(seed, i, 1, 0, 301) * (H - 2));
+            for (int k = 0; k < h; k++) dot(p, x + (k > h / 2 ? (i & 1 ? 1 : -1) : 0), N - 1 - k, k >= h - 2 ? col : rgb_scale(stem, 0.8f + 0.04f * k));
+        }
+        break;
+    case FS_BLOOM:
+        for (int i = 0; i < 3; i++) {
+            int x = 3 + i * 5 + (int)(hash3f(seed, i, 0, 0, 302) * 2), h = (int)(H * (0.5f + 0.45f * hash3f(seed, i, 1, 0, 302)));
+            for (int k = 0; k < h; k++) dot(p, x, N - 1 - k, stem);
+            int top = N - 1 - h;
+            dot(p, x - 1, N - 3, stem); dot(p, x + 1, N - 4, stem); /* leaves */
+            disc(p, x, top, 1.6f + (v == 2 ? 0.5f : 0.0f), col, dark);
+            dot(p, x, top, light);
+        }
+        break;
+    case FS_REED:
+        for (int i = 0; i < 5; i++) {
+            float x = 1.5f + i * 3.0f + hash3f(seed, i, 0, 0, 303);
+            int h = (int)(H * (0.6f + 0.4f * hash3f(seed, i, 1, 0, 303)));
+            for (int k = 0; k < h; k++) {
+                x += (hash3f(seed, i, k, 0, 304) - 0.5f) * 0.4f;
+                dot(p, (int)x, N - 1 - k, k > h - 4 ? col : stem);
+            }
+        }
+        break;
+    case FS_CACTUS: {
+        int h = (int)H, x0 = 6;
+        for (int k = 0; k < h; k++)
+            for (int dx = 0; dx < 4; dx++) dot(p, x0 + dx, N - 1 - k, dx == 0 ? dark : dx == 3 ? rgb_scale(col, 0.8f) : col);
+        int ay = N - 1 - h / 2;
+        for (int dx = 0; dx < 3; dx++) { dot(p, x0 - 1 - dx, ay, col); dot(p, x0 + 4 + dx, ay - 2, col); }
+        for (int dy = 0; dy < 4; dy++) { dot(p, x0 - 3, ay - dy, col); dot(p, x0 + 6, ay - 2 - dy, col); }
+        for (int i = 0; i < 10; i++) dot(p, x0 - 1 + (int)(hash3f(seed, i, 0, 0, 305) * 6), N - 1 - (int)(hash3f(seed, i, 1, 0, 305) * h), (RGB){ 250, 250, 240 });
+        if (v == 2) disc(p, x0 + 1, N - 1 - h, 1.2f, (RGB){ 255, 120, 180 }, (RGB){ 220, 80, 140 });
+        break;
+    }
+    case FS_FERN:
+        for (int i = 0; i < 5; i++) {
+            float a = -1.1f + i * 0.55f, len = H * (0.6f + 0.35f * hash3f(seed, i, 0, 0, 306));
+            for (int k = 0; k < (int)len; k++) {
+                float t = k / len;
+                int x = 8 + (int)(sinf(a) * k * 0.8f), y = N - 1 - (int)(cosf(a) * k * (1.0f - t * 0.5f));
+                dot(p, x, y, t > 0.6f ? col : rgb_mix(stem, col, t));
+                if (k % 2 == 0 && k > 1) { dot(p, x - 1, y - 1, dark); dot(p, x + 1, y - 1, dark); }
+            }
+        }
+        break;
+    case FS_CAP:
+        for (int i = 0; i < (slot == 1 ? 1 : 3); i++) {
+            int x = slot == 1 ? 8 : 3 + i * 5, h = slot == 1 ? N - 5 : 3 + (int)(hash3f(seed, i, 0, 0, 307) * (H - 3));
+            float r = slot == 1 ? 5.5f : 2.0f;
+            for (int k = 0; k < h; k++) { dot(p, x, N - 1 - k, stem); if (slot == 1) dot(p, x - 1, N - 1 - k, rgb_scale(stem, 0.85f)); }
+            int top = N - 1 - h;
+            for (int dx = -(int)r; dx <= (int)r; dx++)
+                for (int dy = 0; dy < (slot == 1 ? 3 : 2); dy++) dot(p, x + dx, top - dy + (abs(dx) > r - 1.5f ? 1 : 0), dy == 0 ? dark : col);
+            if (v == 2) for (int dx = -(int)r + 1; dx < r; dx += 2) dot(p, x + dx, top - 1, light);
+        }
+        break;
+    case FS_SPIKE:
+        for (int i = 0; i < 5; i++) {
+            int x = 1 + i * 3 + (int)(hash3f(seed, i, 0, 0, 308) * 2), h = (int)(H * (0.4f + 0.6f * hash3f(seed, i, 1, 0, 308)));
+            for (int k = 0; k < h; k++) {
+                int w = k < h / 3 ? 1 : 0;
+                for (int dx = -w; dx <= w; dx++) dot(p, x + dx, N - 1 - k, k > h - 3 ? light : dx < 0 ? dark : col);
+            }
+        }
+        break;
+    case FS_KELP:
+        for (int i = 0; i < 3; i++) {
+            float x = 3.0f + i * 5.0f;
+            for (int k = 0; k < N; k++) {
+                int xi = (int)(x + sinf(k * 0.6f + i * 2.0f) * 1.3f);
+                dot(p, xi, N - 1 - k, col);
+                dot(p, xi + 1, N - 1 - k, dark);
+                if (k % 4 == 2) dot(p, xi - 1, N - 1 - k, light); /* bladders */
+            }
+        }
+        break;
+    case FS_POD:
+        for (int i = 0; i < 3; i++) {
+            int x = 3 + i * 5, h = 3 + (int)(hash3f(seed, i, 0, 0, 309) * (H - 7));
+            for (int k = 0; k < h; k++) dot(p, x, N - 1 - k, stem);
+            disc(p, x, N - 3 - h, 2.4f, rgb_mix(col, (RGB){ 255, 255, 255 }, 0.2f), dark);
+            dot(p, x - 1, N - 4 - h, (RGB){ 255, 255, 255 });
+        }
+        break;
+    case FS_SAPLING: {
+        int trunk = slot == 1 ? 8 : 3;
+        for (int k = 0; k < trunk; k++) { dot(p, 7, N - 1 - k, stem); dot(p, 8, N - 1 - k, rgb_scale(stem, 0.8f)); }
+        int cy = N - 1 - trunk - 3;
+        for (int y = cy - 4; y <= cy + 3; y++)
+            for (int x = 2; x <= 13; x++) {
+                float dx = (x - 7.5f) / 5.5f, dy = (y - cy) / 4.0f;
+                if (dx * dx + dy * dy < 1.0f && hash3f(seed, x, y, 0, 310) < 0.85f) dot(p, x, y, rgb_mix(stem, (RGB){ 60, 120, 50 }, 0.4f + 0.3f * pn(seed, x, y)));
+            }
+        for (int i = 0; i < 6; i++) disc(p, 3 + (int)(hash3f(seed, i, 0, 0, 311) * 10), cy - 3 + (int)(hash3f(seed, i, 1, 0, 311) * 6), 0.8f, col, light);
+        break;
+    }
+    case FS_ORB:
+        for (int i = 0; i < 3; i++) {
+            int x = 3 + i * 5, h = 2 + (int)(hash3f(seed, i, 0, 0, 312) * (H - 5));
+            for (int k = 0; k < h; k++) dot(p, x + (k > h / 2 && (i & 1)), N - 1 - k, stem);
+            disc(p, x, N - 2 - h, 1.7f, light, col);
+        }
+        break;
+    case FS_LEAVES: {
+        for (int k = 0; k < N - 4; k++) { dot(p, 7, N - 1 - k, stem); dot(p, 8, N - 1 - k, stem); }
+        for (int i = 0; i < 7; i++) { /* pages (or leaves) hanging from the branches */
+            int x = 2 + (int)(hash3f(seed, i, 0, 0, 313) * 11), y = 1 + (int)(hash3f(seed, i, 1, 0, 313) * 8);
+            for (int dy = 0; dy < 3; dy++)
+                for (int dx = 0; dx < 2; dx++) dot(p, x + dx, y + dy, dy == 2 ? dark : col);
+            for (int bx = MINI(x, 7); bx <= MAXI(x, 8); bx++) dot(p, bx, y - 1, stem);
+        }
+        break;
+    }
+    }
+}
+
 void texgen_theme(int theme, u8 *out) {
     ThemeInfo t;
     theme_info(theme, &t);
@@ -694,6 +832,12 @@ void texgen_theme(int theme, u8 *out) {
             case B_OIL: case B_ACID: tex_water(p, seed, base); break;
             case B_RUBBLE: tex_dirt(p, seed, base); cracks(p, seed, 6, 0.5f); break;
             case B_CROP: spr_crop(p, seed, base, v); break;
+            case B_RFLORA_LOW: case B_RFLORA_TALL: case B_RFLORA_GLOW: {
+                int realm = realm_of_flavor(theme_flavor(theme)), slot = b - B_RFLORA_LOW;
+                if (realm >= 0) spr_realm_flora(p, seed, &REALM_FLORA[realm * 3 + slot], v, slot);
+                else spr_grass(p, seed, rgb_scale(rgb(t.mat[B_DIRT]), 1.2f));
+                break;
+            }
             default: fill_noise(p, seed, base, 0.2f); break;
             }
         }

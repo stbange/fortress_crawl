@@ -601,6 +601,21 @@ bones, vines down from wet ceilings, and bees hang hives where flowers bloom; fi
 grazing animals crop the grass, and flies, bees, moths and glowworms gather where they belong.
 See [docs/SIMULATION.md](docs/SIMULATION.md).
 
+## The realms behind the Gate
+
+![The Garden of the First Seed](docs/screenshots/realm_garden.png)
+
+Twenty-one other worlds lie beyond the fortress: the three moons and the keeps of their wizard-kings,
+the fortress at the heart of the sun, the keep under the ocean, the icelands, the storm peaks, the
+cloud court of the dead, the hollow earth, the fungal deep, the bone fields, the clockwork orrery, the
+library of ash, the garden of the first seed, a fallen star, the mirror fortress, the dream of the
+sleeper and more. Each world is joined to six to eight of them, chosen by its seed. Rifts in the
+fortress lead to them, each at about its own danger, and attune the Gate in the Sanctum's court to
+them. Every realm has its own danger (3 to 30), its own rules (weight, air, a burning sun,
+lightning, tides, storms, spores, growth twenty times as fast), a ruler in its keep, a story tied
+to the world's history, and three plants and three animals of its own, each in three variants.
+See [docs/REALMS.md](docs/REALMS.md); `--demo realm|keep|gate --cast N` shows realm N.
+
 ## Weapons
 
 Each of the 21 weapon types has its own model, the same in your hands, in other players'

@@ -81,6 +81,7 @@ static const char *lore_text(Game *g, LoreEntry *e) {
         else if (e->kind == LORE_PAGE && h && e->a >= 0 && e->a < H_CAST) history_clue_text(h, h->page[e->a], NULL, buf, sizeof buf);
         else if (e->kind == LORE_RESIDENT && h && e->a >= 0 && e->a < H_CAST) history_resident_line(h, e->a, NULL, buf, sizeof buf);
         else if (e->kind == LORE_TRACE) story_trace_text(&g->world, e->a, e->b, e->c, buf, sizeof buf);
+        else if (e->kind == LORE_REALM) gate_lore_text(g, e->a, e->b, buf, sizeof buf);
         e->text = malloc(strlen(buf) + 1);
         memcpy(e->text, buf, strlen(buf) + 1);
     }

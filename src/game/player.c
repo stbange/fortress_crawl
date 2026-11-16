@@ -16,6 +16,7 @@ void player_init(Player *p, vec3 pos, float yaw) {
     p->speed_mult = 1.0f;
     p->max_fall = 40.0f;
     p->jump_mult = 1.0f;
+    p->gravity = 1.0f;
 }
 
 /* Lowest stance that fits at pos (standing preferred). */
@@ -101,7 +102,7 @@ void player_update(Player *p, const PlayerInput *in, float dt, SolidFn solid, vo
         float vy = in->jump ? 3.2f : in->crouch ? -3.0f : p->water > 1.5f ? 0.9f : p->water < 1.3f ? -0.6f : 0.0f;
         p->vel.y += (vy - p->vel.y) * fminf(1.0f, 4.0f * dt);
     } else {
-        p->vel.y -= 25.0f * dt;
+        p->vel.y -= 25.0f * (p->gravity > 0 ? p->gravity : 1.0f) * dt;
         if (p->vel.y < -p->max_fall) p->vel.y = -p->max_fall;
         if (in->jump && p->on_ground && p->stance == STANCE_STAND) p->vel.y = 8.2f * p->jump_mult;
     }

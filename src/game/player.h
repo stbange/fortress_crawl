@@ -27,6 +27,7 @@ typedef struct Player {
     int move_mode;    /* MOVE_* */
     float max_fall;   /* fastest fall (feather fall: slow) */
     float jump_mult;  /* a steed jumps higher */
+    float gravity;    /* 1 in the fortress; the realms have their own (set by the game) */
     bool climbing;    /* spider climb: pushing into a wall climbs it */
     float water;      /* how deep the water reaches above the feet, in m (set by the game) */
     bool on_vine;     /* holding a vine: jump climbs, crouch slides down (set by the game) */

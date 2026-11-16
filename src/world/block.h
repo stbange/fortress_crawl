@@ -53,6 +53,11 @@ enum {
     B_ACID,      /* liquid: eats stone, hurts, water dilutes it */
     B_RUBBLE,    /* cube: what a collapse leaves; loose, it slides off a pile */
     B_CROP,      /* sprite: what you sowed; grows from a shoot to ripe (docs/SIMULATION.md, farming) */
+    /* the plants of the realms behind the Gate (realms.h): what each looks like and does comes
+     * from the realm of its theme */
+    B_RFLORA_LOW,  /* sprite: ground cover */
+    B_RFLORA_TALL, /* sprite: grows tall */
+    B_RFLORA_GLOW, /* sprite: glows */
     B_COUNT
 };
 

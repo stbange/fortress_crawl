@@ -16,6 +16,7 @@
 #include "world/chunkmap.h"
 #include "world/layout.h"
 #include "world/pocket.h"
+#include "world/realms.h"
 #include "game/tele.h"
 /* WBF_* of the weapon landing the current blow (monster_damage reads it: a flail ignores shields) */
 extern unsigned g_hit_flags;
@@ -114,6 +115,7 @@ typedef struct Monster {
     u8 parley;       /* a chapter target that yielded: 1 waiting for a choice, 2 to be killed */
     u8 resident;     /* a spared one living in the Sanctum: harmless and unharmed */
     char name[STORY_NAME];
+    u8 ruler;        /* the ruler of a realm behind the Gate: 1 + RM_* */
 } Monster;
 
 typedef struct Projectile {
@@ -191,7 +193,7 @@ typedef struct Mission {
 } Mission;
 
 /* Lore read in this world (shared by all characters). */
-enum { LORE_TRACE = 1, LORE_REVEAL, LORE_LEGEND, LORE_ORDERS, LORE_PAGE, LORE_RESIDENT, LORE_KINDS };
+enum { LORE_TRACE = 1, LORE_REVEAL, LORE_LEGEND, LORE_ORDERS, LORE_PAGE, LORE_RESIDENT, LORE_REALM, LORE_KINDS }; /* LORE_REALM: a = realm, b = 0 its story, 1 + q a page of the Library */
 #define MAX_LORE 512
 typedef struct LoreEntry {
     u8 kind;
@@ -245,6 +247,13 @@ typedef struct Stats {
     bool realm_return_set;
     vec3 realm_return;
     float realm_return_yaw;
+    /* the realms behind the Gate (gate.c): where you went through from, and what keeps their
+     * rules off you (v25) */
+    bool gate_from_set;
+    vec3 gate_from;
+    float gate_from_yaw;
+    float sunward_t;  /* a sun-ward: the Sun does not burn */
+    float gills_t;    /* a gill draught: breath lasts five times as long */
     float refreshed_t, well_fed_t, rest_t, feast_t;
     u8 sanctum;          /* SANCTUM_*: the rooms bought back to life (shop.c) */
     float library_t;     /* until the library's next scroll */
@@ -425,6 +434,8 @@ typedef struct PlayerSlot {
     float target_retry;
     vec3 scry_pos;          /* Clairvoyance: where your sight is */
     float gate_cd;          /* just went through a gate or door */
+    float realm_note_t;     /* the realms: until the next warning of the same kind */
+    u8 realm_notes;         /* the realms: warnings already given this visit (bits) */
     float ritual_t;         /* opening the Sanctum Door: seconds left of the ritual */
     float story_quiet;      /* seconds without a chapter finished (the story sends hunters) */
     char reading[STORY_TEXT]; /* the trace you stand at */
@@ -488,7 +499,9 @@ typedef struct Sanctum {
 } Sanctum;
 
 /* Neutral wildlife (wildlife.c): never attacks, monsters ignore it, gives food. */
-enum { CR_HARE, CR_HEN, CR_GOAT, CR_RAM, CR_FISH, CR_CARP, CR_CRAB, CR_SALAMANDER, CR_GROUSE, CR_BEETLE, CR_SNAIL, CR_HIVE, CR_QUAIL, CR_COUNT };
+enum { CR_HARE, CR_HEN, CR_GOAT, CR_RAM, CR_FISH, CR_CARP, CR_CRAB, CR_SALAMANDER, CR_GROUSE, CR_BEETLE, CR_SNAIL, CR_HIVE, CR_QUAIL,
+       CR_REALM, /* an animal of a realm behind the Gate: its species in REALM_FAUNA (realms.h) */
+       CR_COUNT };
 enum { CS_GRAZE, CS_WALK, CS_FLEE, CS_HIDE };
 typedef struct Critter {
     bool alive, on_ground;
@@ -501,6 +514,8 @@ typedef struct Critter {
     float sound_t;
     float air_used;  /* seconds with its head under water (docs/SIMULATION.md) */
     u64 key, chunk_key;
+    u8 species, variant, level; /* CR_REALM: REALM_FAUNA index, its variant, the realm's danger */
+    float bite_t;    /* a fierce one: until its next bite */
 } Critter;
 #define MAX_CRITTERS 128
 
@@ -531,6 +546,13 @@ typedef struct Game {
     Pickup pickups[MAX_PICKUPS];
     Effect effects[MAX_EFFECTS];
     Critter critters[MAX_CRITTERS];
+    /* the realms behind the Gate (gate.c): those joined to this world (from its seed), the one
+     * the Gate in the Sanctum shows, rifts seen in the fortress, the orrery's eclipse */
+    u32 realms_joined;
+    int gate_sel;
+    struct Rift { vec3 pos; u8 realm; bool alive; u64 chunk_key; float yaw; } rifts[24];
+    int nrifts;
+    float eclipse_t, realm_t, storm_t, tide;
     /* chests and relics already taken (keys) */
     u64 *looted;
     int looted_cap, looted_count;
@@ -799,6 +821,24 @@ bool shop_buy_kind(Game *g, PlayerSlot *ps, int kind);
 bool shop_buy_arg(Game *g, PlayerSlot *ps, int kind, int arg);
 /* game.c: the Golden Thread key (right after a death: back where you fell) */
 void game_thread_key(Game *g, PlayerSlot *ps);
+
+/* gate.c: the realms behind the Gate (realms.h, docs/REALMS.md) */
+void monsters_alert(Game *g, vec3 p, float radius);
+void gate_init(Game *g);                       /* the realms joined to this world */
+void gate_update(Game *g, float dt);           /* travel, rifts, each realm's rules */
+void gate_draw(Game *g, PlayerSlot *viewer);   /* the Gate in the Sanctum, the arches home, rifts */
+bool gate_use(Game *g, PlayerSlot *ps);        /* the Gate's dial; the orrery's moons */
+bool gate_go(Game *g, PlayerSlot *ps, int realm, vec3 from, float yaw);
+void gate_spawn_chunk(Game *g, Chunk *c);      /* rifts in the fortress, rulers in their keeps */
+void gate_ruler_slain(Game *g, Monster *m);
+void gate_flora_broken(Game *g, PlayerSlot *ps, Block b, int x, int y, int z, u64 h);
+void gate_fauna_speaks(Game *g, PlayerSlot *ps, int species, u64 key);
+void gate_note_fauna(Game *g, int species);
+bool gate_no_air(Game *g, PlayerSlot *ps);     /* airless here: breath runs out as under water */
+float gate_gravity(Game *g, PlayerSlot *ps);
+float gate_temperature(int realm);
+bool gate_open(const Game *g, int realm, const char **why); /* not sealed by the story */
+void gate_lore_text(Game *g, int a, int b, char *out, int n);
 void realm_enter(Game *g, PlayerSlot *ps, vec3 from, float yaw);
 void realm_update(Game *g, float dt);
 void realm_draw(Game *g);

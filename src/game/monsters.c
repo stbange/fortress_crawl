@@ -243,6 +243,7 @@ static void spawn_chunk(Game *g, Chunk *c) {
             if (!known) g->shrines[g->nshrines++] = sp;
         }
     wildlife_spawn_chunk(g, c); /* animals, outside and at home too */
+    gate_spawn_chunk(g, c);     /* rifts to the realms; a realm's ruler in its keep */
     if (ci->arch == ARCH_EXTERIOR) loot_place_in_chunk(g, c); /* herbs */
     if (ci->arch == ARCH_EXTERIOR || ci->arch == ARCH_POCKET) return; /* nothing hostile outside or at home */
 
@@ -504,6 +505,18 @@ static void wake_neighbours(Game *g, Monster *m) {
 
 static void bloater_burst(Game *g, Monster *m, float mult);
 
+/* Something told the monsters near p where you are (the realms' mycelium): they wake and come. */
+void monsters_alert(Game *g, vec3 p, float radius) {
+    for (int i = 0; i < MAX_MONSTERS; i++) {
+        Monster *o = &g->mons[i];
+        if (!o->alive || o->type == MON_MIMIC || o->resident || o->charm_t > 0 || v3_len(v3_sub(o->pos, p)) > radius) continue;
+        if (!o->awake) sfx_monster(g, o, MSFX_ALERT);
+        o->awake = true;
+        o->state = MS_CHASE;
+        o->sulk_t = 0;
+    }
+}
+
 void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int attacker) {
     if (!m->alive || m->hidden) return; /* vanished or underground */
     if (m->parley == 1 || m->resident) return; /* yielded, waiting for a choice; or at home in the Sanctum */
@@ -560,6 +573,7 @@ void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int 
             if (luck > 0) for (int k = 0; k < 2; k++) loot_drop(g, m->pos, m->level, m->elite, luck);
         }
         if (m->story_key) story_on_kill(g, m);
+        if (m->ruler) gate_ruler_slain(g, m);
         if (m->orders) story_orders_found(g, m);
         if (m->named_kind && m->story_key) sanctum_trophy_named(g, m->story_key);
         if (m->named_kind && m->story_key && m->level >= 6.0f) {

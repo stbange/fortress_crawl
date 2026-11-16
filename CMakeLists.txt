@@ -55,6 +55,8 @@ add_library(fcworld STATIC
   src/world/gen_mech.c
   src/world/gen_exterior.c
   src/world/gen_pocket.c
+  src/world/gen_realm.c
+  src/world/realms.c
   src/world/mesher.c
   src/world/support.c
   src/world/eco.c
@@ -102,6 +104,7 @@ add_executable(fortress_crawl
   src/game/weapons.c
   src/game/utility.c
   src/game/realm.c
+  src/game/gate.c
   src/game/bot.c
   src/game/shop.c
   src/game/arms.c

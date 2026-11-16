@@ -30,7 +30,43 @@ static const CritterDef DEFS[CR_COUNT] = {
     [CR_SNAIL] = { "salt snail", 0.12f, 0.12f, 0.25f, 0.0f, 1, -1, { 0.8f, 0.74f, 0.66f } },
     [CR_HIVE] = { "beehive", 0.35f, 0.7f, 0.0f, 0.0f, 255, -1, { 0.78f, 0.62f, 0.3f } },
     [CR_QUAIL] = { "steppe quail", 0.15f, 0.26f, 6.0f, 5.0f, 1, FD_QUAIL, { 0.62f, 0.48f, 0.32f } },
+    [CR_REALM] = { "beast", 0.2f, 0.3f, 3.0f, 0.0f, 2, -1, { 0.6f, 0.6f, 0.6f } },
 };
+
+/* The animals of the realms (realms.h): their numbers from their species and body plan. */
+static CritterDef RDEFS[REALM_FAUNA_COUNT];
+static const CritterDef *rdef(int species) {
+    CritterDef *d = &RDEFS[species];
+    if (!d->name) {
+        const FaunaDef *f = &REALM_FAUNA[species];
+        float s = f->size;
+        float hw = 0.18f * s, h = 0.3f * s;
+        switch (f->plan) {
+        case BP_QUAD: hw = 0.22f * s; h = 0.6f * s; break;
+        case BP_STRIDER: hw = 0.2f * s; h = 0.9f * s; break;
+        case BP_BIRD: hw = 0.16f * s; h = 0.4f * s; break;
+        case BP_SERPENT: hw = 0.16f * s; h = 0.16f * s; break;
+        case BP_WHALE: hw = 0.4f * s; h = 0.5f * s; break;
+        case BP_CRAWLER: hw = 0.18f * s; h = 0.16f * s; break;
+        default: break;
+        }
+        d->hw = hw; d->h = h;
+        d->speed = f->speed;
+        d->flee_r = f->temper == TM_SHY ? 6.0f : 0.0f;
+        d->hp = f->hp;
+        d->meat = f->food;
+        d->color = v3(f->col[0][0] / 255.0f, f->col[0][1] / 255.0f, f->col[0][2] / 255.0f);
+        d->name = f->name;
+    }
+    return d;
+}
+static const CritterDef *def_of(const Critter *c) { return c->kind == CR_REALM ? rdef(c->species) : &DEFS[c->kind]; }
+static bool floats(const Critter *c) {
+    if (c->kind == CR_CARP) return true;
+    if (c->kind != CR_REALM) return false;
+    int p = REALM_FAUNA[c->species].plan;
+    return p == BP_FLYER || p == BP_JELLY || p == BP_WHALE;
+}
 
 #define EPOCH_HUNT 900.0f   /* a hunted animal is back after this */
 #define EPOCH_GIVE 600.0f   /* milk, eggs, honey */
@@ -63,7 +99,7 @@ static Critter *critter_new(Game *g, int kind, vec3 pos, u64 key, u64 ck) {
         c->alive = true;
         c->kind = (u8)kind;
         c->pos = c->home = pos;
-        c->hp = DEFS[kind].hp;
+        c->hp = kind == CR_REALM ? 1 : DEFS[kind].hp; /* (a realm animal: set by critter_new_realm) */
         c->key = key;
         c->chunk_key = ck;
         c->yaw = frand(&g_wrng) * 2.0f * PI_F;
@@ -75,6 +111,18 @@ static Critter *critter_new(Game *g, int kind, vec3 pos, u64 key, u64 ck) {
         return c;
     }
     return NULL;
+}
+
+static Critter *critter_new_realm(Game *g, int species, int variant, int level, vec3 pos, u64 key, u64 ck) {
+    Critter *c = critter_new(g, CR_REALM, pos, key, ck);
+    if (!c) return NULL;
+    const FaunaDef *f = &REALM_FAUNA[species];
+    c->species = (u8)species;
+    c->variant = (u8)(variant % 3);
+    c->level = (u8)level;
+    c->hp = (u8)MINI(250, f->hp + level / 4);
+    c->color = v3(f->col[c->variant][0] / 255.0f, f->col[c->variant][1] / 255.0f, f->col[c->variant][2] / 255.0f);
+    return c;
 }
 
 static float pick(float *w, int n, float r) {
@@ -184,12 +232,53 @@ static void spawn_garden(Game *g, Chunk *c, u64 ck) {
     }
 }
 
+/* A realm's animals: its three species, more of them than in the fortress (the realms are
+ * full of life), in groups by their size. */
+static void spawn_realm(Game *g, Chunk *c, u64 ck) {
+    const ChunkInfo *ci = &c->info;
+    int r = realm_of_flavor(ci->flavor);
+    if (r < 0) return;
+    bool water = false;
+    for (int i = 0; i < CHUNK_VOL && !water; i += 7) water = c->blocks[i] == B_WATER;
+    Rng rr = rng_make(ci->seed ^ 0xFA0A1ULL);
+    if (!rng_chance(&rr, 0.6f)) return;
+    int groups = rng_chance(&rr, 0.35f) ? 2 : 1, idx = 0;
+    for (int gi = 0; gi < groups; gi++) {
+        float w[3];
+        for (int k = 0; k < 3; k++) {
+            int plan = REALM_FAUNA[r * 3 + k].plan;
+            w[k] = plan == BP_FISH ? (water ? 2.0f : 0.0f) : plan == BP_WHALE ? 0.5f : 1.0f;
+        }
+        float kf = pick(w, 3, rng_float(&rr));
+        if (kf < 0) return;
+        int sp = r * 3 + (int)kf;
+        const FaunaDef *f = &REALM_FAUNA[sp];
+        int n = f->plan == BP_WHALE ? 1 : f->size >= 1.6f ? rng_range(&rr, 1, 2) : f->plan == BP_FISH ? rng_range(&rr, 3, 5) : rng_range(&rr, 2, 4);
+        int variant = rng_range(&rr, 0, 2);
+        vec3 anchor;
+        bool ok = f->plan == BP_FISH ? water_spot(g, c, &rr, &anchor) : spot_near(g, c, &rr, v3(0, 0, 0), true, &anchor);
+        if (!ok) continue;
+        for (int i = 0; i < n; i++, idx++) {
+            vec3 p = anchor;
+            if (i > 0 && f->plan == BP_FISH) { if (!water_spot(g, c, &rr, &p) || v3_len(v3_sub(p, anchor)) > 8.0f) p = anchor; }
+            else if (i > 0 && !spot_near(g, c, &rr, anchor, false, &p)) continue;
+            if (f->plan == BP_FLYER || f->plan == BP_JELLY) p.y += 2.0f + rng_float(&rr) * 3.0f;
+            if (f->plan == BP_WHALE) p.y += 6.0f + rng_float(&rr) * 6.0f;
+            if (game_solid(g, (int)floorf(p.x), (int)floorf(p.y), (int)floorf(p.z))) p.y = anchor.y + 0.5f;
+            /* a herd is mostly one variant, now and then another among them */
+            int v = rng_chance(&rr, 0.25f) ? rng_range(&rr, 0, 2) : variant;
+            critter_new_realm(g, sp, v, ci->level, p, mix64(ck ^ ((u64)(idx + 1) * 0x9E3779B97F4A7C15ULL)) | 1, ck);
+        }
+    }
+}
+
 void wildlife_spawn_chunk(Game *g, Chunk *c) {
     const ChunkInfo *ci = &c->info;
     u64 ck = chunk_spawn_key(c->cx, c->cy, c->cz);
     for (int i = 0; i < MAX_CRITTERS; i++)
         if (g->critters[i].alive && g->critters[i].chunk_key == ck) g->critters[i].alive = false;
     if (ci->arch == ARCH_POCKET) { spawn_garden(g, c, ck); return; }
+    if (ci->arch == ARCH_REALM) { spawn_realm(g, c, ck); return; }
     float w[CR_COUNT] = { 0 };
     int tier;
     world_region(&g->world, c->cx, c->cy, c->cz, &tier);
@@ -261,7 +350,7 @@ static void die(Game *g, Critter *c, int owner);
 static void move_ground(Game *g, Critter *c, vec3 want, float dt) {
     /* in deep water it swims, slower, its head held out; held under too long it drowns
      * (crabs and salamanders are at home where they are) */
-    const CritterDef *d = &DEFS[c->kind];
+    const CritterDef *d = def_of(c);
     float depth = sim_water_depth(g, c->pos);
     bool swim = depth > d->h * 0.6f && c->kind != CR_CRAB;
     vec3 cur = depth > 0.1f ? sim_current(g, c->pos) : v3(0, 0, 0); /* running water carries it */
@@ -342,7 +431,7 @@ void wildlife_update(Game *g, float dt) {
         Critter *c = &g->critters[i];
         if (!c->alive) continue;
         if (!game_nearest_player(g, c->pos, 90.0f)) continue; /* asleep far away */
-        const CritterDef *d = &DEFS[c->kind];
+        const CritterDef *d = def_of(c);
         c->anim += dt;
         c->flash = fmaxf(0.0f, c->flash - dt * 4.0f);
         c->timer -= dt;
@@ -449,34 +538,62 @@ void wildlife_update(Game *g, float dt) {
                 c->yaw = v3_len(h) > 6.0f ? atan2f(h.z, h.x) + (frand(&g_wrng) - 0.5f) : frand(&g_wrng) * 2.0f * PI_F;
             }
         }
-        switch (c->kind) {
+        /* the fierce ones of the realms: close enough, or hurt, and they come for you */
+        bool hunting = false;
+        if (c->kind == CR_REALM && REALM_FAUNA[c->species].temper == TM_FIERCE) {
+            if (c->angry_t > 0) c->angry_t -= dt;
+            if (c->bite_t > 0) c->bite_t -= dt;
+            PlayerSlot *prey = threat(g, c, c->angry_t > 0 ? 16.0f : 4.5f);
+            if (prey) {
+                hunting = true;
+                vec3 to = v3_sub(prey->pl.pos, c->pos);
+                float dy = to.y;
+                to.y = 0;
+                float dd = v3_len(to);
+                if (dd > 0.01f) { to = v3_scale(to, 1.0f / dd); c->yaw = atan2f(to.z, to.x); }
+                want = dd > d->hw + 0.6f ? v3_scale(to, d->speed) : v3(0, 0, 0);
+                if (floats(c)) want.y = (dy + 1.0f) * 2.0f;
+                c->state = CS_WALK;
+                c->timer = 1.0f;
+                if (dd < d->hw + 1.1f && fabsf(dy) < 2.2f && c->bite_t <= 0) {
+                    c->bite_t = 1.3f;
+                    tele_src(HS_OTHER, 0, 0, 0);
+                    game_hurt_player(g, prey, 3.0f + c->level * 0.6f * fminf(2.0f, REALM_FAUNA[c->species].size), c->pos);
+                    sfx_at(g, SFX_CRITTER_SQUEAK, c->pos, 0.9f);
+                }
+            }
+        }
+        int plan = c->kind == CR_REALM ? REALM_FAUNA[c->species].plan : -1;
+        switch (plan == BP_FISH ? CR_FISH : floats(c) ? CR_CARP : c->kind) {
         case CR_FISH: {
             if (!water_at(g, c->pos)) { /* stranded: flop back down */
                 c->pos.y -= dt * 3.0f;
                 if (c->pos.y < c->home.y - 3.0f) c->alive = false;
                 break;
             }
-            if (c->state != CS_FLEE) want = v3_scale(v3(cosf(c->yaw), sinf(c->anim * 0.7f) * 0.2f, sinf(c->yaw)), sp * 0.4f);
+            if (c->state != CS_FLEE && !hunting) want = v3_scale(v3(cosf(c->yaw), sinf(c->anim * 0.7f) * 0.2f, sinf(c->yaw)), sp * 0.4f);
             move_free(g, c, want, dt, true);
             break;
         }
         case CR_CARP: {
-            /* floats in slow circles round home, bobbing */
-            if (c->state != CS_FLEE) {
-                float a = c->anim * 0.25f + (float)(c->key & 7);
-                vec3 tgt = v3_add(c->home, v3(cosf(a) * 4.0f, sinf(c->anim * 0.6f) * 0.5f, sinf(a) * 4.0f));
+            /* floats in slow circles round home, bobbing (the great ones in great circles) */
+            float circle = c->kind == CR_REALM ? 4.0f + 3.0f * REALM_FAUNA[c->species].size : 4.0f;
+            if (hunting) {
+            } else if (c->state != CS_FLEE) {
+                float a = c->anim * 0.25f * 4.0f / circle + (float)(c->key & 7);
+                vec3 tgt = v3_add(c->home, v3(cosf(a) * circle, sinf(c->anim * 0.6f) * 0.5f, sinf(a) * circle));
                 vec3 to = v3_sub(tgt, c->pos);
                 want = v3_len(to) > 0.1f ? v3_scale(v3_norm(to), sp) : v3(0, 0, 0);
             } else want.y = 1.5f;
             if (v3_len(v3(want.x, 0, want.z)) > 0.1f) c->yaw = atan2f(want.z, want.x);
-            move_free(g, c, want, dt, false);
+            move_free(g, c, want, dt, c->kind == CR_REALM && water_at(g, c->home));
             break;
         }
         default:
             /* grouse and quail burst into flight when fleeing */
-            if ((c->kind == CR_GROUSE || c->kind == CR_QUAIL || c->kind == CR_HEN) && c->state == CS_FLEE && c->on_ground && frand(&g_wrng) < dt * 2.0f)
+            if ((c->kind == CR_GROUSE || c->kind == CR_QUAIL || c->kind == CR_HEN || plan == BP_BIRD) && c->state == CS_FLEE && c->on_ground && frand(&g_wrng) < dt * 2.0f)
                 c->vel.y = c->kind == CR_HEN ? 3.0f : 5.0f;
-            if (c->kind == CR_HARE && c->on_ground && v3_len(want) > 0.5f && frand(&g_wrng) < dt * 3.0f) c->vel.y = 3.5f; /* hops */
+            if ((c->kind == CR_HARE || plan == BP_HOPPER) && c->on_ground && v3_len(want) > 0.5f && frand(&g_wrng) < dt * 3.0f) c->vel.y = 3.5f; /* hops */
             move_ground(g, c, want, dt);
             break;
         }
@@ -486,12 +603,15 @@ void wildlife_update(Game *g, float dt) {
 /* ---------- being hit ---------- */
 
 static void die(Game *g, Critter *c, int owner) {
-    const CritterDef *d = &DEFS[c->kind];
+    const CritterDef *d = def_of(c);
     c->alive = false;
     looted_mark(g, epoch_key(g, c->key, 0x4B11, EPOCH_HUNT));
     sfx_at(g, SFX_CRITTER_DEATH, c->pos, 0.8f);
     particles_burst(g, v3_add(c->pos, v3(0, d->h * 0.5f, 0)), c->kind == CR_FISH ? v3(0.6f, 0.7f, 0.9f) : v3(0.55f, 0.1f, 0.08f), 8, 2.0f, 0.04f, false);
     if (d->meat >= 0) pickup_spawn(g, PK_FOOD, v3_add(c->pos, v3(0, 0.3f, 0)), d->meat, NULL, 0, 0);
+    if (c->kind == CR_REALM && REALM_FAUNA[c->species].reagent >= 0)
+        pickup_spawn(g, PK_REAGENT, v3_add(c->pos, v3(0.3f, 0.3f, 0)), REALM_FAUNA[c->species].reagent, NULL, 0, 0);
+    if (c->kind == CR_REALM) gate_note_fauna(g, c->species);
     if (owner >= 0) g_tele.hunted++;
     if (critter_grazes(c->kind)) eco_note(c->pos, ECO_GRAZER_TAKEN);
 }
@@ -551,9 +671,11 @@ static void hurt(Game *g, Critter *c, float dmg, int element, int owner) {
     if (c->kind == CR_FISH && element == EL_FROST) { die(g, c, owner); return; } /* frozen, floats up */
     int n = dmg >= 45.0f ? 2 : 1;
     if (c->kind == CR_CRAB && c->state != CS_FLEE) n = 1; /* in its shell */
+    if (c->kind == CR_REALM) n = MAXI(1, (int)(dmg / 12.0f)); /* (the big ones take a while) */
     c->hp = (u8)(c->hp > n ? c->hp - n : 0);
     c->flash = 1.0f;
     if (c->hp == 0) { die(g, c, owner); return; }
+    if (c->kind == CR_REALM && REALM_FAUNA[c->species].temper == TM_FIERCE) { c->angry_t = 20.0f; return; } /* it turns on you */
     c->state = CS_FLEE;
     c->timer = 3.0f;
     flee_sound(g, c);
@@ -566,14 +688,14 @@ static void hurt(Game *g, Critter *c, float dmg, int element, int owner) {
     }
 }
 
-static vec3 centre(const Critter *c) { return v3_add(c->pos, v3(0, DEFS[c->kind].h * 0.5f, 0)); }
+static vec3 centre(const Critter *c) { return v3_add(c->pos, v3(0, def_of(c)->h * 0.5f, 0)); }
 
 bool wildlife_hit(Game *g, vec3 p, float radius, float dmg, int element, int owner) {
     bool any = false;
     for (int i = 0; i < MAX_CRITTERS; i++) {
         Critter *c = &g->critters[i];
         if (!c->alive) continue;
-        const CritterDef *d = &DEFS[c->kind];
+        const CritterDef *d = def_of(c);
         vec3 cc = centre(c);
         float reach = d->hw + 0.15f + radius;
         if (fabsf(p.x - cc.x) > reach || fabsf(p.z - cc.z) > reach || fabsf(p.y - cc.y) > d->h * 0.5f + 0.15f + radius) continue;
@@ -595,7 +717,7 @@ bool wildlife_strike(Game *g, PlayerSlot *ps, vec3 eye, vec3 fwd, float range, f
         vec3 cc = centre(c), dv = v3_sub(cc, chest);
         float dy = dv.y;
         dv.y = 0;
-        float dist = v3_len(dv) - DEFS[c->kind].hw;
+        float dist = v3_len(dv) - def_of(c)->hw;
         if (dist > range || dy > 2.0f || dy < -2.8f) continue;
         float ang = acosf(clampf(v3_dot(v3_norm(dv), fwd), -1.0f, 1.0f));
         if (ang > arc * 0.5f && dist > 0.4f) continue;
@@ -609,6 +731,18 @@ bool wildlife_strike(Game *g, PlayerSlot *ps, vec3 eye, vec3 fwd, float range, f
 
 bool wildlife_use(Game *g, PlayerSlot *ps) {
     vec3 f = v3(cosf(ps->pl.yaw), 0, sinf(ps->pl.yaw));
+    for (int i = 0; i < MAX_CRITTERS; i++) { /* the animals of the realms that have something to tell */
+        Critter *c = &g->critters[i];
+        if (!c->alive || c->kind != CR_REALM || !REALM_FAUNA[c->species].say) continue;
+        vec3 dv = v3_sub(c->pos, ps->pl.pos);
+        dv.y = 0;
+        float d = v3_len(dv);
+        if (d > 2.4f || v3_dot(v3_scale(dv, 1.0f / fmaxf(d, 0.01f)), f) < 0.5f) continue;
+        c->state = CS_GRAZE;
+        c->timer = 3.0f;
+        gate_fauna_speaks(g, ps, c->species, c->key);
+        return true;
+    }
     for (int i = 0; i < MAX_CRITTERS; i++) {
         Critter *c = &g->critters[i];
         if (!c->alive || c->kind != CR_GOAT || c->state == CS_FLEE) continue;
@@ -636,7 +770,7 @@ Critter *wildlife_nearest(Game *g, vec3 p, float max_dist, bool huntable) {
     float bd = max_dist;
     for (int i = 0; i < MAX_CRITTERS; i++) {
         Critter *c = &g->critters[i];
-        if (!c->alive || (huntable && (DEFS[c->kind].meat < 0 && c->kind != CR_BEETLE && c->kind != CR_SNAIL))) continue;
+        if (!c->alive || (huntable && (def_of(c)->meat < 0 && c->kind != CR_BEETLE && c->kind != CR_SNAIL && c->kind != CR_REALM))) continue;
         float d = v3_len(v3_sub(c->pos, p));
         if (d < bd) { bd = d; best = c; }
     }
@@ -661,6 +795,136 @@ static void legs(const Frame *b, float fw, float rt, float h, float r, float t, 
     }
 }
 
+/* An animal of a realm, from its body plan (realms.h), its size and its variant's colour. */
+static void draw_realm(Game *g, Critter *c, Frame *b, vec3 col, vec3 dark, vec3 l, float t, float peck, bool moving) {
+    const FaunaDef *f = &REALM_FAUNA[c->species];
+    vec3 glow = v3(f->col[c->variant][0] / 255.0f * 1.2f, f->col[c->variant][1] / 255.0f * 1.2f, f->col[c->variant][2] / 255.0f * 1.2f);
+    vec3 eye = f->glow ? v3(1.2f, 1.1f, 0.6f) : lit(v3(0.08f, 0.08f, 0.08f), l);
+    b->s = f->size;
+    float a = c->anim;
+    switch (f->plan) {
+    case BP_QUAD: {
+        bx(b, at(b, 0, 0, 0.42f), 0.28f, 0.14f, 0.13f, col, false);
+        vec3 head = at(b, 0.32f + peck * 0.04f, 0, 0.56f - peck * 0.25f);
+        bx(b, head, 0.1f, 0.07f, 0.08f, col, false);
+        bx(b, v3_add(head, v3_scale(b->f, 0.08f * b->s)), 0.04f, 0.045f, 0.04f, dark, false); /* muzzle */
+        for (int k = -1; k <= 1; k += 2) {
+            bx(b, v3_add(head, v3_add(v3_scale(b->r, 0.05f * k * b->s), v3(0, 0.06f * b->s, 0))), 0.015f, 0.015f, 0.04f, dark, false); /* ears */
+            bx(b, v3_add(head, v3_add(v3_add(v3_scale(b->r, 0.05f * k * b->s), v3_scale(b->f, 0.06f * b->s)), v3(0, 0.02f * b->s, 0))), 0.01f, 0.01f, 0.01f, eye, f->glow);
+        }
+        bx(b, at(b, -0.3f, 0, 0.5f + sinf(a * 3.0f) * 0.02f), 0.06f, 0.02f, 0.02f, dark, false); /* tail */
+        if (f->glow) bx(b, at(b, 0, 0, 0.56f), 0.2f, 0.02f, 0.01f, glow, true); /* a glowing stripe */
+        legs(b, 0.2f, 0.1f, 0.3f, 0.035f, t, dark);
+        break;
+    }
+    case BP_HOPPER: {
+        float hop = moving ? fabsf(sinf(a * 9.0f)) * 0.08f : 0.0f;
+        b->p.y += hop;
+        bx(b, at(b, -0.02f, 0, 0.14f), 0.16f, 0.09f, 0.09f, col, false);
+        bx(b, at(b, 0.17f, 0, 0.2f - peck * 0.06f), 0.07f, 0.06f, 0.06f, col, false);
+        for (int k = -1; k <= 1; k += 2) bx(b, at(b, 0.14f, 0.03f * k, 0.34f - peck * 0.06f), 0.015f, 0.02f, 0.1f, dark, false);
+        if (f->glow) bx(b, at(b, 0.22f, 0, 0.22f), 0.012f, 0.05f, 0.012f, glow, true);
+        legs(b, 0.09f, 0.06f, 0.06f, 0.025f, t, dark);
+        break;
+    }
+    case BP_BIRD: {
+        bool air = !c->on_ground;
+        bx(b, at(b, 0, 0, 0.22f), 0.13f, 0.09f, 0.09f, col, f->glow);
+        bx(b, at(b, -0.16f, 0, 0.27f), 0.06f, 0.07f, 0.02f, dark, false);
+        bx(b, at(b, 0.12f + peck * 0.05f, 0, 0.35f - peck * 0.15f), 0.05f, 0.045f, 0.05f, col, false);
+        bx(b, at(b, 0.19f + peck * 0.05f, 0, 0.34f - peck * 0.15f), 0.035f, 0.012f, 0.012f, lit(v3(0.85f, 0.7f, 0.3f), l), false);
+        float wf = air ? sinf(a * 26.0f) * 0.12f : 0.0f;
+        for (int k = -1; k <= 1; k += 2) {
+            Frame w = *b;
+            bx(&w, at(b, 0, (air ? 0.2f : 0.1f) * k, 0.24f + wf * k * 0.5f + wf), 0.09f, air ? 0.12f : 0.015f, 0.02f + (air ? 0 : 0.03f), dark, false);
+        }
+        for (int k = -1; k <= 1; k += 2) bx(b, at(b, sinf(t + k) * 0.04f, 0.04f * k, 0.06f), 0.01f, 0.01f, 0.06f, lit(v3(0.6f, 0.5f, 0.3f), l), false);
+        break;
+    }
+    case BP_FLYER: { /* moths, rays, minnows of the air: a body and wide wings */
+        float flap = sinf(a * (c->state == CS_FLEE ? 18.0f : 7.0f));
+        bx(b, at(b, 0, 0, 0.1f), 0.14f, 0.05f, 0.04f, dark, false);
+        for (int k = -1; k <= 1; k += 2) {
+            vec3 wc = at(b, 0.02f, 0.17f * k, 0.1f + flap * 0.07f);
+            batch3d_obox(wc, v3_scale(b->f, 0.12f * b->s), v3_scale(b->r, 0.13f * b->s), v3(0, (0.02f + flap * 0.04f * k) * b->s, 0), f->glow ? glow : col, f->glow);
+        }
+        bx(b, at(b, -0.18f, 0, 0.1f), 0.08f, 0.01f, 0.01f, col, false); /* a tail */
+        break;
+    }
+    case BP_FISH: {
+        float wag = sinf(a * (c->state == CS_FLEE ? 20.0f : 6.0f)) * 0.3f;
+        bx(b, at(b, 0, 0, 0.06f), 0.16f, 0.04f, 0.06f, col, f->glow);
+        Frame tb = *b;
+        float ty = c->yaw + PI_F + wag;
+        tb.f = v3(cosf(ty), 0, sinf(ty));
+        tb.r = v3(-sinf(ty), 0, cosf(ty));
+        tb.p = at(b, -0.16f, 0, 0);
+        bx(&tb, at(&tb, 0.06f, 0, 0.06f), 0.06f, 0.01f, 0.07f, dark, false);
+        break;
+    }
+    case BP_CRAWLER: {
+        float sc = sinf(a * 14.0f) * (moving ? 0.02f : 0.0f);
+        bx(b, at(b, -0.02f, sc, 0.08f), 0.14f, 0.12f, 0.05f, col, false);
+        bx(b, at(b, 0.14f, sc, 0.07f), 0.05f, 0.07f, 0.04f, dark, false);
+        if (f->glow) bx(b, at(b, -0.04f, 0, 0.13f), 0.08f, 0.07f, 0.01f, glow, true);
+        for (int k = -1; k <= 1; k += 2) {
+            for (int j = 0; j < 3; j++) bx(b, at(b, -0.08f + j * 0.08f, 0.15f * k, 0.03f + sinf(t + j * 2.0f + k) * 0.01f), 0.01f, 0.06f, 0.01f, dark, false);
+            bx(b, at(b, 0.2f, 0.05f * k, 0.08f + peck * 0.03f), 0.05f, 0.015f, 0.015f, dark, false); /* mandibles or claws */
+        }
+        break;
+    }
+    case BP_SERPENT: {
+        int n = 7;
+        for (int k = 0; k < n; k++) {
+            float w = sinf(a * (moving ? 10.0f : 2.0f) - k * 0.8f) * 0.08f;
+            float sz = 0.07f - k * 0.006f;
+            bx(b, at(b, 0.24f - k * 0.1f, w, 0.06f), 0.06f, sz, sz * 0.8f, k == 0 ? dark : col, false);
+            if (f->glow && k % 2 == 0) bx(b, at(b, 0.24f - k * 0.1f, w, 0.06f + sz * 0.8f), 0.02f, 0.02f, 0.01f, glow, true);
+        }
+        for (int k = -1; k <= 1; k += 2) bx(b, at(b, 0.29f, 0.03f * k, 0.09f), 0.01f, 0.01f, 0.01f, eye, f->glow);
+        break;
+    }
+    case BP_JELLY: {
+        float pulse = 1.0f + 0.12f * sinf(a * 3.0f);
+        bx(b, at(b, 0, 0, 0.3f), 0.16f * pulse, 0.16f * pulse, 0.1f, glow, true);
+        bx(b, at(b, 0, 0, 0.22f), 0.12f, 0.12f, 0.03f, col, true);
+        for (int k = 0; k < 5; k++) {
+            float an = k * 1.26f, sw = sinf(a * 2.0f + k) * 0.04f;
+            vec3 p = at(b, cosf(an) * 0.08f + sw, sinf(an) * 0.08f, 0.08f);
+            batch3d_box(p, v3(0.01f * b->s, 0.12f * b->s, 0.01f * b->s), an, v3_scale(glow, 0.7f), true);
+        }
+        break;
+    }
+    case BP_WHALE: {
+        float sw = sinf(a * 1.2f);
+        bx(b, at(b, 0, 0, 0.25f), 0.45f, 0.16f, 0.15f, col, f->glow);
+        bx(b, at(b, 0.4f, 0, 0.24f), 0.1f, 0.13f, 0.12f, col, f->glow);
+        bx(b, at(b, 0.05f, 0, 0.12f), 0.35f, 0.13f, 0.03f, lit(v3(0.85f, 0.85f, 0.85f), l), false); /* the pale belly */
+        Frame tb = *b;
+        tb.p = at(b, -0.45f, 0, 0.25f + sw * 0.05f);
+        bx(&tb, at(&tb, -0.08f, 0, 0), 0.08f, 0.04f, 0.04f, col, false);
+        bx(&tb, at(&tb, -0.18f, 0, sw * 0.04f), 0.05f, 0.18f, 0.015f, dark, false); /* the flukes */
+        for (int k = -1; k <= 1; k += 2) bx(b, at(b, 0.18f, 0.2f * k, 0.18f + sw * 0.03f * k), 0.08f, 0.08f, 0.015f, dark, false);
+        if (f->glow) for (int k = 0; k < 6; k++) bx(b, at(b, 0.3f - k * 0.12f, 0, 0.41f), 0.02f, 0.02f, 0.01f, glow, true);
+        break;
+    }
+    case BP_STRIDER: {
+        float bob = moving ? sinf(a * 8.0f) * 0.03f : 0.0f;
+        bx(b, at(b, 0, 0, 0.8f + bob), 0.15f, 0.12f, 0.08f, col, false);
+        bx(b, at(b, 0.16f, 0, 0.82f + bob), 0.05f, 0.06f, 0.05f, dark, false);
+        for (int k = -1; k <= 1; k += 2) bx(b, at(b, 0.2f, 0.03f * k, 0.84f + bob), 0.012f, 0.012f, 0.012f, eye, f->glow);
+        for (int k = 0; k < 4; k++) {
+            float sx = (k < 2 ? 0.12f : -0.12f) + sinf(t + k * 1.6f) * 0.06f, sy = (k % 2 ? 0.14f : -0.14f);
+            vec3 foot = at(b, sx * 1.5f, sy * 1.6f, 0.0f), knee = at(b, sx * 1.2f, sy * 1.3f, 0.95f + bob);
+            batch3d_spike(foot, v3_norm(v3_sub(knee, foot)), 0.02f * b->s, v3_len(v3_sub(knee, foot)), dark, false);
+        }
+        if (f->glow) bx(b, at(b, 0, 0, 0.89f + bob), 0.1f, 0.06f, 0.01f, glow, true);
+        break;
+    }
+    }
+    (void)g;
+}
+
 void wildlife_draw(Game *g, PlayerSlot *viewer) {
     vec3 eye = game_view_eye(viewer);
     for (int i = 0; i < MAX_CRITTERS; i++) {
@@ -675,6 +939,7 @@ void wildlife_draw(Game *g, PlayerSlot *viewer) {
         float t = c->anim * (c->state == CS_FLEE ? 18.0f : 8.0f) * (moving ? 1.0f : 0.0f);
         float peck = !moving ? fmaxf(0.0f, sinf(c->anim * 2.5f)) : 0.0f;
         switch (c->kind) {
+        case CR_REALM: draw_realm(g, c, &b, col, dark, l, t, peck, moving); break;
         case CR_HARE: {
             float hop = moving ? fabsf(sinf(c->anim * 9.0f)) * 0.08f : 0.0f;
             b.p.y += hop;
@@ -783,6 +1048,6 @@ void wildlife_draw(Game *g, PlayerSlot *viewer) {
         }
         /* Reveal the Hidden: nests and hives show */
         if (viewer->st.reveal_t > 0 && (c->kind == CR_HIVE || ((c->kind == CR_HEN || c->kind == CR_QUAIL || c->kind == CR_GOAT) && c->ready_t <= 0)))
-            batch3d_octa(v3_add(c->pos, v3(0, DEFS[c->kind].h + 0.4f, 0)), 0.05f, 0.08f, c->anim * 2.0f, v3(0.6f, 1.0f, 0.5f), true);
+            batch3d_octa(v3_add(c->pos, v3(0, def_of(c)->h + 0.4f, 0)), 0.05f, 0.08f, c->anim * 2.0f, v3(0.6f, 1.0f, 0.5f), true);
     }
 }

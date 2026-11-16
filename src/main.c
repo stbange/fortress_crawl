@@ -227,6 +227,33 @@ static void demo_setup(Game *g) {
     s->mana = s->maxmana;
     if (!strcmp(g_demo_kind, "skills")) { p1->show_skills = true; p1->menu_tab = TAB_SKILLS; p1->skill_sel = skill_id(BR_ARCANE, 2); return; }
     if (!strcmp(g_demo_kind, "map")) { p1->show_map = true; return; }
+    if (!strcmp(g_demo_kind, "realm") || !strcmp(g_demo_kind, "keep") || !strcmp(g_demo_kind, "gate") || !strcmp(g_demo_kind, "gatetest")) {
+        /* the realms behind the Gate (docs/REALMS.md): --cast n picks the realm (RM_*); "realm" stands
+         * by the arch you arrive at, "keep" before the ruler's keep, "gate" at the Sanctum's Gate */
+        int r = g_demo_cast >= 0 && g_demo_cast < REALM_COUNT ? g_demo_cast : 0;
+        g->world.realm_attuned = (1u << REALM_COUNT) - 1;
+        p1->pl.fly = false;
+        if (!strcmp(g_demo_kind, "gate") || !strcmp(g_demo_kind, "gatetest")) {
+            g->realms_joined |= 1u << r;
+            g->gate_sel = r;
+            p1->pl.pos = v3(38.5f, (float)POCKET_G, 89.5f);
+            p1->pl.yaw = -PI_F * 0.5f;
+            return;
+        }
+        int x, y, z;
+        if (!strcmp(g_demo_kind, "keep")) {
+            realm_keep(r, &x, &y, &z);
+            bool patch = REALMS[r].terrain == TR_MIRROR || REALMS[r].terrain == TR_DREAM;
+            p1->pl.pos = patch ? v3(5 * CHUNK + 4.5f, (float)y, 5 * CHUNK + 16.5f) : v3(x - REALM_KEEP_R - 14.5f, (float)y, z + 0.5f);
+            p1->pl.yaw = 0;
+        } else {
+            realm_arrival(r, &x, &y, &z);
+            p1->pl.pos = v3(x + 0.5f, (float)y, z + 3.5f);
+            p1->pl.yaw = PI_F * 0.25f;
+        }
+        p1->pl.pitch = -0.05f;
+        return;
+    }
     if (!strcmp(g_demo_kind, "inventory") || !strcmp(g_demo_kind, "spells") || !strcmp(g_demo_kind, "loot") ||
         !strcmp(g_demo_kind, "magic")) {
         /* a character some way into the game */
@@ -1189,6 +1216,33 @@ static void screenshot_step(App *a, float frame_dt) {
             SDL_Log("blast: %d cells scorched", scorch);
         }
     }
+    if (g->opt.demo && a->demo_done && !strcmp(kind, "gatetest")) {
+        /* through the Gate and back (docs/REALMS.md): into the arch, a look round, out through the
+         * arch home; then a rift in the fortress */
+        static int stage;
+        int r = realm_at_w(p1->pl.pos.x, p1->pl.pos.y, p1->pl.pos.z);
+        if (stage == 0 && a->shot_wait > 1.0f) { p1->pl.pos = v3(38.5f, (float)POCKET_G, 84.5f); stage = 1; }
+        else if (stage == 1 && r >= 0) {
+            SDL_Log("gatetest: through the Gate into %s at %.1f %.1f %.1f", REALMS[r].name, p1->pl.pos.x, p1->pl.pos.y, p1->pl.pos.z);
+            stage = 2;
+        } else if (stage == 2 && p1->gate_cd <= 0) {
+            int x, y, z;
+            realm_arrival(r, &x, &y, &z);
+            p1->pl.pos = v3(x + 0.5f, (float)y, z + 0.5f);
+            stage = 3;
+        } else if (stage == 3 && r < 0) {
+            SDL_Log("gatetest: home through the arch at %.1f %.1f %.1f (%s)", p1->pl.pos.x, p1->pl.pos.y, p1->pl.pos.z, realm_has(p1->pl.pos) ? "the Sanctum" : "the fortress");
+            stage = 4;
+        }
+    }
+    if (g->opt.demo && a->demo_done && (!strcmp(kind, "realm") || !strcmp(kind, "keep"))) {
+        /* the realms for the camera: their monsters away (a ruler stays for "keep"), no harm done */
+        for (int i = 0; i < MAX_MONSTERS; i++)
+            if (g->mons[i].alive && (!g->mons[i].ruler || !strcmp(kind, "realm"))) g->mons[i].alive = false;
+        p1->st.hp = p1->st.maxhp;
+        p1->st.burn_t = 0;
+        p1->breath = BREATH_MAX;
+    }
     if (g->opt.demo && a->demo_done && !strcmp(kind, "farm")) {
         /* farming (docs/SIMULATION.md): six crops sown on earth by a channel of water with a torch,
          * flowers by three of them; growth sped up; then all of it reaped */
@@ -1783,6 +1837,7 @@ static void start_world(App *a) {
     vec3 start = g->opt.has_pos ? g->opt.pos : v3(-70.5f, 6.0f, 0.5f);
     bool touch = g->touch.active;
     game_init(g, start, g->opt.yaw);
+    gate_init(g); /* the realms joined to this world */
     g->touch.active = touch || g->opt.touch;
     g->touch.forced = g->opt.touch;
     g->players[0].pl.pitch = g->opt.pitch;

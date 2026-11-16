@@ -134,6 +134,19 @@ d.text((10, 34), 'rooms and corridors, one floor each (the exterior and the vest
 m.save('$OUT/layers.png', optimize=True)" && echo "ok   layers"
 fi
 
+# ---- the realms behind the Gate (docs/REALMS.md): --cast picks the realm (RM_*) ----
+SHOT_TIME=${SHOT_TIME:-5}
+shot realm_gate        --demo gate --cast 7
+shot realm_pale_moon   --demo realm --cast 0
+shot realm_black_moon  --demo realm --cast 2
+shot realm_sun         --demo realm --cast 3
+shot realm_icelands    --demo realm --cast 7
+shot realm_court       --demo keep --cast 10
+shot realm_fungal      --demo realm --cast 13
+shot realm_garden      --demo realm --cast 17
+shot realm_desert      --demo realm --cast 5
+wait
+
 # ---- kept from earlier (framed by hand, their features have not changed) ----
 # chasm, vault, puzzle_beam, puzzle_statues, trap_spikes, trap_flames, spell_keep, combat_mines.
 # The demos --demo levers|beam|statues|spikes|flames|cast --cast 16 make

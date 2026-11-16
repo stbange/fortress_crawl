@@ -247,6 +247,11 @@ static int shop_items(Game *g, PlayerSlot *ps, ShopItem *out) {
     add(out, &n, SH_SUPPLY, 107, 20, s->firewood + 3 <= 20, "YOU CARRY ALL YOU CAN", "3 BUNDLES OF FIREWOOD: P LIGHTS A CAMPFIRE (YOU HAVE %d)", s->firewood);
     if (!s->cloak) add(out, &n, SH_SUPPLY, 102, 350, true, NULL, "A FUR CLOAK: THE COLD REACHES YOU FOUR TIMES SLOWER");
     add(out, &n, SH_SUPPLY, 103, 60, s->warm_t < 600.0f, "YOU ARE WARM ENOUGH", "A WARMING DRAUGHT: AN HOUR OF WARMTH IN THE COLD");
+    /* for the realms behind the Gate (docs/REALMS.md), once the Gate is attuned to one */
+    if (g->world.realm_attuned) {
+        add(out, &n, SH_SUPPLY, 109, 120, s->sunward_t < 300.0f, "THE SALVE STILL HOLDS", "A SUN-WARD SALVE: TWENTY MINUTES THE SUN DOES NOT BURN");
+        add(out, &n, SH_SUPPLY, 110, 140, s->gills_t < 300.0f, "THE DRAUGHT STILL WORKS", "A GILL DRAUGHT: FOR TWENTY MINUTES YOUR BREATH LASTS FIVE TIMES AS LONG UNDER WATER");
+    }
     /* the smith (with the forge): the supplies that are only bought, and two metals */
     if (sanctum_stage(g, SP_FORGE) >= 1 && sanctum_stage(g, SP_ISLAND) >= 2) {
         static const struct { int m, n, price; } SUP[] = { { FG_CHARCOAL, 5, 100 }, { FG_FLUX, 1, 80 }, { FG_QUENCH_OIL, 1, 150 }, { FG_RUNE_INK, 1, 300 }, { FG_STEEL, 1, 200 }, { FG_IRON, 1, 50 } };
@@ -462,6 +467,16 @@ static void buy(Game *g, PlayerSlot *ps, const ShopItem *it) {
         if (it->arg == 102) {
             ps->st.cloak = 1;
             snprintf(buf, sizeof buf, "A FUR CLOAK - THE COLD REACHES YOU FOUR TIMES SLOWER");
+            break;
+        }
+        if (it->arg == 109) {
+            ps->st.sunward_t = 1200.0f;
+            snprintf(buf, sizeof buf, "A SUN-WARD SALVE - TWENTY MINUTES");
+            break;
+        }
+        if (it->arg == 110) {
+            ps->st.gills_t = 1200.0f;
+            snprintf(buf, sizeof buf, "A GILL DRAUGHT - TWENTY MINUTES OF LONG BREATH");
             break;
         }
         if (it->arg == 103) {

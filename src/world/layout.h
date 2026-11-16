@@ -48,6 +48,10 @@ typedef struct World {
         i16 gx, gy, gz; /* DK_LORD: the domain cell */
         u64 key;    /* the named enemy's story key */
     } deeds[128];
+    /* the realms behind the Gate (realms.h, docs/REALMS.md): which the Gate is attuned to, whose
+     * rulers are fallen, which were visited, the plants and animals met there (bits): saved */
+    u32 realm_attuned, realm_beaten, realm_seen;
+    u64 flora_seen, fauna_seen;
 } World;
 #define MAX_DEEDS 128
 enum { DK_NONE, DK_CHAPTER, DK_LORD };

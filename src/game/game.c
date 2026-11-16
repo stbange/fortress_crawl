@@ -346,6 +346,15 @@ void game_update_atmosphere(Game *g, PlayerSlot *ps, float dt) {
         amb = v3(0.05f, 0.055f, 0.08f);
         stars = 1.0f;
         density = 0.012f;
+    } else if (ci.arch == ARCH_REALM && realm_of_flavor(ci.flavor) >= 0) {
+        /* a realm behind the Gate: its own sky (gate.c, realms.h) */
+        const RealmDef *rd = &REALMS[realm_of_flavor(ci.flavor)];
+        fog = v3(rd->fog[0], rd->fog[1], rd->fog[2]);
+        amb = v3(0.03f + rd->sky[0] / 15.0f * 0.2f, 0.03f + rd->sky[1] / 15.0f * 0.2f, 0.035f + rd->sky[2] / 15.0f * 0.2f);
+        stars = rd->stars;
+        moons = rd->moons;
+        density = rd->fog_density;
+        if ((rd->rules & RR_SANDSTORM) && fmodf(g->realm_t, 90.0f) > 65.0f) { density = 0.05f; fog = v3_scale(v3_add(fog, v3(0.4f, 0.3f, 0.2f)), 0.6f); }
     } else if (ci.arch == ARCH_POCKET) {
         /* the pocket realm: a clear night, three moons and a sky full of stars */
         fog = v3(0.035f, 0.045f, 0.09f);
@@ -353,6 +362,11 @@ void game_update_atmosphere(Game *g, PlayerSlot *ps, float dt) {
         stars = 1.0f;
         moons = 1.0f;
         density = 0.0018f;
+    }
+    if (g->eclipse_t > 0 && ci.arch != ARCH_REALM) { /* the orrery's eclipse (gate.c) darkens the fortress and its sky */
+        amb = v3_scale(amb, 0.45f);
+        moons = 0.0f;
+        stars = fmaxf(stars, 0.8f);
     }
     ps->openness_timer -= dt;
     if (ps->openness_timer <= 0) {
@@ -859,14 +873,15 @@ static void update_player(Game *g, PlayerSlot *ps, const PlayerInput *in, float 
             if (t < 2.0f && fmodf(g->time + ps->index * 0.7f, 2.5f) < dt && g->nparts < MAX_PARTICLES - 4) {
                 vec3 e = player_eye(&ps->pl), f = dir_from_angles(ps->pl.yaw, 0.0f);
                 Particle *q = &g->parts[g->nparts++];
-                *q = (Particle){ v3_add(e, v3_scale(f, 0.35f)), v3_add(v3_scale(f, 0.4f), v3(0, 0.25f, 0)), v3(0.85f, 0.88f, 0.92f), 1.0f, 1.0f, 0.07f, false, false };
+                *q = (Particle){ v3_add(e, v3_add(v3_scale(f, 0.7f), v3(0, -0.25f, 0))), v3_add(v3_scale(f, 0.4f), v3(0, 0.25f, 0)), v3(0.85f, 0.88f, 0.92f), 1.0f, 1.0f, 0.04f, false, false };
             }
         }
         /* breath: under water it runs out, then you drown */
         bool under = !ps->pl.fly && sim_water_depth(g, ps->pl.pos) > player_eye(&ps->pl).y - ps->pl.pos.y;
-        if (under) {
-            if (ps->breath > 0 && ps->breath - dt <= 0) game_banner(ps, "OUT OF BREATH - GET TO THE SURFACE");
-            ps->breath -= dt;
+        bool airless = !under && gate_no_air(g, ps); /* a realm without air (gate.c) */
+        if (under || airless) {
+            if (ps->breath > 0 && ps->breath - dt <= 0) game_banner(ps, airless ? "OUT OF BREATH - GET UNDER A DOME" : "OUT OF BREATH - GET TO THE SURFACE");
+            ps->breath -= dt * (s->gills_t > 0 && under ? 0.2f : 1.0f);
             if (ps->breath <= 0) {
                 ps->breath = 0;
                 ps->drown_t -= dt;

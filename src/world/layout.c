@@ -1,5 +1,7 @@
+#include <ctype.h>
 #include "world/layout.h"
 #include "world/pocket.h"
+#include "world/realms.h"
 
 #include "core/noise.h"
 
@@ -63,6 +65,12 @@ int world_flavor(const World *w, int cx, int cy, int cz) {
 }
 
 int world_region(const World *w, int cx, int cy, int cz, int *tier) {
+    int realm = realm_at(cx, cy, cz);
+    if (realm >= 0) { /* a realm behind the Gate: its rank from its own danger */
+        *tier = MINI(10, REALMS[realm].level / 3);
+        int st = REALMS[realm].stratum;
+        return st > ST_DUNGEON ? REG_UP : st < ST_DUNGEON ? REG_DOWN : REG_NONE;
+    }
     int fl = world_flavor(w, cx, cy, cz), st = world_stratum(w, cx, cy, cz);
     int ht = fl == FL_OLD ? 0 : FLAVORS[fl].tier, hax = fl == FL_OLD ? REG_NONE : FLAVORS[fl].axis; /* axis 1-4 = REG_NORTH.. */
     int vt = abs(st - ST_DUNGEON), vax = st > ST_DUNGEON ? REG_UP : st < ST_DUNGEON ? REG_DOWN : REG_NONE;
@@ -154,7 +162,7 @@ bool world_structure_at(const World *w, int cx, int cy, int cz, Structure *out) 
         make_vestibule(w, out);
         return true;
     }
-    if (world_is_exterior(cx, cy, cz)) return false;
+    if (world_is_exterior(cx, cy, cz) || world_is_realm(cx, cy, cz)) return false;
     Structure s;
     if (!cell_structure(w, floordiv(cx, SUPER), floordiv(cy, SUPER), floordiv(cz, SUPER), &s)) return false;
     if (cx < s.cx0 || cx >= s.cx0 + s.sx || cy < s.cy0 || cy >= s.cy0 + s.sy || cz < s.cz0 || cz >= s.cz0 + s.sz)
@@ -169,7 +177,15 @@ void world_chunk_info(const World *w, int cx, int cy, int cz, ChunkInfo *ci) {
     ci->seed = hash3(w->seed, cx, cy, cz, 0xC4);
     ci->difficulty = world_difficulty(cx, cy, cz);
     ci->level = (int)ci->difficulty;
-    if (world_is_pocket(cx, cy, cz)) {
+    int realm = realm_at(cx, cy, cz);
+    if (realm >= 0) {
+        /* a realm behind the Gate: its own look, its own danger; the stratum picks its monsters */
+        ci->stratum = REALMS[realm].stratum;
+        ci->flavor = (u8)realm_flavor(realm);
+        ci->arch = ARCH_REALM;
+        ci->difficulty = REALMS[realm].level;
+        ci->level = REALMS[realm].level;
+    } else if (world_is_pocket(cx, cy, cz)) {
         /* the pocket realm: always the same castle, nothing hostile */
         ci->stratum = ST_HEAVEN;
         ci->flavor = FL_SANCTUM;
@@ -229,6 +245,7 @@ static bool struct_stair_ok(const ChunkInfo *c, bool up) {
 int world_face_portals(const World *w, int axis, int lx, int ly, int lz, Portal *out, int max) {
     int ux = lx + (axis == 0), uy = ly + (axis == 1), uz = lz + (axis == 2);
     if (world_is_pocket(lx, ly, lz) || world_is_pocket(ux, uy, uz)) return 0; /* nothing leads into the pocket realm */
+    if (world_is_realm(lx, ly, lz) || world_is_realm(ux, uy, uz)) return 0;   /* nor into the realms (the Gate does) */
     bool eL = world_is_exterior(lx, ly, lz), eU = world_is_exterior(ux, uy, uz);
     if (eL || eU) {
         if (axis == 0 && lx == -1 && ly == 0 && (lz == -1 || lz == 0) && eL && !eU && max > 0) {
@@ -322,6 +339,11 @@ void world_place_name(const ChunkInfo *ci, char *buf, int n) {
     theme_name(ci->theme, tn, sizeof tn);
     if (ci->arch == ARCH_EXTERIOR) snprintf(buf, (size_t)n, "Before the Gates");
     else if (ci->arch == ARCH_POCKET) snprintf(buf, (size_t)n, "The Sanctum");
+    else if (ci->arch == ARCH_REALM) {
+        int r = realm_of_flavor(ci->flavor);
+        const char *nm = r >= 0 ? REALMS[r].name : "a realm";
+        snprintf(buf, (size_t)n, "%c%s", toupper((unsigned char)nm[0]), nm + 1);
+    }
     else if (ci->has_struct && ci->st.type == STRUCT_VESTIBULE) snprintf(buf, (size_t)n, "The Grand Vestibule");
     else if (ci->has_struct) snprintf(buf, (size_t)n, "%s - %s", tn, STRUCT_NAMES[ci->st.type]);
     else snprintf(buf, (size_t)n, "%s (%s)", tn, ARCH_NAMES[ci->arch]);

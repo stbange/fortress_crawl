@@ -180,8 +180,27 @@ static void crop_grows(Game *g, int x, int y, int z, float r) {
     if (t < -2.0f && r < 0.3f) { wither(g, x, y, z, B_AIR); return; }
     if (!age) return; /* ripe */
     bool home = world_is_pocket(floordiv(x, CHUNK), floordiv(y, CHUNK), floordiv(z, CHUNK));
-    if (light_at(g, x, y, z) < 5 || t < 2.0f || t > 40.0f || !(home || damp(g, x, y - 1, z)) || r > 0.4f) return;
+    int realm = realm_at(floordiv(x, CHUNK), floordiv(y, CHUNK), floordiv(z, CHUNK));
+    bool garden = realm >= 0 && (REALMS[realm].rules & RR_GROWTH); /* the Garden of the First Seed: watered, and twenty times as fast */
+    if (light_at(g, x, y, z) < 5 || t < 2.0f || t > 40.0f || !(home || garden || damp(g, x, y - 1, z)) || r > (garden ? 1.0f : 0.4f)) return;
     chunkmap_set_stain(&g->map, x, y, z, (u8)((st & 0x3F) | (age == 2 ? 0 : (2 << 6))));
+}
+
+/* The plants of the realms behind the Gate (realms.h): they spread to the bare earth beside
+ * them; in the Garden of the First Seed twenty times as fast. True when the cell was a realm's. */
+static bool realm_cell(Game *g, int x, int y, int z, Block b, float r) {
+    int realm = realm_at(floordiv(x, CHUNK), floordiv(y, CHUNK), floordiv(z, CHUNK));
+    if (realm < 0) return false;
+    if (b != B_AIR) return false;
+    bool fast = REALMS[realm].rules & RR_GROWTH;
+    if (r > (fast ? 0.5f : 0.025f) || !earth(blk(g, x, y - 1, z)) || dig_protected(g, x, y, z)) return true;
+    static const int D[8][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 }, { 1, 1 }, { -1, -1 }, { 1, -1 }, { -1, 1 } };
+    for (int k = 0; k < 8; k++)
+        for (int dy = -1; dy <= 1; dy++) {
+            Block n = blk(g, x + D[k][0], y + dy, z + D[k][1]);
+            if (n >= B_RFLORA_LOW && n <= B_RFLORA_GLOW) { grow(g, x, y, z, n); return true; }
+        }
+    return true;
 }
 
 static void bio_cell(Game *g, int x, int y, int z, u64 h) {
@@ -190,6 +209,7 @@ static void bio_cell(Game *g, int x, int y, int z, u64 h) {
     marks(g, x, y, z, b, hash_unit(h >> 40));
     if (b == B_CROP) { crop_grows(g, x, y, z, r); return; }
     if (heat_rules(g, x, y, z, b, hash_unit(h >> 20))) return;
+    if (realm_cell(g, x, y, z, b, r)) return;
     if ((b == B_AIR || b == B_ASH || b == B_GRASS || b == B_ROCK || b == B_BONES) && !growing_weather(g, x, y, z)) return;
     if (b == B_AIR || b == B_ASH) {
         Block below = blk(g, x, y - 1, z), above = blk(g, x, y + 1, z);
@@ -395,7 +415,10 @@ void bio_update(Game *g, float dt) {
         PlayerSlot *ps = &g->players[k];
         if (!ps->active || ps->st.dead) continue;
         int px = (int)floorf(ps->pl.pos.x), py = (int)floorf(ps->pl.pos.y), pz = (int)floorf(ps->pl.pos.z);
-        for (int s = 0; s < BIO_SAMPLES; s++) {
+        /* the Garden of the First Seed: life twelve times as busy (with its sure growth, twenty) */
+        int realm = realm_at_w(ps->pl.pos.x, ps->pl.pos.y, ps->pl.pos.z);
+        int samples = realm >= 0 && (REALMS[realm].rules & RR_GROWTH) ? BIO_SAMPLES * 12 : BIO_SAMPLES;
+        for (int s = 0; s < samples; s++) {
             u64 h = mix64((u64)bio_tick * 0x9E3779B97F4A7C15ull + (u64)s * 0xBF58476D1CE4E5B9ull + (u64)k);
             int x = px + (int)(h % (2 * BIO_RANGE + 1)) - BIO_RANGE, z = pz + (int)((h >> 10) % (2 * BIO_RANGE + 1)) - BIO_RANGE;
             int y = py + (int)((h >> 20) % 13) - 6;

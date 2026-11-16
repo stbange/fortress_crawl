@@ -40,6 +40,7 @@ float heat_base_theme(int theme) {
     if (fl >= FL_FROST && fl <= FL_LASTCOLD) t = -6.0f - 1.6f * (float)(fl - FL_FROST);
     else if (fl >= FL_SANDSTONE && fl <= FL_SUNBLAST) t = 26.0f + 2.0f * (float)(fl - FL_SANDSTONE);
     else if (fl == FL_SANCTUM) return 18.0f;
+    else if (realm_of_flavor(fl) >= 0) return gate_temperature(realm_of_flavor(fl));
     if (st == ST_CORE || st == ST_MAW || st == ST_IRONHELL || st == ST_INFERNO) t += 18.0f;
     else if (st == ST_CLOUDS || st == ST_HEAVEN || st == ST_ASTRAL || st == ST_STORM) t -= 6.0f;
     return t;

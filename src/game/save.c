@@ -12,7 +12,7 @@
  * user's preference folder. The world itself never needs saving: the seed rebuilds it. */
 
 #define SAVE_MAGIC 0x56534346u /* "FCSV" */
-#define SAVE_VERSION 24 /* 24: seeds; 23: firewood; 22: insect swarms; 21: the numbers of animals and plants per chunk; 20: the marks on cells (wet, soot, scorch, plants' age); 19: flasks to throw; 18: the fur cloak, warmth and cold of each character; 17: when each chunk was last seen (the world goes on while you are away); 16: the clouds of gas in the air; 15: what was broken in the world, the pickaxe and bombs; 14: the ledger of deeds (choices); 13: the story generator of the world; 12: the forge (materials, smithing, blueprints, runes); 11: the Sanctum's decorations, keystones bought; 10: meal variety, toxicity, torn formulae; 9: alchemy (reagents, elixirs, formulae, the elixir working); 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms;
+#define SAVE_VERSION 25 /* 25: the realms behind the Gate (attuned, rulers fallen, plants and animals met; where you went through from); 24: seeds; 23: firewood; 22: insect swarms; 21: the numbers of animals and plants per chunk; 20: the marks on cells (wet, soot, scorch, plants' age); 19: flasks to throw; 18: the fur cloak, warmth and cold of each character; 17: when each chunk was last seen (the world goes on while you are away); 16: the clouds of gas in the air; 15: what was broken in the world, the pickaxe and bombs; 14: the ledger of deeds (choices); 13: the story generator of the world; 12: the forge (materials, smithing, blueprints, runes); 11: the Sanctum's decorations, keystones bought; 10: meal variety, toxicity, torn formulae; 9: alchemy (reagents, elixirs, formulae, the elixir working); 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms;
                           6: weapons with materials, powers, legendaries and memory; 7: the Sanctum per world (written by one
                           build still marked 6); 8: food (the larder, dishes, recipes, the meal) */
 #define EXPLORED_BUDGET (1200 * 1024)
@@ -189,6 +189,7 @@ static void write_player(Buf *b, const Stats *s, const Player *pl) {
     w8(b, s->flasks[0]); w8(b, s->flasks[1]); w8(b, s->flasks[2]); w8(b, s->throw_sel); /* v19 */
     w8(b, s->firewood); /* v23 */
     w8(b, s->seeds); /* v24 */
+    w8(b, s->gate_from_set); wv(b, s->gate_from); wf(b, s->gate_from_yaw); wf(b, s->sunward_t); wf(b, s->gills_t); /* v25 */
 }
 
 /* Explored cells: per chunk a 512-byte mask of the non-zero bytes, then those bytes. */
@@ -318,6 +319,9 @@ bool game_save(Game *g) {
             if (eco[i].init) { wf(&b, eco[i].grazers); wf(&b, eco[i].predators); wf(&b, eco[i].insects); wf(&b, eco[i].carrion); }
         }
     }
+    /* v25: the realms behind the Gate */
+    w32(&b, g->world.realm_attuned); w32(&b, g->world.realm_beaten); w32(&b, g->world.realm_seen);
+    w64(&b, g->world.flora_seen); w64(&b, g->world.fauna_seen);
     char key[64];
     save_key(g->opt.seed, key, sizeof key);
     bool ok = store_write(key, b.d, b.n);
@@ -470,6 +474,13 @@ static void read_player(Rd *r, SavedPlayer *sp) {
     }
     if (r->ver >= 23) s->firewood = (u8)MINI(r8(r), 20);
     if (r->ver >= 24) s->seeds = (u8)MINI(r8(r), 99);
+    if (r->ver >= 25) {
+        s->gate_from_set = r8(r) != 0;
+        s->gate_from = rv(r);
+        s->gate_from_yaw = rf(r);
+        s->sunward_t = clampf(rf(r), 0, 3600);
+        s->gills_t = clampf(rf(r), 0, 3600);
+    }
     if (!s->blueprints) s->blueprints = (1u << WB_DAGGER) | (1u << WB_SWORD) | (1u << WB_SHORTBOW) | (1u << WB_STAFF);
     /* sanity: a save from a broken build must not crash the game */
     if (s->level < 1 || s->level > 999) s->level = 1;
@@ -628,6 +639,14 @@ bool game_load(Game *g) {
                 }
                 if (!r.bad) away_restore(cx, cy, cz, t, e.init ? &e : NULL);
             }
+        }
+        if (r.ver >= 25) {
+            u32 mask = (1u << REALM_COUNT) - 1;
+            g->world.realm_attuned = r32(&r) & mask;
+            g->world.realm_beaten = r32(&r) & mask;
+            g->world.realm_seen = r32(&r) & mask;
+            g->world.flora_seen = r64(&r);
+            g->world.fauna_seen = r64(&r);
         }
         if (r.bad) { /* a broken tail: the Sanctum as a new world has it */
             u8 gen = r.ver >= 13 ? g->world.story_gen : 0;

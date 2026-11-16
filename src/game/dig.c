@@ -47,6 +47,7 @@ static vec3 mat_color(Block b) {
     case B_WEB: case B_BONES: return v3(0.85f, 0.83f, 0.78f);
     case B_MOSS: case B_VINE: return v3(0.3f, 0.5f, 0.22f);
     case B_FLOWER: return v3(0.85f, 0.5f, 0.6f);
+    case B_RFLORA_LOW: case B_RFLORA_TALL: case B_RFLORA_GLOW: return v3(0.5f, 0.6f, 0.45f);
     case B_HIVE: return v3(0.8f, 0.62f, 0.3f);
     case B_ASH: return v3(0.4f, 0.39f, 0.37f);
     case B_OBSIDIAN: return v3(0.15f, 0.1f, 0.2f);
@@ -83,6 +84,9 @@ static void drop_for(Game *g, PlayerSlot *ps, Block b, int x, int y, int z, u64 
     case B_ROOTS:
         if ((h & 7) == 0) pickup_spawn(g, PK_FOOD, at, FD_TUBER, NULL, 0, 0);
         if (ps && ps->st.firewood < 20 && (h & 1)) ps->st.firewood++;
+        break;
+    case B_RFLORA_LOW: case B_RFLORA_TALL: case B_RFLORA_GLOW: /* the plants of the realms */
+        gate_flora_broken(g, ps, b, x, y, z, h);
         break;
     case B_WOOD: /* firewood (P lights a campfire) */
         if (ps && ps->st.firewood < 20) ps->st.firewood = (u8)MINI(20, ps->st.firewood + 2);

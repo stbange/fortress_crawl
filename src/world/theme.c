@@ -1,4 +1,5 @@
 #include "world/theme.h"
+#include "world/realms.h"
 
 /* One stratum per 10 chunks of height (the dungeon around the gate is a little thinner).
  * Fields: name, chunk-y band,
@@ -300,6 +301,93 @@ const FlavorDef FLAVORS[FL_COUNT] = {
         C(150, 140, 120), C(225, 212, 186), C(170, 150, 120), C(205, 188, 160), C(236, 226, 204), C(120, 76, 44),
         C(170, 150, 110), C(230, 180, 70), C(70, 130, 60), C(255, 200, 120), C(150, 70, 50),
         PAT_ASHLAR, FP_TILES, C(255, 200, 130), C(70, 60, 50), B_LANTERN, 0, true },
+    /* ---------- the realms behind the Gate (realms.h): ground is B_DIRT, rock below ---------- */
+#define RF(n) [FL_R_FIRST + (n)]
+    RF(0) = { "Pale Moon", "Lunar", 0, 0, /* the Pale Moon */
+        C(150, 152, 160), C(200, 205, 215), C(140, 145, 160), C(180, 185, 195), C(225, 228, 235), C(110, 110, 120),
+        C(190, 195, 210), C(200, 220, 255), C(175, 178, 185), C(170, 210, 255), C(150, 160, 185),
+        PAT_MARBLE, FP_TILES, C(190, 210, 255), C(5, 6, 12), B_CRYSTAL, 0 },
+    RF(1) = { "Red Moon", "Rust-red", 0, 0,
+        C(120, 50, 35), C(150, 70, 45), C(80, 30, 20), C(130, 60, 40), C(170, 90, 60), C(90, 50, 35),
+        C(140, 80, 60), C(230, 110, 40), C(160, 70, 40), C(255, 130, 70), C(110, 40, 30),
+        PAT_BASALT, FP_FLAGSTONE, C(255, 120, 60), C(40, 14, 8), B_CHAIN, 0 },
+    RF(2) = { "Black Moon", "Hollow", 0, 0,
+        C(30, 28, 36), C(45, 40, 55), C(20, 18, 26), C(36, 32, 44), C(60, 55, 72), C(40, 34, 44),
+        C(55, 55, 70), C(130, 90, 220), C(34, 32, 40), C(120, 90, 255), C(30, 26, 40),
+        PAT_RUNES, FP_FLAGSTONE, C(140, 110, 255), C(2, 2, 5), B_FUNGUS, 0 },
+    RF(3) = { "Sun", "Solar", 0, 0,
+        C(220, 170, 90), C(250, 225, 160), C(220, 160, 60), C(240, 210, 140), C(255, 240, 200), C(180, 120, 60),
+        C(240, 200, 110), C(255, 230, 120), C(230, 190, 110), C(255, 240, 180), C(240, 170, 60),
+        PAT_MARBLE, FP_MOSAIC, C(255, 230, 150), C(120, 80, 30), B_BRAZIER, B_LAVA, true },
+    RF(4) = { "Forge-World", "Forged", 0, 0,
+        C(60, 52, 50), C(80, 72, 68), C(200, 80, 30), C(70, 62, 58), C(100, 90, 85), C(60, 45, 35),
+        C(120, 120, 130), C(255, 140, 40), C(50, 44, 42), C(255, 150, 60), C(70, 50, 45),
+        PAT_BASALT, FP_GRATE, C(255, 140, 50), C(40, 12, 4), B_CHAIN, B_LAVA },
+    RF(5) = { "Glass Desert", "Glassy", 0, 0,
+        C(200, 165, 110), C(225, 200, 150), C(170, 130, 80), C(215, 185, 135), C(240, 225, 190), C(150, 110, 70),
+        C(180, 160, 130), C(120, 220, 230), C(225, 195, 140), C(190, 240, 245), C(190, 120, 70),
+        PAT_ASHLAR, FP_TILES, C(255, 220, 160), C(110, 85, 50), B_BONES, 0 },
+    RF(6) = { "Ocean Keep", "Drowned", 0, 0,
+        C(60, 80, 85), C(80, 120, 120), C(40, 70, 70), C(70, 100, 100), C(120, 160, 150), C(70, 60, 50),
+        C(90, 130, 120), C(120, 230, 210), C(110, 120, 100), C(120, 220, 255), C(50, 90, 90),
+        PAT_SCALES, FP_MOSAIC, C(120, 230, 220), C(4, 18, 30), B_CHAIN, B_WATER },
+    RF(7) = { "Icelands", "Frozen", 0, 0,
+        C(140, 150, 165), C(190, 210, 230), C(120, 140, 170), C(170, 190, 210), C(220, 235, 245), C(110, 90, 70),
+        C(160, 175, 190), C(140, 200, 255), C(235, 240, 248), C(200, 230, 255), C(150, 170, 200),
+        PAT_ICE, FP_FLAGSTONE, C(200, 220, 255), C(150, 160, 180), B_BONES, B_ICE },
+    RF(8) = { "Sea of Night", "Night-tide", 0, 0,
+        C(45, 50, 65), C(70, 78, 100), C(30, 35, 50), C(60, 66, 85), C(100, 110, 140), C(50, 45, 50),
+        C(90, 100, 120), C(170, 190, 255), C(70, 72, 80), C(140, 170, 255), C(40, 45, 70),
+        PAT_ASHLAR, FP_FLAGSTONE, C(170, 190, 255), C(6, 8, 20), B_CHAIN, B_WATER },
+    RF(9) = { "Storm Peaks", "Storm-struck", 0, 0,
+        C(95, 100, 110), C(120, 125, 140), C(70, 75, 90), C(110, 115, 125), C(150, 155, 170), C(70, 60, 55),
+        C(130, 140, 160), C(150, 190, 255), C(105, 115, 100), C(180, 210, 255), C(70, 80, 100),
+        PAT_BIGBRICK, FP_FLAGSTONE, C(170, 200, 255), C(30, 32, 42), B_CHAIN, 0 },
+    RF(10) = { "Shining Court", "Shining", 0, 0,
+        C(220, 220, 215), C(250, 248, 240), C(220, 200, 150), C(240, 238, 228), C(255, 255, 250), C(200, 170, 120),
+        C(230, 210, 150), C(255, 215, 110), C(240, 240, 235), C(255, 245, 210), C(230, 200, 130),
+        PAT_MARBLE, FP_MOSAIC, C(255, 240, 200), C(190, 190, 170), B_LANTERN, 0, true },
+    RF(11) = { "Astral Shore", "Astral", 0, 0,
+        C(60, 55, 90), C(90, 85, 130), C(140, 120, 220), C(80, 75, 115), C(130, 125, 180), C(70, 60, 90),
+        C(150, 150, 190), C(200, 160, 255), C(70, 65, 100), C(190, 170, 255), C(70, 60, 110),
+        PAT_RUNES, FP_MOSAIC, C(200, 180, 255), C(6, 4, 15), B_CRYSTAL, 0, true },
+    RF(12) = { "Hollow Earth", "Primeval", 0, 0,
+        C(110, 90, 65), C(140, 115, 80), C(90, 70, 50), C(120, 100, 70), C(160, 135, 100), C(110, 75, 40),
+        C(120, 110, 90), C(240, 170, 60), C(90, 80, 45), C(255, 200, 120), C(120, 80, 50),
+        PAT_LOGS, FP_DIRT, C(255, 190, 110), C(35, 30, 15), B_ROOTS, B_WATER },
+    RF(13) = { "Fungal Deep", "Spore-grown", 0, 0,
+        C(70, 60, 70), C(90, 80, 85), C(120, 200, 150), C(80, 70, 75), C(120, 110, 115), C(90, 70, 60),
+        C(100, 110, 100), C(120, 255, 170), C(95, 80, 70), C(120, 255, 190), C(80, 60, 70),
+        PAT_SCALES, FP_DIRT, C(130, 255, 180), C(8, 16, 12), B_FUNGUS, B_WATER },
+    RF(14) = { "Bone Fields", "Bone-strewn", 0, 0,
+        C(140, 130, 110), C(200, 190, 165), C(120, 105, 85), C(170, 160, 135), C(225, 215, 190), C(100, 80, 60),
+        C(130, 120, 100), C(200, 60, 50), C(150, 135, 105), C(220, 200, 150), C(130, 110, 90),
+        PAT_ASHLAR, FP_DIRT, C(230, 200, 140), C(50, 45, 30), B_BONES, 0 },
+    RF(15) = { "Clockwork Orrery", "Clockwork", 0, 0,
+        C(90, 80, 70), C(150, 120, 70), C(110, 80, 40), C(130, 110, 75), C(200, 170, 90), C(110, 70, 40),
+        C(200, 160, 70), C(240, 200, 90), C(120, 110, 80), C(200, 220, 255), C(120, 90, 50),
+        PAT_BIGBRICK, FP_GRATE, C(255, 220, 140), C(8, 8, 18), B_CHAIN, 0, true },
+    RF(16) = { "Library of Ash", "Ash-grey", 0, 0,
+        C(85, 80, 78), C(120, 110, 100), C(60, 55, 50), C(100, 92, 85), C(150, 140, 130), C(100, 70, 45),
+        C(110, 100, 90), C(220, 120, 60), C(95, 90, 86), C(255, 180, 120), C(80, 70, 65),
+        PAT_ASHLAR, FP_PLANKS, C(255, 170, 100), C(40, 32, 26), B_LANTERN, 0 },
+    RF(17) = { "Garden of the First Seed", "Verdant", 0, 0,
+        C(110, 105, 90), C(200, 190, 160), C(130, 120, 90), C(170, 160, 130), C(225, 215, 190), C(120, 85, 50),
+        C(150, 140, 110), C(240, 200, 90), C(70, 130, 55), C(220, 255, 200), C(150, 80, 60),
+        PAT_ASHLAR, FP_FLAGSTONE, C(255, 230, 160), C(100, 120, 90), B_LANTERN, B_WATER },
+    RF(18) = { "Fallen Star", "Star-fallen", 0, 0,
+        C(70, 70, 90), C(100, 100, 125), C(80, 90, 160), C(85, 85, 105), C(140, 140, 170), C(60, 55, 60),
+        C(170, 180, 210), C(140, 180, 255), C(80, 80, 95), C(150, 200, 255), C(70, 70, 100),
+        PAT_BASALT, FP_FLAGSTONE, C(160, 200, 255), C(10, 10, 25), B_CRYSTAL, 0 },
+    RF(19) = { "Mirror Fortress", "Mirrored", 0, 0,
+        C(100, 105, 115), C(160, 165, 175), C(110, 115, 125), C(140, 145, 155), C(200, 205, 215), C(90, 85, 90),
+        C(180, 185, 200), C(220, 225, 240), C(110, 112, 120), C(220, 235, 255), C(120, 125, 140),
+        PAT_MARBLE, FP_TILES, C(220, 230, 255), C(10, 10, 14), B_CHAIN, B_WATER },
+    RF(20) = { "Dream", "Dreaming", 0, 0,
+        C(120, 100, 140), C(180, 150, 190), C(140, 100, 160), C(160, 130, 170), C(220, 190, 230), C(140, 100, 120),
+        C(170, 160, 200), C(255, 170, 220), C(130, 110, 150), C(255, 200, 240), C(150, 100, 160),
+        PAT_PLASTER, FP_MOSAIC, C(255, 190, 240), C(40, 25, 50), B_LANTERN, B_WATER, true },
+#undef RF
 };
 #undef C
 
@@ -331,8 +419,12 @@ static void light_levels(Col c, u8 out[3]) {
     out[2] = (u8)((c.b * 15 + m / 2) / m);
 }
 
+/* A realm's palette is its own: no stratum tints it (the stratum only picks its monsters). */
+static const StratumDef REALM_STRATUM = { "realm", 0, 0, { 0 }, { 0 }, { 0, 0, 0 }, 0.0f, 1.0f, 0.0f };
+
 void theme_info(int theme, ThemeInfo *t) {
-    const StratumDef *s = &STRATA[theme_stratum(theme)];
+    int realm = realm_of_flavor(theme_flavor(theme));
+    const StratumDef *s = realm >= 0 ? &REALM_STRATUM : &STRATA[theme_stratum(theme)];
     const FlavorDef *f = &FLAVORS[theme_flavor(theme)];
     memset(t, 0, sizeof *t);
     Col base[BLOCK_TEX_SLOTS] = { 0 };
@@ -389,6 +481,19 @@ void theme_info(int theme, ThemeInfo *t) {
     t->ambient[1] = amb * (0.6f + t->fog[1]);
     t->ambient[2] = amb * (0.6f + t->fog[2]);
     t->sky = s->sky;
+    if (realm >= 0) {
+        const RealmDef *rd = &REALMS[realm];
+        for (int k = 0; k < 3; k++) {
+            t->fog[k] = rd->fog[k];
+            t->ambient[k] = 0.04f + rd->sky[k] / 15.0f * 0.22f;
+        }
+        t->fog_density = rd->fog_density;
+        t->sky = rd->stars > 0;
+        t->mat[B_CRYSTAL] = col_lerp(FLAVORS[theme_flavor(theme)].accent, (Col){ 255, 255, 255 }, 0.15f);
+        light_levels(t->mat[B_CRYSTAL], t->light[LIGHT_CRYSTAL]);
+        const FloraDef *glow = &REALM_FLORA[realm * 3 + 2];
+        light_levels((Col){ glow->col[0][0], glow->col[0][1], glow->col[0][2] }, t->light[LIGHT_FUNGUS]);
+    }
 }
 
 void theme_name(int theme, char *buf, int n) {

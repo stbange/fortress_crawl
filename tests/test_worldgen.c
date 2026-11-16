@@ -11,6 +11,7 @@
  *  7. mechanisms: vault gates open onto a floor reached from the gate, every puzzle can
  *     be solved and does not start solved, traps stand on the floor */
 #include "world/layout.h"
+#include "world/realms.h"
 #include "world/story.h"
 #include "world/history.h"
 #include "world/carve.h"
@@ -123,6 +124,33 @@ static int test_grid_block(void *user, int x, int y, int z) {
     if (y < 0) return B_ROCK; /* the ground goes on down */
     if (x < 0 || z < 0 || x >= 40 || y >= 40 || z >= 40) return B_AIR;
     return grid[y][z][x];
+}
+
+
+/* ---------- realms: a cache of generated chunks ---------- */
+typedef struct { int cx, cy, cz; Block *b; } RChunk;
+static RChunk *g_rc;
+static int g_nrc, g_caprc;
+static Block realm_block(int x, int y, int z) {
+    int cx = floordiv(x, CHUNK), cy = floordiv(y, CHUNK), cz = floordiv(z, CHUNK);
+    for (int i = g_nrc - 1; i >= 0; i--)
+        if (g_rc[i].cx == cx && g_rc[i].cy == cy && g_rc[i].cz == cz) return g_rc[i].b[cidx(x - cx * CHUNK, y - cy * CHUNK, z - cz * CHUNK)];
+    if (g_nrc == g_caprc) { g_caprc = g_caprc ? g_caprc * 2 : 256; g_rc = realloc(g_rc, sizeof(RChunk) * (size_t)g_caprc); }
+    RChunk *c = &g_rc[g_nrc++];
+    c->cx = cx; c->cy = cy; c->cz = cz;
+    c->b = malloc(CHUNK_VOL);
+    world_generate_chunk(&g_world, cx, cy, cz, c->b, NULL);
+    return c->b[cidx(x - cx * CHUNK, y - cy * CHUNK, z - cz * CHUNK)];
+}
+static void realm_cache_clear(void) {
+    for (int i = 0; i < g_nrc; i++) free(g_rc[i].b);
+    g_nrc = 0;
+}
+static bool r_open(int x, int y, int z) { Block b = realm_block(x, y, z); return !block_solid(b) && b != B_LAVA; }
+static bool r_stand(int x, int y, int z) {
+    if (!r_open(x, y, z) || !r_open(x, y + 1, z)) return false;
+    Block below = realm_block(x, y - 1, z);
+    return block_solid(below) || realm_block(x, y, z) == B_WATER;
 }
 
 int main(int argc, char **argv) {
@@ -777,6 +805,76 @@ int main(int argc, char **argv) {
         CHECK(bad == 0, "%d broken vaults or traps", bad);
         CHECK(vaults >= 8, "too few vaults");
         CHECK(front_reached * 10 >= vaults * 7, "too many vault gates cannot be reached from the gate");
+    }
+
+
+    /* realms behind the Gate: every one has ground to arrive on, a keep, its plants, and a
+     * way on foot from the gate to the keep */
+    {
+        int reached = 0;
+        u32 picked = realm_pick(g_world.seed);
+        int npick = 0;
+        for (int r = 0; r < REALM_COUNT; r++) npick += (picked >> r) & 1;
+        CHECK(npick >= 6 && npick <= 8, "a world must be joined to 6 to 8 realms");
+        for (int r = 0; r < REALM_COUNT; r++) {
+            int ax, ay, az, kx, ky, kz;
+            realm_arrival(r, &ax, &ay, &az);
+            realm_keep(r, &kx, &ky, &kz);
+            ChunkInfo ci;
+            world_chunk_info(&g_world, ax / CHUNK, ay / CHUNK, az / CHUNK, &ci);
+            CHECK(ci.arch == ARCH_REALM && realm_of_flavor(ci.flavor) == r && ci.level == REALMS[r].level, "realm chunk info");
+            bool arrive_ok = r_stand(ax, ay, az + 3);
+            CHECK(arrive_ok, "nowhere to stand where you arrive in a realm");
+            /* walk: from the arrival, a breadth-first search over standable cells */
+            int span = REALM_W, y0 = ay - 48, ylen = 112;
+            u8 *seen = calloc((size_t)span * span * ylen, 1);
+            int *q = malloc(sizeof(int) * 4 * 400000);
+            int qh = 0, qt = 0;
+            #define RIDX(x, y, z) (((size_t)((y) - y0) * span + (z)) * span + (x))
+            q[qt * 3] = ax; q[qt * 3 + 1] = ay; q[qt * 3 + 2] = az + 3; qt++;
+            seen[RIDX(ax, ay, az + 3)] = 1;
+            bool found = false;
+            int flora = 0, visited = 0;
+            while (qh < qt && !found && qt < 390000) {
+                int x = q[qh * 3], y = q[qh * 3 + 1], z = q[qh * 3 + 2];
+                qh++;
+                visited++;
+                if (abs(x - kx) <= 6 && abs(z - kz) <= 6 && abs(y - ky) <= 3) found = true;
+                Block here = realm_block(x, y, z);
+                if (here >= B_RFLORA_LOW && here <= B_RFLORA_GLOW) flora++;
+                static const int D4[4][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } };
+                for (int d = 0; d < 4; d++)
+                    for (int dy = 1; dy >= -4; dy--) {
+                        int nx = x + D4[d][0], nz = z + D4[d][1], ny = y + dy;
+                        if (nx < 0 || nz < 0 || nx >= span || nz >= span || ny < y0 || ny >= y0 + ylen) continue;
+                        if (dy > 0 && !r_open(x, y + 2, z)) continue;
+                        if (!r_stand(nx, ny, nz)) continue;
+                        bool clear = true; /* a step down: the way down the neighbour's column is open */
+                        for (int k = ny + 2; k <= y + 1 && clear; k++) clear = r_open(nx, k, nz);
+                        if (!clear) break;
+                        if (seen[RIDX(nx, ny, nz)]) break;
+                        seen[RIDX(nx, ny, nz)] = 1;
+                        q[qt * 3] = nx; q[qt * 3 + 1] = ny; q[qt * 3 + 2] = nz; qt++;
+                        break;
+                    }
+                /* swimming up and down */
+                if (here == B_WATER)
+                    for (int dy = -1; dy <= 1; dy += 2)
+                        if (y + dy >= y0 && y + dy < y0 + ylen && r_stand(x, y + dy, z) && !seen[RIDX(x, y + dy, z)]) {
+                            seen[RIDX(x, y + dy, z)] = 1;
+                            q[qt * 3] = x; q[qt * 3 + 1] = y + dy; q[qt * 3 + 2] = z; qt++;
+                        }
+            }
+            #undef RIDX
+            printf("realm %2d %-38s level %2d  arrive %s  keep %s on foot (%d cells walked, %d plants met)\n", r, REALMS[r].name, REALMS[r].level,
+                   arrive_ok ? "ok" : "BAD", found ? "reached" : "NOT reached", visited, flora);
+            reached += found;
+            free(seen);
+            free(q);
+            realm_cache_clear();
+        }
+        printf("realms: the keep reached on foot in %d of %d\n", reached, REALM_COUNT);
+        CHECK(reached >= REALM_COUNT - 2, "too many realms where the keep cannot be reached from the gate");
     }
 
     if (g_fail) printf("%d check(s) failed\n", g_fail);
