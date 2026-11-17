@@ -76,6 +76,7 @@ typedef struct Bot {
     bool hunting;    /* king bot: on its way to a great dragon for its heart and blood */
     u64 hunt_key;
     int hunts, dragons;
+    float next_hunt_note;
     float avoid_until;
     float vertical_until; /* the thread's end is reached: now go up or down the stairs */
     bool low;
@@ -386,12 +387,13 @@ static void plan(PlayerSlot *ps) {
     }
     bool talk;
     B.hunting = false;
-    if (B.style == BS_KING && !king_bot_target(G, ps, &tgt, &talk) && (king_bot_needs(G, ps) & KN_DRAGON)) {
-        /* nothing on the way it can do now, and what is left needs a dragon's heart or blood:
-         * the nearest great dragon it can face */
-        int lvl;
-        u64 key;
-        if (dragon_lair_near(G, feet, ps->st.level + 2, &tgt, &lvl, &key)) {
+    int lvl = 0;
+    u64 key = 0;
+    if (B.style == BS_KING && (king_bot_needs(G, ps) & KN_DRAGON)) {
+        /* the way needs a dragon's heart or blood: the nearest great dragon it can face first */
+        bool lair = dragon_lair_near(G, feet, ps->st.level + 2, &tgt, &lvl, &key);
+        if (!lair && B.t >= B.next_hunt_note) { B.next_hunt_note = B.t + 300.0f; logf_("%7.1f DRAGON wanted, but no lair within reach of level %d\n", B.t, ps->st.level + 2); }
+        if (lair) {
             if (key != B.hunt_key) { B.hunt_key = key; B.hunts++; logf_("%7.1f DRAGON hunt: a lair of level %d at %.0f %.0f %.0f\n", B.t, lvl, tgt.x, tgt.y, tgt.z); }
             B.hunting = true;
             has_tgt = true;
@@ -399,7 +401,8 @@ static void plan(PlayerSlot *ps) {
             if (ri >= 0 && dist_[ri] > 1) { B.goal_kind = 0; set_path_to(ri); B.goal = tgt; return; }
             if (fabsf(tgt.y - feet.y) > 6.0f) B.vertical_until = B.t + 20.0f;
         }
-    } else if (B.style == BS_KING && king_bot_target(G, ps, &tgt, &talk)) { /* the Old King's way (king.c) */
+    }
+    if (B.style == BS_KING && !B.hunting && king_bot_target(G, ps, &tgt, &talk)) { /* the Old King's way (king.c) */
         has_tgt = true;
         int ri = reach_index(tgt);
         if (ri >= 0 && dist_[ri] > 1) { /* in reach: straight there */

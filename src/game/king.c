@@ -784,6 +784,7 @@ bool king_bot_target(Game *g, PlayerSlot *ps, vec3 *at, bool *talk) {
         if (!step_open(g, K, i)) continue;
         int t = K->step[i].type;
         if (t == KS_BREW && (!(ps->st.reag[RG_PHOENIX] || ps->st.reag[RG_HEARTSTONE]) || !ps->st.reag[RG_ORCHID])) continue;
+        if (t == KS_ALLEGIANCE && ps->st.gold < 500) continue; /* (the bot wins friendship with gold for the works) */
         vec3 p;
         bool tk;
         if (!step_place(g, K, i, &p, &tk)) continue;
