@@ -150,28 +150,33 @@ at the end. `test_worldgen` checks the way of every seed and two heirs each.
 
 ## How long the way takes (bots, November 2026)
 
-`--bot king`, four seeds, three hours of play each (1337, 42, 777, 2024). No bot reached the
-throne. When each step was done (minutes of play):
+`--bot king`, four seeds, three hours of play each (1337, 42, 777, 2024). The bot follows the
+Golden Thread to the step the line at the top follows; goes home for the vision; builds the
+island and the forge first and buys steel when the forge step is open; buys an orchid where one
+is sold; and, when the way needs a dragon's heart or blood, hunts the nearest great dragon whose
+lair is no more than two levels above its own (the thread leads it there). No bot has reached
+the throne yet. Minutes of play when each group was done, from the last batch:
 
-| Seed | Steps 1-3 done | Steps 4-7 | Where it stopped |
-|---|---|---|---|
-| 1337 | 11 | 2 of 4 by 47 | the forge (no forge built, no titan heart) |
-| 777 | 21 | 0 | the brew (no dragon's blood) |
-| 2024 | 21 | 2 of 4 by 74 | the brew |
-| 42 | 2 of 3 by 9 | - | stood 90 minutes 38 m from the stele, with no path found to it |
+| Seed | Steps 1-3 | Steps 4-7 | Dragons slain | Where it stopped |
+|---|---|---|---|---|
+| 1337 | 11 | 3 of 4 by 50 | 0 | the realm step (a ruler behind the Gate: the bot does not travel there) |
+| 42 | 24 | 2 of 4 by 91 | 2 (one hunted, then the way's own) | still on the means at the end |
+| 2024 | 21 | 0 | 0 | reached its lair (hunted at 31 min) but did not win there |
+| 777 | 2 of 3 by 17 | - | 0 | the vision (home trips come too seldom for it) |
 
 What it shows:
-- **Finding out (steps 1-3) takes 10-20 minutes**, which suits a first act.
-- **The means (steps 4-7) are where a way stalls**: the forge needs the Sanctum built to its
-  forge and a dragon's heart, the brew a dragon's blood, so the dragon step is in practice their
-  key. The bot does not plan for that; a player told by the hints might, but should not have to
-  guess the order. Worth considering: the brew and forge steps say where their parts come from
-  (they do), and the bot learns to hunt a dragon first.
-- Navigation to a marker on the same layer can still fail where the floor is walled off from
-  the side one comes from (seed 42), a known gap of the generator.
+- **Finding out (steps 1-3) takes 10-25 minutes**: a first act.
+- **The means (steps 4-7) are the long part**, and their order is not free in practice: the
+  forge and the brew need a dragon's heart and blood, so a dragon comes first. Great dragons
+  near enough in danger are often 200-400 m away and a few layers off; the thread gets there,
+  but slowly. A player who reads the hints will do the same in fewer detours.
+- **Steps the bot still cannot do**: a realm's ruler behind the Gate, and the vision when its
+  home trips are rare. Both block a way until done.
+- A marker on the same layer can still be unreachable from the side one comes from (seen once,
+  seed 42 in an earlier batch), a known gap of the generator.
 
-Time to the throne is not measured yet; it needs the bot to gather a dragon's parts and build
-the forge, or a human playtest.
+Time to the throne is not measured yet: next for the bot are trips through the Gate for the realm
+step, and a home trip as soon as the vision is the only step left.
 
 ## Code
 
