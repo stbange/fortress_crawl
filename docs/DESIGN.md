@@ -81,7 +81,8 @@ See [OLD_KING.md](OLD_KING.md). In short:
 - **The realms** ([REALMS.md](REALMS.md)): twenty-one worlds behind the Gate, each with a ruler.
 
 The line at the top shows one of them at a time: the Old King's way by default; **Y** moves it to
-the chronicle or a town's task and back.
+the chronicle or a town's task and back. The Golden Thread (G) leads to the king's step, or to
+the chronicle's target when the line follows the chronicle.
 
 ## Co-op
 

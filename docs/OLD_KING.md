@@ -70,7 +70,7 @@ shows the nearest open step and its direction; each step done shows a banner
 ## On the way
 
 - **The line at the top** follows the nearest open step (Y moves it to the chronicle or a town's
-  task). The first time it follows a step, a line says how that step is done: the way teaches
+  task), and the Golden Thread (G) leads to it. The first time it follows a step, a line says how that step is done: the way teaches
   the game (the Sanctum Door, the STORY tab, crouching past a sleeping dragon, the forge, the
   Gate, a town's works).
 - **The chronicle counts**: when the chronicle of your motive ends (the one who opened the seal),

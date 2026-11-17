@@ -1519,7 +1519,9 @@ static int thread_path(Game *g, vec3 from, vec3 goal, Thread *th) {
 /* The goals the thread can lead to: the chapter target, then the missions. */
 static int thread_goals(Game *g, PlayerSlot *ps, vec3 *goal, char names[][STORY_NAME], int max) {
     int n = 0;
-    if (ps->st.motive) {
+    /* the Old King's way first, unless the line at the top follows something else (Y) */
+    if (ps->track != 1 && king_thread_goal(g, ps, &goal[n], names[n], STORY_NAME)) n++;
+    if (ps->st.motive && n < max) {
         ensure_target(g, ps);
         Monster *m = find_named(g, ps->target.key);
         goal[n] = m ? v3_add(m->pos, v3(0, 0.5f, 0)) : chunk_centre(ps->target.cx, ps->target.cy, ps->target.cz);

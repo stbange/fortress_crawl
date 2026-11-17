@@ -423,7 +423,7 @@ last and shows what is saved; *New characters* (press twice) deletes the save of
 | K / N | eat the best dish you carry / the FOOD tab (cooking at a fire, the larder, the cookbook) |
 | V / O | drink an elixir (the last one brewed or drunk) / the ALCHEMY tab (brewing at a shrine or at home) |
 | U | the FORGE tab (at the anvil: X or LEFT the bellows, ENTER or UP strikes) |
-| G | Golden Thread: a fading line to your story target (again: next mission) |
+| G | Golden Thread: a fading line to the Old King's next step, or your story target (again: the next goal) |
 | Y | the line at the top follows the next of: the Old King's way, the chronicle, a town's task |
 | TAB, I, B, L | character menu: last tab, inventory, spellbook, story; SHOP, FOOD, ALCHEMY and FORGE are the fifth to eighth tabs (Q/E or [ ] switch tabs) |
 | in the menu | arrows or WASD select, Enter equips / uses / learns / makes a spell active, Del or X scraps a weapon |

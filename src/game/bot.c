@@ -332,7 +332,7 @@ static void plan(PlayerSlot *ps) {
         int ri = reach_index(p->pos);
         if (ri < 0) continue;
         float sc = dist_[ri] - (p->kind == PK_CHEST ? 15.0f : 0.0f) - (p->kind == PK_RELIC ? 20.0f : 0.0f);
-        int max_d = B.style == BS_QUESTER && ps->thread.n > 1 ? 10 : 60; /* the quester keeps to its thread */
+        int max_d = (B.style == BS_QUESTER || B.style == BS_KING) && ps->thread.n > 1 ? 10 : 60; /* the quester keeps to its thread */
         if (sc < bscore && dist_[ri] < max_d) { bscore = sc; best = ri; best_i = i; }
     }
     if (best >= 0) {
@@ -354,7 +354,7 @@ static void plan(PlayerSlot *ps) {
         return;
     }
     /* the quester follows the Golden Thread: the farthest point of it within reach */
-    if (B.style == BS_QUESTER && ps->thread.n > 1 && ps->thread.t < ps->thread.life) {
+    if ((B.style == BS_QUESTER || B.style == BS_KING) && ps->thread.n > 1 && ps->thread.t < ps->thread.life) {
         int bi = -1;
         for (int k = ps->thread.n - 1; k >= 0 && bi < 0; k--) {
             int ri = reach_index(ps->thread.pts[k]);
@@ -1376,6 +1376,6 @@ bool bot_step(Game *g, PlayerInput *in, float dt) {
     }
     follow_path(ps, in, dt, B.goal_kind == 0 && s->hp > s->maxhp * 0.5f);
     /* the golden thread now and then for the quester */
-    if (B.style == BS_QUESTER && (ps->thread.n == 0 || ps->thread.t >= ps->thread.life) && fmodf(B.t, 5.0f) < dt) cast_util(g, ps, SU_THREAD);
+    if ((B.style == BS_QUESTER || B.style == BS_KING) && (ps->thread.n == 0 || ps->thread.t >= ps->thread.life) && fmodf(B.t, 5.0f) < dt) cast_util(g, ps, SU_THREAD);
     return true;
 }

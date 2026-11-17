@@ -673,55 +673,80 @@ bool king_use(Game *g, PlayerSlot *ps) {
 /* Where the bot should go for the nearest step it can do now, and whether to strike there (to
  * talk). Steps that need home (the vision, the forge), the Gate, a town's tasks or a brew's
  * reagents are left to the rest of its play. */
+/* Where a step happens now: the one to talk to, its marker, the lair, the king; and whether to
+ * strike there (to talk). False for a step with no place in the fortress. */
+static bool step_place(Game *g, const KingWay *K, int i, vec3 *at, bool *talk) {
+    const KingStep *st = &K->step[i];
+    vec3 p = step_centre(st);
+    bool t = false;
+    switch (st->type) {
+    case KS_VISION: case KS_FORGE: case KS_REALM: return false;
+    case KS_HERALD: case KS_BREW: case KS_ALLEGIANCE: {
+        int role = st->type == KS_BREW ? FR_HEALER : FR_ELDER;
+        for (int k = 0; k < MAX_FOLK; k++) {
+            Folk *f = &g->folk[k];
+            if (f->alive && f->role == role && f->rec >= 0 && f->rec < g->world.ntowns && g->world.towns[f->rec].key == st->key) { p = f->pos; t = true; }
+        }
+        break;
+    }
+    case KS_WITNESS:
+        for (int k = 0; k < MAX_FOLK; k++) if (g->folk[k].alive && g->folk[k].rec == -100 - i) { p = g->folk[k].pos; t = true; }
+        break;
+    case KS_THRONE: {
+        vec3 seat, centre;
+        Monster *m = the_king(g);
+        if (m) { p = m->pos; t = m->resident || falter_t > 0; }
+        else if (throne_place(g, K, &seat, &centre)) p = centre;
+        break;
+    }
+    default:
+        for (int k = 0; k < MAX_MARKS; k++) if (marks[k].on && marks[k].step == i) p = marks[k].pos;
+        if (st->type == KS_DRAGON || st->type == KS_WYRM) {
+            Structure s;
+            Lair L;
+            if (world_structure_at(&g->world, st->cx, st->cy, st->cz, &s) && lair_from_structure(&s, &L)) p = v3(L.cx + 0.5f, (float)L.floor, L.cz + 0.5f);
+        }
+        for (int k = 0; k < MAX_MONSTERS; k++) if (g->mons[k].alive && g->mons[k].kingstep == i + 1) p = g->mons[k].pos;
+        break;
+    }
+    *at = p;
+    *talk = t;
+    return true;
+}
+
+/* The Golden Thread (quests.c) follows the line at the top: the step it follows, if it has a place. */
+bool king_thread_goal(Game *g, PlayerSlot *ps, vec3 *at, char *name, int n) {
+    const KingWay *K = way(g);
+    if (!K->valid || king_won(g)) return false;
+    int s = tracked_step(g, K, ps);
+    bool talk;
+    if (s < 0 || !step_place(g, K, s, at, &talk)) return false;
+    char goal[160];
+    step_goal(g, K, s, goal, sizeof goal);
+    snprintf(name, (size_t)n, "%.40s", goal);
+    return true;
+}
+
+/* Where the bot should go for the nearest step it can do now, and whether to strike there (to
+ * talk). Steps that need home (the vision, the forge), the Gate, a town's tasks or a brew's
+ * reagents are left to the rest of its play. */
 bool king_bot_target(Game *g, PlayerSlot *ps, vec3 *at, bool *talk) {
     const KingWay *K = way(g);
     if (!K->valid || king_won(g)) return false;
     int best = -1;
     float bd = 1e9f;
-    vec3 bp = ps->pl.pos;
-    bool btalk = false;
     for (int i = 0; i < KING_STEPS; i++) {
         if (!step_open(g, K, i)) continue;
-        const KingStep *st = &K->step[i];
-        vec3 p = step_centre(st);
-        bool t = false;
-        switch (st->type) {
-        case KS_VISION: case KS_FORGE: case KS_REALM: case KS_ALLEGIANCE: continue;
-        case KS_BREW: if (!(ps->st.reag[RG_PHOENIX] || ps->st.reag[RG_HEARTSTONE]) || !ps->st.reag[RG_ORCHID]) continue; /* fall through */
-        case KS_HERALD: {
-            int role = st->type == KS_HERALD ? FR_ELDER : FR_HEALER;
-            for (int k = 0; k < MAX_FOLK; k++) {
-                Folk *f = &g->folk[k];
-                if (f->alive && f->role == role && f->rec >= 0 && f->rec < g->world.ntowns && g->world.towns[f->rec].key == st->key) { p = f->pos; t = true; }
-            }
-            break;
-        }
-        case KS_WITNESS:
-            for (int k = 0; k < MAX_FOLK; k++) if (g->folk[k].alive && g->folk[k].rec == -100 - i) { p = g->folk[k].pos; t = true; }
-            break;
-        case KS_THRONE: {
-            vec3 seat, centre;
-            Monster *m = the_king(g);
-            if (m) { p = m->pos; t = m->resident || falter_t > 0; }
-            else if (throne_place(g, K, &seat, &centre)) p = centre;
-            break;
-        }
-        default:
-            for (int k = 0; k < MAX_MARKS; k++) if (marks[k].on && marks[k].step == i) p = marks[k].pos;
-            if (st->type == KS_DRAGON || st->type == KS_WYRM) {
-                Structure s;
-                Lair L;
-                if (world_structure_at(&g->world, st->cx, st->cy, st->cz, &s) && lair_from_structure(&s, &L)) p = v3(L.cx + 0.5f, (float)L.floor, L.cz + 0.5f);
-            }
-            break;
-        }
+        int t = K->step[i].type;
+        if (t == KS_ALLEGIANCE) continue;
+        if (t == KS_BREW && (!(ps->st.reag[RG_PHOENIX] || ps->st.reag[RG_HEARTSTONE]) || !ps->st.reag[RG_ORCHID])) continue;
+        vec3 p;
+        bool tk;
+        if (!step_place(g, K, i, &p, &tk)) continue;
         float d = v3_len(v3_sub(p, ps->pl.pos));
-        if (d < bd) { bd = d; best = i; bp = p; btalk = t; }
+        if (d < bd) { bd = d; best = i; *at = p; *talk = tk; }
     }
-    if (best < 0) return false;
-    *at = bp;
-    *talk = btalk;
-    return true;
+    return best >= 0;
 }
 
 /* ---------- raids on the towns ---------- */

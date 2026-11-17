@@ -870,6 +870,7 @@ void king_draw_credits(Game *g, PlayerSlot *ps, int W, int H);
 void king_heir(Game *g);
 bool king_raids_on(Game *g);
 bool king_bot_target(Game *g, PlayerSlot *ps, vec3 *at, bool *talk);
+bool king_thread_goal(Game *g, PlayerSlot *ps, vec3 *at, char *name, int n);
 int king_raid(Game *g, vec3 at, int level, int n, u64 key); /* raiders (king 4) */
 bool king_faltering(const Monster *m);
 void king_lore_text(Game *g, int a, char *out, int n);
