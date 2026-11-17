@@ -677,6 +677,7 @@ static void survive(Game *g, PlayerSlot *ps, bool in_fight) {
     /* a trip home when worn out and nobody is close */
     bool worn = s->hp < s->maxhp * 0.5f && s->potions_hp == 0;
     bool rich = s->gold >= 2000 && B.t >= B.next_home; /* ranks, relics and building are sold at home */
+    if (B.style == BS_KING && king_bot_home(G) && B.t >= B.next_home - 480.0f) rich = true; /* the Old King's vision: a night at home */
     if (!in_fight && !realm_has(ps->pl.pos) && (worn || rich) && s->spell_cd <= 0 && B.realm_phase == 0) {
         if (cast_util(g, ps, SU_SANCTUM)) {
             B.realm_phase = 1;
@@ -1300,6 +1301,7 @@ bool bot_step(Game *g, PlayerInput *in, float dt) {
             d.y = 0;
             if (v3_len(d) < 2.3f) {
                 face(ps, v3_add(at, v3(0, 1.2f, 0)), 8.0f, dt);
+                in->crouch = s->gold >= 500; /* gold for the town's works (a town's friendship) */
                 ps->pad_attack = facing(ps, v3_add(at, v3(0, 1.2f, 0)), 0.3f) && fmodf(B.t, 1.0f) < dt * 2.0f;
                 if (ps->pad_attack) logf_("%7.1f KING talk at %.0f %.0f %.0f\n", B.t, at.x, at.y, at.z);
                 return true;

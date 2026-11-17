@@ -306,6 +306,13 @@ static bool standable(Game *g, int x, int y, int z) {
 }
 
 static bool spot_in_chunk(Game *g, int cx, int cy, int cz, u64 seed, vec3 *out) {
+    /* on the layer's own floor first, where one walks (not atop a pillar or in a sealed pocket) */
+    for (int a = 0; a < 300; a++) {
+        u64 h = mix64(seed ^ (u64)a * 0x31);
+        int x = cx * CHUNK + 3 + (int)(h % 26), z = cz * CHUNK + 3 + (int)((h >> 8) % 26);
+        for (int y = cy * CHUNK + LAYER_FLOOR; y <= cy * CHUNK + LAYER_FLOOR + 2; y++)
+            if (standable(g, x, y, z) && standable(g, x + 1, y, z) && standable(g, x, y, z + 1)) { *out = v3(x + 0.5f, (float)y, z + 0.5f); return true; }
+    }
     for (int a = 0; a < 300; a++) {
         u64 h = mix64(seed ^ (u64)a * 0x31);
         int x = cx * CHUNK + 3 + (int)(h % 26), z = cz * CHUNK + 3 + (int)((h >> 8) % 26);
@@ -365,6 +372,7 @@ static void place_things(Game *g, const KingWay *K) {
                 for (int k = 0; k < MAX_MARKS; k++)
                     if (!marks[k].on) {
                         marks[k].on = true; marks[k].step = i; marks[k].kind = mk; marks[k].pos = p;
+                        if (g_note_hook) { char b[96]; snprintf(b, sizeof b, "marker for step %d at %.0f %.0f %.0f", i + 1, p.x, p.y, p.z); g_note_hook(0, "KINGMARK", b); }
                         if (mk == MK_RELIC || mk == MK_SEAL) guards(g, K, p, chunk_level(g, st->cx, st->cy, st->cz) + 2, mk == MK_SEAL ? 5 : 3, chunk_spawn_key(st->cx, st->cy, st->cz));
                         break;
                     }
@@ -680,7 +688,13 @@ static bool step_place(Game *g, const KingWay *K, int i, vec3 *at, bool *talk) {
     vec3 p = step_centre(st);
     bool t = false;
     switch (st->type) {
-    case KS_VISION: case KS_FORGE: case KS_REALM: return false;
+    case KS_VISION: case KS_REALM: return false;
+    case KS_FORGE: { /* the anvil, once its marker is there (the forge built, you at home) */
+        bool on = false;
+        for (int k = 0; k < MAX_MARKS; k++) if (marks[k].on && marks[k].step == i) { p = marks[k].pos; on = true; }
+        if (!on) return false;
+        break;
+    }
     case KS_HERALD: case KS_BREW: case KS_ALLEGIANCE: {
         int role = st->type == KS_BREW ? FR_HEALER : FR_ELDER;
         for (int k = 0; k < MAX_FOLK; k++) {
@@ -714,6 +728,15 @@ static bool step_place(Game *g, const KingWay *K, int i, vec3 *at, bool *talk) {
     return true;
 }
 
+/* The bot: is a step open that is done at home (the vision; the forge with its marker there)? */
+bool king_bot_home(Game *g) {
+    const KingWay *K = way(g);
+    if (!K->valid || king_won(g)) return false;
+    for (int i = 0; i < KING_STEPS; i++)
+        if (step_open(g, K, i) && K->step[i].type == KS_VISION) return true;
+    return false;
+}
+
 /* The Golden Thread (quests.c) follows the line at the top: the step it follows, if it has a place. */
 bool king_thread_goal(Game *g, PlayerSlot *ps, vec3 *at, char *name, int n) {
     const KingWay *K = way(g);
@@ -738,7 +761,6 @@ bool king_bot_target(Game *g, PlayerSlot *ps, vec3 *at, bool *talk) {
     for (int i = 0; i < KING_STEPS; i++) {
         if (!step_open(g, K, i)) continue;
         int t = K->step[i].type;
-        if (t == KS_ALLEGIANCE) continue;
         if (t == KS_BREW && (!(ps->st.reag[RG_PHOENIX] || ps->st.reag[RG_HEARTSTONE]) || !ps->st.reag[RG_ORCHID])) continue;
         vec3 p;
         bool tk;
