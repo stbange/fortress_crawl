@@ -148,6 +148,31 @@ build/fortress_crawl --seed 1337 --fresh --mute --demo kingtest --shot /tmp/k.bm
 witness, the healer; the markers, the dragons, the lieutenant, the throne) and logs a `KING` line
 at the end. `test_worldgen` checks the way of every seed and two heirs each.
 
+## How long the way takes (bots, November 2026)
+
+`--bot king`, four seeds, three hours of play each (1337, 42, 777, 2024). No bot reached the
+throne. When each step was done (minutes of play):
+
+| Seed | Steps 1-3 done | Steps 4-7 | Where it stopped |
+|---|---|---|---|
+| 1337 | 11 | 2 of 4 by 47 | the forge (no forge built, no titan heart) |
+| 777 | 21 | 0 | the brew (no dragon's blood) |
+| 2024 | 21 | 2 of 4 by 74 | the brew |
+| 42 | 2 of 3 by 9 | - | stood 90 minutes 38 m from the stele, with no path found to it |
+
+What it shows:
+- **Finding out (steps 1-3) takes 10-20 minutes**, which suits a first act.
+- **The means (steps 4-7) are where a way stalls**: the forge needs the Sanctum built to its
+  forge and a dragon's heart, the brew a dragon's blood, so the dragon step is in practice their
+  key. The bot does not plan for that; a player told by the hints might, but should not have to
+  guess the order. Worth considering: the brew and forge steps say where their parts come from
+  (they do), and the bot learns to hunt a dragon first.
+- Navigation to a marker on the same layer can still fail where the floor is walled off from
+  the side one comes from (seed 42), a known gap of the generator.
+
+Time to the throne is not measured yet; it needs the bot to gather a dragon's parts and build
+the forge, or a human playtest.
+
 ## Code
 
 - `src/world/king.h`, `king.c`: the kinds, the texts, the way generator (and the heirs'), the
