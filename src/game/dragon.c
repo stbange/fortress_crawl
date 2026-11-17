@@ -957,3 +957,31 @@ void dragon_draw(Game *g, const Monster *m, vec3 light) {
         batch3d_obox(v3((float)m->pos.x, (float)fy + 0.03f, (float)m->pos.z), v3_scale(B.f, 1.2f * s), v3_scale(B.r, 2.0f * s), v3(0, 0.01f, 0), v3(0.02f, 0.02f, 0.025f), false);
     }
 }
+
+/* The nearest lair whose great dragon still lives, within cells of the player's (for the bot,
+ * and anything else that hunts dragons): its hoard (where the dragon sleeps), its danger level and
+ * its key. max_level: none deeper in than that. */
+bool dragon_lair_near(Game *g, vec3 from, int max_level, vec3 *at, int *level, u64 *key) {
+    int pcx = floordiv(fl(from.x), CHUNK), pcy = floordiv(fl(from.y), CHUNK), pcz = floordiv(fl(from.z), CHUNK);
+    int gx0 = floordiv(pcx, 6), gy0 = floordiv(pcy, 6), gz0 = floordiv(pcz, 6);
+    float bd = 1e9f;
+    bool found = false;
+    for (int gy = gy0 - 1; gy <= gy0 + 1; gy++)
+        for (int gz = gz0 - 4; gz <= gz0 + 4; gz++)
+            for (int gx = gx0 - 4; gx <= gx0 + 4; gx++) {
+                Structure s;
+                Lair L;
+                if (!world_cell_structure(&g->world, gx, gy, gz, &s) || s.type != STRUCT_HALL || s.variant != HALL_LAIR) continue;
+                if (!lair_from_structure(&s, &L)) continue;
+                bool slain = false;
+                for (int k = 0; k < g->world.ndragons_slain && !slain; k++) slain = g->world.dragons_slain[k] == L.key;
+                if (slain) continue;
+                ChunkInfo ci;
+                world_chunk_info(&g->world, floordiv(L.cx, CHUNK), floordiv(L.floor, CHUNK), floordiv(L.cz, CHUNK), &ci);
+                if (ci.level > max_level) continue;
+                vec3 p = v3(L.cx + 0.5f, (float)L.floor, L.cz + 0.5f);
+                float d = v3_len(v3_sub(p, from));
+                if (d < bd) { bd = d; *at = p; *level = ci.level; *key = L.key; found = true; }
+            }
+    return found;
+}

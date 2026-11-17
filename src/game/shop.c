@@ -559,6 +559,27 @@ bool shop_buy_arg(Game *g, PlayerSlot *ps, int kind, int arg) {
     return false;
 }
 
+/* Buys a reagent wherever it is offered here: the alchemist at home, a town's market (the bot). */
+bool shop_buy_reagent(Game *g, PlayerSlot *ps, int rg) {
+    ShopItem items[SHOP_MAX];
+    int n = shop_items(g, ps, items), people = town_market(g, ps, NULL);
+    for (int i = 0; i < n; i++) {
+        const ShopItem *it = &items[i];
+        if (!it->ok || it->price > ps->st.gold) continue;
+        bool match = false;
+        if (it->kind == SH_MERCHANT) {
+            bool reag;
+            int id, price;
+            match = merchant_offer(g, it->arg, &reag, &id, &price) && reag && id == rg;
+        } else if (it->kind == SH_TOWN && people >= 0) {
+            const Ware *w = it->arg < 5 ? &PEOPLES[people].wares[it->arg] : &PEOPLE_SPECIAL[people][it->arg - 5];
+            match = w->kind == WA_REAGENT && w->id == rg;
+        }
+        if (match) { buy(g, ps, &items[i]); return true; }
+    }
+    return false;
+}
+
 /* Buys the first offer of that kind that can be bought (for the playtest bot). */
 bool shop_buy_kind(Game *g, PlayerSlot *ps, int kind) {
     ShopItem items[SHOP_MAX];

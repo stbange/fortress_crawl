@@ -73,6 +73,9 @@ typedef struct Bot {
     float next_shop;
     bool shopped_realm;
     int realm_rested;
+    bool hunting;    /* king bot: on its way to a great dragon for its heart and blood */
+    u64 hunt_key;
+    int hunts, dragons;
     float avoid_until;
     float vertical_until; /* the thread's end is reached: now go up or down the stairs */
     bool low;
@@ -354,7 +357,7 @@ static void plan(PlayerSlot *ps) {
         return;
     }
     /* the quester follows the Golden Thread: the farthest point of it within reach */
-    if ((B.style == BS_QUESTER || B.style == BS_KING) && ps->thread.n > 1 && ps->thread.t < ps->thread.life) {
+    if ((B.style == BS_QUESTER || (B.style == BS_KING && !B.hunting)) && ps->thread.n > 1 && ps->thread.t < ps->thread.life) {
         int bi = -1;
         for (int k = ps->thread.n - 1; k >= 0 && bi < 0; k--) {
             int ri = reach_index(ps->thread.pts[k]);
@@ -382,7 +385,21 @@ static void plan(PlayerSlot *ps) {
         has_tgt = true;
     }
     bool talk;
-    if (B.style == BS_KING && king_bot_target(G, ps, &tgt, &talk)) { /* the Old King's way (king.c) */
+    B.hunting = false;
+    if (B.style == BS_KING && !king_bot_target(G, ps, &tgt, &talk) && (king_bot_needs(G, ps) & KN_DRAGON)) {
+        /* nothing on the way it can do now, and what is left needs a dragon's heart or blood:
+         * the nearest great dragon it can face */
+        int lvl;
+        u64 key;
+        if (dragon_lair_near(G, feet, ps->st.level + 2, &tgt, &lvl, &key)) {
+            if (key != B.hunt_key) { B.hunt_key = key; B.hunts++; logf_("%7.1f DRAGON hunt: a lair of level %d at %.0f %.0f %.0f\n", B.t, lvl, tgt.x, tgt.y, tgt.z); }
+            B.hunting = true;
+            has_tgt = true;
+            int ri = reach_index(tgt);
+            if (ri >= 0 && dist_[ri] > 1) { B.goal_kind = 0; set_path_to(ri); B.goal = tgt; return; }
+            if (fabsf(tgt.y - feet.y) > 6.0f) B.vertical_until = B.t + 20.0f;
+        }
+    } else if (B.style == BS_KING && king_bot_target(G, ps, &tgt, &talk)) { /* the Old King's way (king.c) */
         has_tgt = true;
         int ri = reach_index(tgt);
         if (ri >= 0 && dist_[ri] > 1) { /* in reach: straight there */
@@ -1047,8 +1064,8 @@ static void summary(PlayerSlot *ps) {
           g_tele.food, g_tele.hunted, g_tele.harvested, g_tele.cooked, g_tele.eaten, __builtin_popcount(s->recipes),
           g_tele.reagents, g_tele.brewed, g_tele.elixirs, __builtin_popcount(s->formulae), g_tele.forge_mats, g_tele.forged, g_tele.masterworks,
           smith_level(s->smith_xp), B.digs, B.blasts, G->map.edits_total, B.warmed, B.harvests, B.throws, s->cloak);
-    logf_("KING steps=%d done=%03x gen=%d won=%d ending=%d town_works=%d raids=%d armour=%d\n", g_tele.king_steps, G->world.king_done, G->world.king_gen,
-          G->world.king_wins, G->world.king_ending, g_tele.town_works, g_tele.town_raids, s->armour);
+    logf_("KING steps=%d done=%03x gen=%d won=%d ending=%d town_works=%d raids=%d armour=%d hunts=%d dragons=%d\n", g_tele.king_steps, G->world.king_done,
+          G->world.king_gen, G->world.king_wins, G->world.king_ending, g_tele.town_works, g_tele.town_raids, s->armour, B.hunts, g_tele.dragons);
     float total = 0;
     for (int i = 0; i < HS_COUNT; i++) total += g_tele.taken[i];
     logf_("DAMAGE_TAKEN total=%.0f", total);
@@ -1174,7 +1191,14 @@ bool bot_step(Game *g, PlayerInput *in, float dt) {
         if (realm_has(ps->pl.pos)) {
             /* build up the Sanctum: the comforts first, then wider, then the rest */
             static const int ORDER[SP_COUNT] = { SP_DINING, SP_BATH, SP_ISLAND, SP_FORGE, SP_HALL, SP_LIBRARY, SP_ARMORY, SP_GARDEN, SP_COURT };
-            for (int k = 0; k < SP_COUNT; k++)
+            static const int FORGE_FIRST[2] = { SP_ISLAND, SP_FORGE };
+            int kneed = B.style == BS_KING ? king_bot_needs(g, ps) : 0;
+            if (kneed & KN_FORGE) /* the Old King's forge step: the island and the forge before anything else */
+                for (int k = 0; k < 2; k++)
+                    if (shop_buy_arg(g, ps, SH_BUILD, FORGE_FIRST[k])) { bought++; B.builds++; logf_("%7.1f BUILD for the king's forge: plot %d stage %d\n", B.t, FORGE_FIRST[k], sanctum_stage(g, FORGE_FIRST[k])); }
+            if (kneed & KN_STEEL)
+                for (int k = 0; k < 2 && ps->st.forge[FG_STEEL] < 2; k++) if (shop_buy_arg(g, ps, SH_SUPPLY, 4)) { bought++; logf_("%7.1f BUY steel for the king's forge\n", B.t); }
+            for (int k = 0; k < SP_COUNT && !(kneed & KN_FORGE); k++)
                 if (s->gold > 400 && shop_buy_arg(g, ps, SH_BUILD, ORDER[k])) {
                     bought++;
                     B.builds++;
@@ -1198,6 +1222,7 @@ bool bot_step(Game *g, PlayerInput *in, float dt) {
         if (here < 2.0f && s->firewood < 3 && s->gold > 60 && shop_buy_arg(g, ps, SH_SUPPLY, 107)) bought++;
         if ((here < 2.0f || s->cold > 0.3f) && s->warm_t < 600.0f && s->gold > 150 && shop_buy_arg(g, ps, SH_SUPPLY, 103)) { bought++; logf_("%7.1f BUY warming draught\n", B.t); }
         if (!s->cloak && s->gold > (here < 2.0f ? 500 : 1500) && shop_buy_arg(g, ps, SH_SUPPLY, 102)) { bought++; logf_("%7.1f BUY fur cloak\n", B.t); }
+        if (B.style == BS_KING && (king_bot_needs(g, ps) & KN_ORCHID) && shop_buy_reagent(g, ps, RG_ORCHID)) { bought++; logf_("%7.1f BUY an orchid for the king's brew\n", B.t); }
         if (s->flasks[1] < 3 && s->gold > 400 && shop_buy_arg(g, ps, SH_SUPPLY, 105)) bought++;
         if (s->flasks[0] < 3 && s->gold > 600 && shop_buy_arg(g, ps, SH_SUPPLY, 104)) bought++;
         if (s->gold > 2500 && shop_buy_kind(g, ps, SH_SEALED)) { bought++; logf_("%7.1f SEALED weapon bought\n", B.t); }
@@ -1378,6 +1403,6 @@ bool bot_step(Game *g, PlayerInput *in, float dt) {
     }
     follow_path(ps, in, dt, B.goal_kind == 0 && s->hp > s->maxhp * 0.5f);
     /* the golden thread now and then for the quester */
-    if ((B.style == BS_QUESTER || B.style == BS_KING) && (ps->thread.n == 0 || ps->thread.t >= ps->thread.life) && fmodf(B.t, 5.0f) < dt) cast_util(g, ps, SU_THREAD);
+    if ((B.style == BS_QUESTER || (B.style == BS_KING && !B.hunting)) && (ps->thread.n == 0 || ps->thread.t >= ps->thread.life) && fmodf(B.t, 5.0f) < dt) cast_util(g, ps, SU_THREAD);
     return true;
 }

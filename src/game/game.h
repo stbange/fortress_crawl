@@ -848,6 +848,7 @@ void shop_nav(Game *g, PlayerSlot *ps, int nav);
 void shop_tap(Game *g, PlayerSlot *ps, int W, int H, int top, float x, float y);
 void shop_draw(Game *g, PlayerSlot *ps, int W, int H, int top);
 enum { SH_SCRAP, SH_POTION_HP, SH_POTION_MP, SH_RANK, SH_REROLL, SH_RELIC, SH_BUILD, SH_SCROLL, SH_STORE, SH_TAKE, SH_MERCHANT, SH_KEYSTONE, SH_PAGE, SH_COMPLETE, SH_RECIPE, SH_SEALED, SH_DECOR, SH_SUPPLY, SH_TOWN };
+bool shop_buy_reagent(Game *g, PlayerSlot *ps, int rg);
 bool shop_buy_kind(Game *g, PlayerSlot *ps, int kind);
 bool shop_buy_arg(Game *g, PlayerSlot *ps, int kind, int arg);
 /* game.c: the Golden Thread key (right after a death: back where you fell) */
@@ -871,6 +872,8 @@ void king_heir(Game *g);
 bool king_raids_on(Game *g);
 bool king_bot_target(Game *g, PlayerSlot *ps, vec3 *at, bool *talk);
 bool king_bot_home(Game *g);
+enum { KN_DRAGON = 1, KN_STEEL = 2, KN_FORGE = 4, KN_ORCHID = 8 }; /* what the bot lacks for the open steps */
+int king_bot_needs(Game *g, PlayerSlot *ps);
 bool king_thread_goal(Game *g, PlayerSlot *ps, vec3 *at, char *name, int n);
 int king_raid(Game *g, vec3 at, int level, int n, u64 key); /* raiders (king 4) */
 bool king_faltering(const Monster *m);
@@ -884,6 +887,7 @@ void dragon_update(Game *g, Monster *m, float dt);
 float dragon_damage(Game *g, Monster *m, float dmg, vec3 from, int attacker);
 bool dragon_rises(Game *g, Monster *m);         /* a dracolich at no health: it rises again */
 void dragon_slain(Game *g, Monster *m);
+bool dragon_lair_near(Game *g, vec3 from, int max_level, vec3 *at, int *level, u64 *key); /* a living great dragon's lair */
 void dragon_draw(Game *g, const Monster *m, vec3 light);
 void dragons_shake(Game *g, vec3 p, float amount, float radius);
 /* town.c: the towns of the friendly peoples (towns.h, docs/TOWNS.md) */

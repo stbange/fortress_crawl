@@ -737,6 +737,28 @@ bool king_bot_home(Game *g) {
     return false;
 }
 
+/* The bot: what the open steps need that it lacks (KN_* bits). */
+int king_bot_needs(Game *g, PlayerSlot *ps) {
+    const KingWay *K = way(g);
+    if (!K->valid || king_won(g)) return 0;
+    const Stats *s = &ps->st;
+    int need = 0, ess = 0;
+    for (int e = 0; e < FG_ESS_COUNT; e++) ess = MAXI(ess, s->forge[FG_ESS0 + e]);
+    for (int i = 0; i < KING_STEPS; i++) {
+        if (!step_open(g, K, i)) continue;
+        if (K->step[i].type == KS_FORGE) {
+            if (!s->forge[FG_TITAN_HEART] || ess < 3) need |= KN_DRAGON;
+            if (s->forge[FG_STEEL] < 2) need |= KN_STEEL;
+            if (!(sanctum_stage(g, SP_ISLAND) >= 2 && sanctum_stage(g, SP_FORGE) >= 1)) need |= KN_FORGE;
+        }
+        if (K->step[i].type == KS_BREW) {
+            if (!s->reag[RG_PHOENIX] && !s->reag[RG_HEARTSTONE]) need |= KN_DRAGON;
+            if (!s->reag[RG_ORCHID]) need |= KN_ORCHID;
+        }
+    }
+    return need;
+}
+
 /* The Golden Thread (quests.c) follows the line at the top: the step it follows, if it has a place. */
 bool king_thread_goal(Game *g, PlayerSlot *ps, vec3 *at, char *name, int n) {
     const KingWay *K = way(g);
