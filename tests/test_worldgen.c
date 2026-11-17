@@ -14,6 +14,7 @@
 #include "world/realms.h"
 #include "world/towns.h"
 #include "world/dragons.h"
+#include "world/king.h"
 #include "world/story.h"
 #include "world/history.h"
 #include "world/carve.h"
@@ -859,6 +860,44 @@ int main(int argc, char **argv) {
             CHECK(doors == 6, "a building of the first town is closed or full");
         }
         realm_cache_clear();
+    }
+
+    /* the Old King (king.h): every seed has a way of ten steps that can be made, with a throne */
+    {
+        int seeds = getenv("KING_SEEDS") ? atoi(getenv("KING_SEEDS")) : 60, ok = 0, kinds[KING_KINDS] = { 0 }, types[KS_COUNT] = { 0 };
+        World keep = g_world;
+        for (int k = 0; k < seeds; k++) {
+            World w;
+            world_init(&w, k == 0 ? keep.seed : mix64((u64)k * 0x9E37));
+            const KingWay *K = king_way(&w, realm_pick(w.seed));
+            if (!K->valid) { printf("  seed %llu: no way to the king\n", (unsigned long long)w.seed); continue; }
+            ok++;
+            kinds[K->kind]++;
+            for (int i = 0; i < KING_STEPS; i++) types[K->step[i].type]++;
+            /* the throne hall is where the way says */
+            Structure st;
+            bool hall = world_structure_at(&w, K->step[9].cx, K->step[9].cy, K->step[9].cz, &st) && st.variant == HALL_THRONE;
+            CHECK(hall, "the throne is not in its hall");
+            bool dragon = false, town = false, sanctum = false;
+            for (int i = 0; i < KING_STEPS; i++) {
+                int t = K->step[i].type;
+                dragon |= t == KS_DRAGON || t == KS_HOARD || t == KS_WYRM;
+                town |= t == KS_HERALD || t == KS_ALLEGIANCE || t == KS_BREW;
+                sanctum |= t == KS_VISION || t == KS_FORGE;
+            }
+            CHECK(dragon && town && sanctum, "a way without a dragon, a town or the Sanctum");
+            if (k == 0) {
+                printf("king: %s, %s; throne at chunk %d %d %d\n", K->name, KING_KINDS_DEF[K->kind].name, K->step[9].cx, K->step[9].cy, K->step[9].cz);
+                for (int i = 0; i < KING_STEPS; i++)
+                    printf("  step %2d (group %d): %-15s at %4d %4d %4d\n", i + 1, K->step[i].group, KING_STEP_NAMES[K->step[i].type], K->step[i].cx, K->step[i].cy, K->step[i].cz);
+            }
+        }
+        printf("king: %d of %d seeds have a way; kinds:", ok, seeds);
+        for (int i = 0; i < KING_KINDS; i++) printf(" %d", kinds[i]);
+        printf("; steps:");
+        for (int i = 0; i < KS_COUNT; i++) printf(" %s %d,", KING_STEP_NAMES[i], types[i]);
+        printf("\n");
+        CHECK(ok == seeds, "a seed without a way to the Old King");
     }
 
     /* dragons' lairs (dragons.h): some within reach, each a cave with room to fly over its hoard */

@@ -161,6 +161,7 @@ static void comforts(Game *g, PlayerSlot *ps, float dt) {
                 g->autosave_timer = 1e9f;
                 sfx_at(g, SFX_REALM_REST, p, 1.0f);
                 game_banner(ps, "YOU REST - YOU WILL WAKE HERE. THE GAME IS SAVED");
+                king_rest(g, ps); /* the Old King's way: a vision in the night (king.c) */
             }
         }
     } else s->rest_t = 0;

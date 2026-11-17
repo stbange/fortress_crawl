@@ -800,7 +800,7 @@ void combat_update(Game *g, float dt) {
         bool touch = ps->keyboard && g->touch.active;
         bool attack = (mouse && ps->attack_held) || ps->pad_attack || (touch && g->touch.held[TB_ATTACK]);
         bool alt = (mouse && ps->alt_held) || ps->pad_alt || (touch && g->touch.held[TB_ALT]);
-        if (attack && s->cooldown <= 0 && (mech_use(g, ps) || town_use(g, ps) || gate_use(g, ps) || wildlife_use(g, ps))) {
+        if (attack && s->cooldown <= 0 && (mech_use(g, ps) || king_use(g, ps) || town_use(g, ps) || gate_use(g, ps) || wildlife_use(g, ps))) {
             /* struck a lever, a statue or a mirror */
             s->cooldown = s->swing_len = s->swing = 0.45f;
             s->swing_kind = 0;

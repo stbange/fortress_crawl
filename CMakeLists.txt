@@ -61,6 +61,7 @@ add_library(fcworld STATIC
   src/world/gen_town.c
   src/world/dragons.c
   src/world/gen_lair.c
+  src/world/king.c
   src/world/mesher.c
   src/world/support.c
   src/world/eco.c
@@ -111,6 +112,7 @@ add_executable(fortress_crawl
   src/game/gate.c
   src/game/town.c
   src/game/dragon.c
+  src/game/king.c
   src/game/bot.c
   src/game/shop.c
   src/game/arms.c

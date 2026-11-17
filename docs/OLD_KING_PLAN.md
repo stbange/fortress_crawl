@@ -374,7 +374,15 @@ The phases in order of size: 3 and 4 are the largest (new bosses, a flying AI, a
 dependence; dragons could also come first, since phase 4 does not depend on 1-3 except for the
 *Dragon* steps.
 
-## 5. Still open
+## 5. Status
+
+Phases 1-3 and 4 are done; see [OLD_KING.md](OLD_KING.md) for what was built. The way uses
+fourteen step kinds, not all of the pool above: the chronicle, alliance, feast, build, war, trial,
+rift and descent steps are not in yet. Still open: thrones of their own per kind (all ten are a
+throne hall with decor of the kind), a hall of victories, *back to the start screen* after the
+credits, and phase 5 (the bot on the main way, batches).
+
+## 6. Still open (earlier notes)
 
 - **Sounds**: the go-ahead is given; the dragon sounds are made, the kings' roars, spells and
   voices come with phase 3.

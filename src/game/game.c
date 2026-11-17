@@ -1239,8 +1239,10 @@ static void draw_hud(Game *g, PlayerSlot *ps, int W, int H) {
     bool idle_pad = false;
     for (int i = 0; i < ARRAY_LEN(g->idle_pads); i++) idle_pad |= g->idle_pads[i] != NULL;
     font_end();
-    story_draw_tracker(g, ps, W, H, g->hud && ps->index == 0 ? 4 + 8 * FONT_LINE : (touch ? 30 : 4) + (idle_pad ? 10 : 0));
-    town_draw_tracker(g, ps, W, H, (g->hud && ps->index == 0 ? 4 + 8 * FONT_LINE : (touch ? 30 : 4) + (idle_pad ? 10 : 0)) + 10);
+    int ty = g->hud && ps->index == 0 ? 4 + 8 * FONT_LINE : (touch ? 30 : 4) + (idle_pad ? 10 : 0);
+    ty += 10 * king_draw_tracker(g, ps, W, H, ty); /* the Old King first: the main way (king.c) */
+    story_draw_tracker(g, ps, W, H, ty);
+    town_draw_tracker(g, ps, W, H, ty + 10);
     font_begin(W, H);
     if (idle_pad && ps->index == 0 && g->nplayers < MAX_PLAYERS) {
         const char *t = "GAMEPAD READY: PRESS START TO JOIN";
@@ -1271,6 +1273,7 @@ static void draw_hud(Game *g, PlayerSlot *ps, int W, int H) {
         if (!small && !touch) font_text(4, y, "LMB/RMB ATTACK  Q SPELL  R NEXT  H/J POTION  K EAT  N FOOD  TAB MENU  M MAP  F FLY  T AHEAD", 0.5f, 0.45f, 0.4f);
     }
     font_end();
+    king_draw_credits(g, ps, W, H); /* the Old King settled: the ending and the credits */
 }
 
 static void draw_menu(Game *g, PlayerSlot *ps, int W, int H) {

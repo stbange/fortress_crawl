@@ -525,6 +525,7 @@ void monsters_alert(Game *g, vec3 p, float radius) {
 
 void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int attacker) {
     if (!m->alive || m->hidden) return; /* vanished or underground */
+    if (m->king == 1) { if (m->resident) king_provoked(g, m); dmg = king_damage(g, m, dmg); } /* the Old King (king.c) */
     if (m->parley == 1 || m->resident) return; /* yielded, waiting for a choice; or at home in the Sanctum */
     if (m->type == MON_DRAGON && (dmg = dragon_damage(g, m, dmg, from, attacker)) <= 0) return;
     if (m->rank >= 4) dmg *= 0.85f; /* armoured, far out */
@@ -584,6 +585,7 @@ void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int 
         if (m->ruler) gate_ruler_slain(g, m);
         town_on_kill(g, m);
         if (m->type == MON_DRAGON) dragon_slain(g, m);
+        if (m->king) king_on_kill(g, m);
         if (m->orders) story_orders_found(g, m);
         if (m->named_kind && m->story_key) sanctum_trophy_named(g, m->story_key);
         if (m->named_kind && m->story_key && m->level >= 6.0f) {

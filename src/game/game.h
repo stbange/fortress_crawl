@@ -19,6 +19,7 @@
 #include "world/realms.h"
 #include "world/towns.h"
 #include "world/dragons.h"
+#include "world/king.h"
 #include "game/tele.h"
 /* WBF_* of the weapon landing the current blow (monster_damage reads it: a flail ignores shields) */
 extern unsigned g_hit_flags;
@@ -120,6 +121,8 @@ typedef struct Monster {
     char name[STORY_NAME];
     u8 ruler;        /* the ruler of a realm behind the Gate: 1 + RM_* */
     u8 townq;        /* a pest a town asked you to kill: 1 + its record (town.c) */
+    u8 king;         /* the Old King himself (1), his lieutenant (2), a servant he summoned (3) (king.c) */
+    u8 kingstep;     /* a lieutenant: 1 + its step */
     /* a dragon (dragon.c): its kind and size, what it is doing, its fight's phase */
     u8 dkind, dsize, dstate, dphase, heads, revived, grounded;
     float dtimer, dbreath, dwing, dalt, dheal, dstep;
@@ -202,7 +205,7 @@ typedef struct Mission {
 } Mission;
 
 /* Lore read in this world (shared by all characters). */
-enum { LORE_TRACE = 1, LORE_REVEAL, LORE_LEGEND, LORE_ORDERS, LORE_PAGE, LORE_RESIDENT, LORE_REALM, LORE_KINDS }; /* LORE_REALM: a = realm, b = 0 its story, 1 + q a page of the Library */
+enum { LORE_TRACE = 1, LORE_REVEAL, LORE_LEGEND, LORE_ORDERS, LORE_PAGE, LORE_RESIDENT, LORE_REALM, LORE_KING, LORE_KINDS }; /* LORE_REALM: a = realm, b = 0 its story, 1 + q a page of the Library */
 #define MAX_LORE 512
 typedef struct LoreEntry {
     u8 kind;
@@ -446,6 +449,8 @@ typedef struct PlayerSlot {
     float gate_cd;          /* just went through a gate or door */
     float realm_note_t;     /* the realms: until the next warning of the same kind */
     float shake;            /* the view shakes (a dragon's tread, its roar) */
+    float credits_t;        /* the Old King settled: the ending and the credits are showing (king.c) */
+    float king_talk_t;      /* spoken to the Old King: a second blow within this settles it */
     u8 realm_notes;         /* the realms: warnings already given this visit (bits) */
     float ritual_t;         /* opening the Sanctum Door: seconds left of the ritual */
     float story_quiet;      /* seconds without a chapter finished (the story sends hunters) */
@@ -845,6 +850,20 @@ void game_thread_key(Game *g, PlayerSlot *ps);
 
 /* gate.c: the realms behind the Gate (realms.h, docs/REALMS.md) */
 void monsters_alert(Game *g, vec3 p, float radius);
+/* king.c: the Old King and the way to him (king.h, docs/OLD_KING.md) */
+void king_update(Game *g, float dt);
+bool king_use(Game *g, PlayerSlot *ps);         /* the throne: speak to him */
+bool king_town_talk(Game *g, PlayerSlot *ps, struct Folk *f, u64 town_key); /* the herald, the brew */
+bool king_folk_talk(Game *g, PlayerSlot *ps, struct Folk *f); /* the witness, the allies */
+void king_rest(Game *g, PlayerSlot *ps);        /* the Sanctum's bed: the vision */
+void king_on_kill(Game *g, Monster *m);
+float king_damage(Game *g, Monster *m, float dmg);
+void king_provoked(Game *g, Monster *m);
+void king_draw(Game *g, PlayerSlot *viewer);
+int king_draw_tracker(Game *g, PlayerSlot *ps, int W, int H, int y); /* lines drawn */
+void king_draw_credits(Game *g, PlayerSlot *ps, int W, int H);
+void king_lore_text(Game *g, int a, char *out, int n);
+bool king_won(const Game *g);
 /* dragon.c: dragons (dragons.h, docs/DRAGONS.md) */
 Monster *dragon_spawn(Game *g, int kind, int size, vec3 pos, int level, u64 key);
 bool dragon_spawn_chunk(Game *g, Chunk *c);     /* a lair's dragon and hoard; true: nothing else spawns here */

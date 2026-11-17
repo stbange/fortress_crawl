@@ -25,6 +25,7 @@ typedef struct Tele {
     int realm_trips, rulers;
     int town_tasks, town_rests, town_heals, town_trades;
     int dragons, drakes;
+    int king_steps, king_won;
 } Tele;
 
 extern Tele g_tele;

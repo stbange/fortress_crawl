@@ -601,6 +601,23 @@ bones, vines down from wet ceilings, and bees hang hives where flowers bloom; fi
 grazing animals crop the grass, and flies, bees, moths and glowworms gather where they belong.
 See [docs/SIMULATION.md](docs/SIMULATION.md).
 
+## The Old King
+
+Every fortress has an Old King, and reaching him is the main storyline. He is one of ten kinds:
+the Tyrant, the Necromancer, the Old Mage, the Dragon-King, the Hollow King, the Clockwork King,
+the Beast-King, the Priest-King of the Sealed, the Alchemist-King or the King-in-the-Stone. At
+first you don't know which. Ten steps lead to his throne, and the tracker shows the nearest one:
+- steps 1-3, in any order: find out about him (a town's elder, a stele with his name, a witness, a
+  dream in the Sanctum)
+- steps 4-7, in any order: gather the means (slay a dragon, rob a hoard, win a town's friendship,
+  make his bane at the Sanctum's forge, have an elixir brewed, beat a realm's ruler, take a relic)
+- steps 8 and 9: two of his lieutenant, his seal and the wyrm before his throne
+- step 10: the throne
+
+Settle with him by the sword, by his true name, or with the artefact his kind needs. Any ending
+wins the game; the credits roll, and then you can explore on. See
+[docs/OLD_KING.md](docs/OLD_KING.md); `--demo kingtest` walks a seed's way to the end.
+
 ## Towns of the friendly peoples
 
 ![A halfling town](docs/screenshots/town_plaza.png)

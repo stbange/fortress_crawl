@@ -353,7 +353,8 @@ bool town_use(Game *g, PlayerSlot *ps) {
         bd = d;
         best = f;
     }
-    if (!best || best->rec < 0 || best->rec >= g->world.ntowns) return false;
+    if (best && best->rec < 0) return king_folk_talk(g, ps, best); /* the Old King's witness, or allies (king.c) */
+    if (!best || best->rec >= g->world.ntowns) return false;
     Folk *f = best;
     TownRec *r = &g->world.towns[f->rec];
     f->talk_t = 6.0f;
@@ -363,6 +364,7 @@ bool town_use(Game *g, PlayerSlot *ps) {
     if (town_here(g, f->home, &t)) snprintf(town, sizeof town, "%s", t.name);
     else snprintf(town, sizeof town, "the town");
     if (r->rep == 0 && f->role != FR_LOST) r->rep = 1; /* you came to us: a guest */
+    if (king_town_talk(g, ps, f, r->key)) return true; /* the Old King's way: the herald, the brew (king.c) */
     switch (f->role) {
     case FR_ELDER: elder(g, ps, f, r, town); break;
     case FR_INNKEEPER: innkeeper(g, ps, f, r, town); break;
@@ -476,7 +478,7 @@ static void guard_shoots(Game *g, Folk *f) {
     vec3 eye = v3_add(f->pos, v3(0, 1.5f, 0));
     for (int i = 0; i < MAX_MONSTERS; i++) {
         Monster *m = &g->mons[i];
-        if (!m->alive || m->resident || m->charm_t > 0) continue;
+        if (!m->alive || m->resident || m->charm_t > 0 || (f->rec == -50 && m->king == 0 && v3_len(v3_sub(m->pos, f->pos)) > 14.0f)) continue;
         float d = v3_len(v3_sub(m->pos, f->pos));
         if (d < bd && phys_line_of_sight(eye, v3_add(m->pos, v3(0, MONSTERS[m->type].h * m->scale * 0.5f, 0)), game_solid, g)) { bd = d; best = m; }
     }
@@ -488,6 +490,7 @@ static void guard_shoots(Game *g, Folk *f) {
     f->yaw = atan2f(dir.z, dir.x);
     float level = 0;
     if (f->rec >= 0 && f->rec < g->world.ntowns) level = g->world.towns[f->rec].level;
+    if (f->rec == -50) level = (float)g->players[0].st.level; /* allies fight as well as you do */
     monster_damage(g, best, 12.0f + level * 3.0f, f->pos, 2.0f, -1);
     sfx_at(g, SFX_SHOOT_SHORTBOW, f->pos, 0.6f);
 }
@@ -549,10 +552,22 @@ void town_update(Game *g, float dt) {
     for (int i = 0; i < MAX_FOLK; i++) {
         Folk *f = &g->folk[i];
         if (!f->alive) continue;
-        if (!game_nearest_player(g, f->pos, 130.0f)) { f->alive = false; continue; } /* (they come again with their town) */
+        if (!game_nearest_player(g, f->pos, 130.0f) && f->rec != -50) { f->alive = false; continue; } /* (they come again with their town) */
         f->anim += dt;
         if (f->talk_t > 0) { f->talk_t -= dt; continue; } /* listening */
         Town t;
+        if (f->rec == -50) { /* allies at the Old King's throne (king.c): close by, shooting what attacks */
+            PlayerSlot *lead = game_nearest_player(g, f->pos, 60.0f);
+            if (lead && v3_len(v3_sub(lead->pl.pos, f->pos)) > 4.0f) {
+                vec3 to = v3_sub(lead->pl.pos, f->pos);
+                to.y = 0;
+                f->pos = v3_add(f->pos, v3_scale(v3_norm(to), 3.5f * dt));
+                f->pos.y = lead->pl.pos.y;
+                f->yaw = atan2f(to.z, to.x);
+            }
+            if ((f->act_t -= dt) <= 0) { f->act_t = 1.2f; guard_shoots(g, f); }
+            continue;
+        }
         if (f->role == FR_LOST) {
             PlayerSlot *ps = game_nearest_player(g, f->pos, 12.0f);
             if (ps) f->yaw = atan2f(ps->pl.pos.z - f->pos.z, ps->pl.pos.x - f->pos.x);

@@ -242,6 +242,13 @@ static void demo_setup(Game *g) {
         s->hp = s->maxhp = 5000;
         return;
     }
+    if (!strcmp(g_demo_kind, "kingtest")) {
+        /* the Old King's way, walked step by step with a hand from the test where a step needs
+         * hours (a dragon slain, a town's friendship, a realm's ruler): see screenshot_step */
+        s->gold = 2000;
+        p1->pl.fly = true;
+        return;
+    }
     if (!strcmp(g_demo_kind, "town") || !strcmp(g_demo_kind, "towntest")) {
         /* the first town east of the gate (docs/TOWNS.md): in its plaza, looking at the well */
         Town t;
@@ -1311,6 +1318,154 @@ static void screenshot_step(App *a, float frame_dt) {
                 SDL_Log("dragonfight: slain at t %.1f; lying about: %d gold, %d weapons, %d chests, %d forge materials, %d reagents; slain list %d, tele %d",
                         a->shot_wait, gold, weapons, chests, forge, reag, g->world.ndragons_slain, g_tele.dragons);
             }
+        }
+    }
+    if (g->opt.demo && a->demo_done && !strcmp(kind, "kingtest")) {
+        static int stage = -1, step = -1;
+        static float wait;
+        const KingWay *K = king_way(&g->world, g->realms_joined);
+        p1->st.hp = p1->st.maxhp;
+        if (stage == -1) {
+            SDL_Log("kingtest: %s, %s; %d steps", K->name, KING_KINDS_DEF[K->kind].name, KING_STEPS);
+            stage = 0;
+        }
+        wait -= frame_dt;
+        if (wait > 0) return;
+        /* the next open step */
+        if (stage == 0) {
+            step = -1;
+            for (int i = 0; i < KING_STEPS && step < 0; i++) {
+                bool open = !((g->world.king_done >> i) & 1);
+                for (int k = 0; k < KING_STEPS && open; k++)
+                    if (K->step[k].group < K->step[i].group && !((g->world.king_done >> k) & 1)) open = false;
+                if (open) step = i;
+            }
+            if (step < 0 || g->world.king_ending) {
+                SDL_Log("kingtest: settled: ending %d, steps done %03x, credits %.1f", g->world.king_ending, g->world.king_done, p1->credits_t);
+                stage = 9;
+                return;
+            }
+            const KingStep *st = &K->step[step];
+            SDL_Log("kingtest: step %d: %s", step + 1, KING_STEP_NAMES[st->type]);
+            p1->pl.pos = v3(st->cx * CHUNK + 16.5f, (float)(st->cy * CHUNK + 8), st->cz * CHUNK + 16.5f);
+            stage = 1;
+            wait = 3.0f;
+            switch (st->type) { /* the steps the test does by hand */
+            case KS_VISION: king_rest(g, p1); stage = 0; break;
+            case KS_DRAGON: case KS_WYRM:
+                if (g->world.ndragons_slain < 64) g->world.dragons_slain[g->world.ndragons_slain++] = st->key;
+                SDL_Log("kingtest:   (the dragon slain by hand)");
+                stage = 0; wait = 1.0f;
+                break;
+            case KS_ALLEGIANCE:
+                for (int k = 0; k < 3; k++) { p1->pl.pos = v3(st->cx * CHUNK + 16.5f, (float)(st->cy * CHUNK + 7), st->cz * CHUNK + 16.5f); }
+                stage = 4; wait = 3.0f;
+                break;
+            case KS_REALM: g->world.realm_beaten |= 1u << st->arg; SDL_Log("kingtest:   (the ruler beaten by hand)"); stage = 0; wait = 1.0f; break;
+            case KS_FORGE:
+                sanctum_set_stage(g, SP_ISLAND, 2); sanctum_set_stage(g, SP_FORGE, 1);
+                forge_give(g, p1, FG_TITAN_HEART, 1); forge_give(g, p1, FG_ESS0, 3); forge_give(g, p1, FG_STEEL, 2);
+                p1->pl.pos = v3(POCKET_ANVIL_X + 3.5f, (float)POCKET_G + 1, POCKET_ANVIL_Z + 0.5f);
+                stage = 2; wait = 3.0f;
+                break;
+            case KS_BREW: alchemy_give(g, p1, RG_PHOENIX, 1); alchemy_give(g, p1, RG_ORCHID, 1); stage = 3; break;
+            case KS_HERALD: stage = 3; break;
+            case KS_THRONE: stage = 5; wait = 4.0f; break;
+            default: stage = 2; break; /* a marker, someone, or a lieutenant */
+            }
+            return;
+        }
+        const KingStep *st = &K->step[step];
+        if (stage == 2) { /* go to whatever the step put there */
+            bool found = false;
+            for (int i = 0; i < MAX_FOLK && !found; i++)
+                if (g->folk[i].alive && g->folk[i].rec == -100 - step) {
+                    p1->pl.pos = v3_add(g->folk[i].pos, v3(1.2f, 0, 0)); p1->pl.yaw = PI_F; town_use(g, p1); found = true;
+                }
+            for (int i = 0; i < MAX_MONSTERS && !found; i++)
+                if (g->mons[i].alive && g->mons[i].kingstep == step + 1) { monster_damage(g, &g->mons[i], 1e7f, p1->pl.pos, 0, 0); found = true; }
+            if (!found) { /* a marker: walk onto it (the king's markers are where the step's chunk had room) */
+                for (int r = 0; r < 3 && !found; r++) {
+                    vec3 c = v3(st->cx * CHUNK + 16.5f, (float)(st->cy * CHUNK + 6), st->cz * CHUNK + 16.5f);
+                    if (st->type == KS_FORGE) c = v3(POCKET_ANVIL_X + 0.5f, (float)POCKET_G + 1.2f, POCKET_ANVIL_Z + 0.5f);
+                    (void)c;
+                }
+                p1->pl.pos = v3(st->cx * CHUNK + 16.5f, (float)(st->cy * CHUNK + 8), st->cz * CHUNK + 16.5f);
+                /* (someone the step brings comes no nearer than 10 m: stand off) */
+                if (st->type == KS_LIEUTENANT || st->type == KS_WITNESS) p1->pl.pos.z += 30.0f;
+                if (st->type == KS_FORGE) p1->pl.pos = v3(POCKET_ANVIL_X + 0.5f, (float)POCKET_G + 1.0f, POCKET_ANVIL_Z + 0.5f);
+                if (st->type == KS_HOARD) {
+                    Structure sst; Lair L;
+                    if (world_structure_at(&g->world, st->cx, st->cy, st->cz, &sst) && lair_from_structure(&sst, &L)) p1->pl.pos = v3(L.cx + 0.5f, (float)L.floor + 3.5f, L.cz + 0.5f);
+                }
+            }
+            /* the markers: the test steps on each one near */
+            extern void king_test_touch(Game *g, PlayerSlot *ps);
+            king_test_touch(g, p1);
+            if ((g->world.king_done >> step) & 1) { SDL_Log("kingtest:   done: %s", p1->msg); stage = 0; wait = 0.5f; }
+            else { wait = 1.0f; static int tries; if (++tries > 30) { SDL_Log("kingtest:   STUCK at step %d", step + 1); stage = 9; } }
+            return;
+        }
+        if (stage == 3) { /* a town: the elder or the healer */
+            Town t;
+            if (!world_town_at(&g->world, st->cx, st->cy, st->cz, &t)) { SDL_Log("kingtest:   no town"); stage = 9; return; }
+            int role = st->type == KS_HERALD ? TB_ELDER : TB_TEMPLE;
+            for (int i = 0; i < TOWN_LOTS; i++)
+                if (t.lot[i].role == role) p1->pl.pos = v3(t.lot[i].spot_x + 1.7f, (float)t.floor, t.lot[i].spot_z + 0.5f);
+            p1->pl.fly = false;
+            p1->pl.yaw = PI_F;
+            stage = 31; wait = 3.0f;
+            return;
+        }
+        if (stage == 31) {
+            int frole = st->type == KS_HERALD ? FR_ELDER : FR_HEALER;
+            for (int i = 0; i < MAX_FOLK; i++)
+                if (g->folk[i].alive && g->folk[i].role == frole && v3_len(v3_sub(g->folk[i].pos, p1->pl.pos)) < 8.0f) {
+                    p1->pl.pos = v3_add(g->folk[i].pos, v3(1.2f, 0, 0)); p1->pl.yaw = PI_F;
+                    g->folk[i].talk_t = 5.0f;
+                    town_use(g, p1);
+                    break;
+                }
+            p1->pl.fly = true;
+            SDL_Log("kingtest:   %s: %s", (g->world.king_done >> step) & 1 ? "done" : "NOT DONE", p1->msg);
+            stage = (g->world.king_done >> step) & 1 ? 0 : 9;
+            return;
+        }
+        if (stage == 4) { /* friendship: as if its tasks were done */
+            for (int i = 0; i < g->world.ntowns; i++) if (g->world.towns[i].key == st->key) g->world.towns[i].rep = 3;
+            SDL_Log("kingtest:   (the town's friendship by hand: %d towns known)", g->world.ntowns);
+            stage = 0; wait = 1.5f;
+            return;
+        }
+        if (stage == 5) { /* the throne */
+            for (int i = 0; i < MAX_MONSTERS; i++) {
+                Monster *m = &g->mons[i];
+                if (!m->alive || m->king != 1) continue;
+                vec3 f = dir_from_angles(m->yaw, 0);
+                p1->pl.pos = v3_add(m->pos, v3_scale(f, 4.0f));
+                p1->pl.yaw = m->yaw + PI_F;
+                p1->pl.fly = false;
+                const char *how = getenv("KINGTEST_END");
+                if (how && !strcmp(how, "fight")) { /* by the sword: blows until he falls */
+                    m->resident = false;
+                    for (int k = 0; k < 400 && m->alive; k++) monster_damage(g, m, 500.0f, p1->pl.pos, 0, 0);
+                    SDL_Log("kingtest:   the fight: king %s; ending %d: %s", m->alive ? "STANDS" : "falls", g->world.king_ending, p1->msg);
+                    stage = 0; wait = 2.0f;
+                    return;
+                }
+                if (how && !strcmp(how, "art")) { g->world.king_flags &= (u8)~KF_NAME; p1->pl.stance = STANCE_CROUCH; }
+                king_use(g, p1);
+                SDL_Log("kingtest:   at the throne: %s | %s", p1->msg, p1->msg_next);
+                king_use(g, p1);
+                SDL_Log("kingtest:   the ending: %s", p1->msg);
+                stage = 0; wait = 2.0f;
+                return;
+            }
+            Structure sst;
+            if (world_structure_at(&g->world, st->cx, st->cy, st->cz, &sst)) p1->pl.pos = v3(st->cx * CHUNK + 16.5f, (float)sst.floor_y + 1, st->cz * CHUNK + 16.5f);
+            static int tries;
+            if (++tries > 20) { SDL_Log("kingtest:   no king on the throne"); stage = 9; }
+            wait = 1.0f;
         }
     }
     if (g->opt.demo && a->demo_done && !strcmp(kind, "towntest")) {

@@ -683,6 +683,7 @@ void utility_update(Game *g, float dt) {
     realm_update(g, dt);
     gate_update(g, dt);
     town_update(g, dt);
+    king_update(g, dt);
 }
 
 /* A monster's blow lands on a decoy or the monster it was charmed to fight. */
@@ -819,6 +820,7 @@ void utility_draw_world(Game *g, PlayerSlot *viewer) {
     if (viewer && viewer->st.reveal_t > 0) mech_draw_revealed(g);
     realm_draw(g);
     gate_draw(g, viewer);
+    if (viewer) king_draw(g, viewer);
 }
 
 void utility_lights(Game *g, vec3 eye, SceneParams *sp) {

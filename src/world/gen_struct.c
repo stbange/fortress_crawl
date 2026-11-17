@@ -385,10 +385,45 @@ static void gen_chasm(GenCtx *g) {
     decorate(g, true);
 }
 
+/* The Old King's throne hall (king.h): a great hall with a carpet up to a dais of three steps
+ * and his throne on it, braziers, and the marks of what he is. */
+static void throne_dais(GenCtx *g) {
+    const Structure *s = &g->info.st;
+    int X0 = s->cx0 * CHUNK, Z0 = s->cz0 * CHUNK, X1 = X0 + s->sx * CHUNK - 1, Z1 = Z0 + s->sz * CHUNK - 1;
+    int floor = s->floor_y, mz = (Z0 + Z1) / 2, back = X1 - 6;
+    int kind = s->people;
+    g_fill_w(g, X0 + 8, floor - 1, mz - 1, back - 6, floor - 1, mz + 1, B_ROOF); /* the carpet */
+    for (int k = 0; k < 3; k++) g_fill_w(g, back - 6 + k * 2, floor + k, mz - 7 + k, back + 1, floor + k, mz + 7 - k, kind == 7 ? B_OBSIDIAN : B_ACCENT);
+    if (kind == 7) g_fill_w(g, back - 1, floor + 3, mz - 2, back + 1, floor + 4, mz + 2, B_OBSIDIAN); /* the Black Altar */
+    else {
+        g_fill_w(g, back, floor + 3, mz - 1, back + 1, floor + 9, mz + 1, kind == 5 ? B_METAL : B_ACCENT); /* the throne's back */
+        g_fill_w(g, back - 1, floor + 3, mz - 1, back - 1, floor + 3, mz + 1, B_ACCENT);                  /* its seat */
+        g_set_w(g, back, floor + 10, mz, B_CRYSTAL);
+    }
+    for (int k = -1; k <= 1; k += 2) {
+        if (kind != 4) { g_set_w(g, back - 4, floor + 1, mz + 8 * k, B_BRAZIER); g_set_w(g, back - 4, floor + 2, mz + 8 * k, B_FIRE); }
+        for (int j = 0; j < 4; j++) { /* what he is, along the carpet */
+            int x = X0 + 14 + j * 10, z = mz + 5 * k;
+            switch (kind) {
+            case 1: case 6: g_set_w(g, x, floor, z, B_BONES); break;                          /* the dead; the den */
+            case 2: case 9: g_fill_w(g, x, floor, z, x, floor + 2, z, B_CRYSTAL); break;      /* the mage; the sleeper */
+            case 5: g_fill_w(g, x, floor, z, x, floor + 3, z, B_METAL); break;                /* brass and iron */
+            case 8: g_set_w(g, x, floor, z, B_BRAZIER); g_set_w(g, x, floor + 1, z, B_FIRE); break; /* the stills */
+            case 4: g_set_w(g, x, floor, z, B_WEB); break;                                    /* the empty court */
+            default: g_fill_w(g, x, floor, z, x, floor + 1, z, B_PILLAR); g_set_w(g, x, floor + 2, z, B_LANTERN); break;
+            }
+        }
+    }
+}
+
 void gen_structure(GenCtx *g) {
     switch (g->info.st.type) {
     case STRUCT_VESTIBULE:
-    case STRUCT_HALL: if (g->info.st.variant == HALL_TOWN) gen_town(g); else if (g->info.st.variant == 4) gen_lair(g); else gen_hall(g); break;
+    case STRUCT_HALL:
+        if (g->info.st.variant == HALL_TOWN) gen_town(g);
+        else if (g->info.st.variant == 4) gen_lair(g);
+        else { gen_hall(g); if (g->info.st.variant == 5) throne_dais(g); }
+        break;
     case STRUCT_CAVERN: gen_cavern(g); break;
     case STRUCT_CHASM: gen_chasm(g); break;
     default: break;

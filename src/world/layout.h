@@ -71,7 +71,13 @@ typedef struct World {
     /* the great dragons slain (their lairs' keys): they do not come back (saved) */
     u64 dragons_slain[64];
     int ndragons_slain;
+    /* the Old King (king.h): the steps done (bits), what is known of him, how it ended (saved) */
+    u16 king_done;
+    u8 king_flags;    /* KF_* */
+    u8 king_ending;   /* KE_*: 0 not yet */
 } World;
+enum { KF_KIND = 1, KF_NAME = 2 };
+enum { KE_NONE, KE_FIGHT, KE_WORD, KE_ARTEFACT };
 enum { TQ_NONE, TQ_HUNT, TQ_FETCH, TQ_LOST, TQ_PEST, TQ_COUNT };
 #define MAX_TOWN_RECS 32
 typedef struct TownRec TownRec;
@@ -167,6 +173,8 @@ extern const int DIR_X[4], DIR_Z[4];
 void world_init(World *w, u64 seed);
 
 bool world_is_exterior(int cx, int cy, int cz);
+/* The megastructure of a placement cell (SUPER chunks a side), if it has one. */
+bool world_cell_structure(const World *w, int gx, int gy, int gz, Structure *out);
 int world_stratum(const World *w, int cx, int cy, int cz);
 int world_flavor(const World *w, int cx, int cy, int cz);
 float world_difficulty(int cx, int cy, int cz);
