@@ -286,7 +286,7 @@ static void plan(PlayerSlot *ps) {
         if (s->well_fed_t <= 0 && !(s->meal && s->meal_t > 0) && ds >= 1) to = v3(POCKET_TABLE_X0 - 1.5f, POCKET_G, (ds == 1 ? POCKET_TABLE_Z0_SHORT + POCKET_TABLE_Z1_SHORT : POCKET_TABLE_Z0 + POCKET_TABLE_Z1) * 0.5f);
         else if (s->refreshed_t <= 0 && bs >= 1) to = v3((POCKET_BATH_X0 + POCKET_BATH_X1) * 0.5f, POCKET_G - 1, (POCKET_BATH_Z0 + POCKET_BATH_Z1) * 0.5f);
         else if (!B.forged && sanctum_stage(G, SP_FORGE) >= 1 && sanctum_stage(G, SP_ISLAND) >= 2) to = v3(POCKET_ANVIL_X + 0.5f, POCKET_G, POCKET_ANVIL_Z + 2.5f);
-        else if (B.realm_rested < 1) to = v3(POCKET_BED_X0 - 1.5f, POCKET_G, (POCKET_BED_Z0 + POCKET_BED_Z1) * 0.5f);
+        else if (B.realm_rested < 1) to = v3(POCKET_BED_X0 - 0.6f, POCKET_G, (POCKET_BED_Z0 + POCKET_BED_Z1) * 0.5f); /* (within the bed's reach: it counts 1.2 m round it) */
         else to = v3(POCKET_EXIT_X, POCKET_G, POCKET_EXIT_Z);
         /* the realm is bigger than the search: walk toward the far goal through the nearest cell */
         int best = -1;
@@ -677,7 +677,7 @@ static void survive(Game *g, PlayerSlot *ps, bool in_fight) {
     /* a trip home when worn out and nobody is close */
     bool worn = s->hp < s->maxhp * 0.5f && s->potions_hp == 0;
     bool rich = s->gold >= 2000 && B.t >= B.next_home; /* ranks, relics and building are sold at home */
-    if (B.style == BS_KING && king_bot_home(G) && B.t >= B.next_home - 480.0f) rich = true; /* the Old King's vision: a night at home */
+    if (B.style == BS_KING && king_bot_home(G) && B.t >= B.next_home) rich = true; /* the Old King's vision: a night at home */
     if (!in_fight && !realm_has(ps->pl.pos) && (worn || rich) && s->spell_cd <= 0 && B.realm_phase == 0) {
         if (cast_util(g, ps, SU_SANCTUM)) {
             B.realm_phase = 1;
@@ -1209,7 +1209,7 @@ bool bot_step(Game *g, PlayerInput *in, float dt) {
         if (s->gold > 1500 && shop_buy_kind(g, ps, SH_RELIC)) bought++;
         if (bought) logf_("%7.1f SHOP %d bought, gold left %d\n", B.t, bought, s->gold);
     }
-    if (B.realm_phase && realm_has(ps->pl.pos) && s->respawn.y > POCKET_Y0 && B.realm_rested < 1) B.realm_rested = 1;
+    if (B.realm_phase && realm_has(ps->pl.pos) && s->rest_t < 0 && B.realm_rested < 1) B.realm_rested = 1;
     if (B.realm_phase && !B.forged && forge_here(g, ps)) bot_forge(g, ps);
     if (!realm_has(ps->pl.pos)) B.forged = false;
     if (B.t >= B.next_skills) {
