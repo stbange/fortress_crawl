@@ -452,6 +452,9 @@ typedef struct PlayerSlot {
     float shake;            /* the view shakes (a dragon's tread, its roar) */
     float credits_t;        /* the Old King settled: the ending and the credits are showing (king.c) */
     float returned_at;      /* when "back where you fell" was last used (once in 5 minutes) */
+    bool waypoint_on;       /* a place the Golden Thread leads to first (the bot's dragon hunt; later the map) */
+    vec3 waypoint;
+    char waypoint_name[32];
     u8 track;               /* the line at the top: 0 the Old King, 1 the chronicle, 2 a town's task (Y) */
     float king_talk_t;      /* spoken to the Old King: a second blow within this settles it */
     u8 realm_notes;         /* the realms: warnings already given this visit (bits) */

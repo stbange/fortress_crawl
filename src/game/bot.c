@@ -358,7 +358,7 @@ static void plan(PlayerSlot *ps) {
         return;
     }
     /* the quester follows the Golden Thread: the farthest point of it within reach */
-    if ((B.style == BS_QUESTER || (B.style == BS_KING && !B.hunting)) && ps->thread.n > 1 && ps->thread.t < ps->thread.life) {
+    if ((B.style == BS_QUESTER || B.style == BS_KING) && ps->thread.n > 1 && ps->thread.t < ps->thread.life) {
         int bi = -1;
         for (int k = ps->thread.n - 1; k >= 0 && bi < 0; k--) {
             int ri = reach_index(ps->thread.pts[k]);
@@ -389,7 +389,10 @@ static void plan(PlayerSlot *ps) {
     B.hunting = false;
     int lvl = 0;
     u64 key = 0;
-    if (B.style == BS_KING && (king_bot_needs(G, ps) & KN_DRAGON)) {
+    ps->waypoint_on = false;
+    int fcx = floordiv((int)floorf(feet.x), CHUNK), fcy = floordiv((int)floorf(feet.y), CHUNK), fcz = floordiv((int)floorf(feet.z), CHUNK);
+    bool out_of_world = realm_has(feet) || world_is_realm(fcx, fcy, fcz); /* (no lair to look for from the Sanctum or a realm) */
+    if (B.style == BS_KING && !out_of_world && (king_bot_needs(G, ps) & KN_DRAGON)) {
         /* the way needs a dragon's heart or blood: the nearest great dragon it can face first */
         bool lair = dragon_lair_near(G, feet, ps->st.level + 2, &tgt, &lvl, &key);
         if (!lair && B.t >= B.next_hunt_note) { B.next_hunt_note = B.t + 300.0f; logf_("%7.1f DRAGON wanted, but no lair within reach of level %d\n", B.t, ps->st.level + 2); }
@@ -397,6 +400,9 @@ static void plan(PlayerSlot *ps) {
             if (key != B.hunt_key) { B.hunt_key = key; B.hunts++; logf_("%7.1f DRAGON hunt: a lair of level %d at %.0f %.0f %.0f\n", B.t, lvl, tgt.x, tgt.y, tgt.z); }
             B.hunting = true;
             has_tgt = true;
+            ps->waypoint_on = true; /* the thread leads to the lair */
+            ps->waypoint = tgt;
+            snprintf(ps->waypoint_name, sizeof ps->waypoint_name, "THE DRAGON'S LAIR");
             int ri = reach_index(tgt);
             if (ri >= 0 && dist_[ri] > 1) { B.goal_kind = 0; set_path_to(ri); B.goal = tgt; return; }
             if (fabsf(tgt.y - feet.y) > 6.0f) B.vertical_until = B.t + 20.0f;
@@ -1406,6 +1412,6 @@ bool bot_step(Game *g, PlayerInput *in, float dt) {
     }
     follow_path(ps, in, dt, B.goal_kind == 0 && s->hp > s->maxhp * 0.5f);
     /* the golden thread now and then for the quester */
-    if ((B.style == BS_QUESTER || (B.style == BS_KING && !B.hunting)) && (ps->thread.n == 0 || ps->thread.t >= ps->thread.life) && fmodf(B.t, 5.0f) < dt) cast_util(g, ps, SU_THREAD);
+    if ((B.style == BS_QUESTER || B.style == BS_KING) && (ps->thread.n == 0 || ps->thread.t >= ps->thread.life) && fmodf(B.t, 5.0f) < dt) cast_util(g, ps, SU_THREAD);
     return true;
 }

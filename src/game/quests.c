@@ -1519,6 +1519,7 @@ static int thread_path(Game *g, vec3 from, vec3 goal, Thread *th) {
 /* The goals the thread can lead to: the chapter target, then the missions. */
 static int thread_goals(Game *g, PlayerSlot *ps, vec3 *goal, char names[][STORY_NAME], int max) {
     int n = 0;
+    if (ps->waypoint_on && n < max) { goal[n] = ps->waypoint; snprintf(names[n], STORY_NAME, "%s", ps->waypoint_name); n++; }
     /* the Old King's way first, unless the line at the top follows something else (Y) */
     if (ps->track != 1 && king_thread_goal(g, ps, &goal[n], names[n], STORY_NAME)) n++;
     if (ps->st.motive && n < max) {
