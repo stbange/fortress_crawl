@@ -1015,7 +1015,10 @@ void inventory_draw(Game *g, PlayerSlot *ps, int W, int H, int top) {
     if (!l.compact) {
         int found = 0;
         for (int i = 0; i < RELIC_COUNT; i++) found += s->relics[i] > 0;
-        snprintf(buf, sizeof buf, "RELICS %d/%d", found, RELIC_COUNT);
+        char arm[64];
+        forge_armour_name(s, arm, sizeof arm);
+        snprintf(buf, sizeof buf, "RELICS %d/%d   ARMOUR: %s", found, RELIC_COUNT, arm);
+        for (char *c = buf; *c; c++) if (*c >= 'a' && *c <= 'z') *c -= 32;
         font_text(l.ex, ry - 10, buf, 0.7f, 0.62f, 0.45f);
         const char *help = touch ? "TAP TO SELECT, TAP AGAIN TO EQUIP OR USE - SCRAP BUTTON SELLS"
                            : ps->pad && !(ps->keyboard && g->mouse) ? "A EQUIP/USE  X SCRAP  LB/RB TABS  B CLOSE"

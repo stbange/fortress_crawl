@@ -1,5 +1,7 @@
 # Balance and pacing: implementation plan
 
+> A plan, kept as a record. How the game fits together today: [DESIGN.md](DESIGN.md).
+
 Status: **done** (November 2026); results in [`PLAYTEST.md`](PLAYTEST.md), section 4.
 Where the implementation differs from the plan:
 - E1: the stairs already had a solid centre; the falls were through the ring of steps, so

@@ -1,5 +1,7 @@
 # The Old King and the dragons: concept and plan
 
+> A plan, kept as a record. What was built: [OLD_KING.md](OLD_KING.md); how it all fits: [DESIGN.md](DESIGN.md).
+
 Today each fortress has stories but no end the whole game leads to. The nine chapters of a
 motive end with the opener of the seal, and that ending feels like a side road. This plan adds
 **one main storyline per fortress: the way to the Old King**. Ten generated steps, like chapters,

@@ -121,7 +121,7 @@ typedef struct Monster {
     char name[STORY_NAME];
     u8 ruler;        /* the ruler of a realm behind the Gate: 1 + RM_* */
     u8 townq;        /* a pest a town asked you to kill: 1 + its record (town.c) */
-    u8 king;         /* the Old King himself (1), his lieutenant (2), a servant he summoned (3) (king.c) */
+    u8 king;         /* the Old King himself (1), his lieutenant (2), a servant he summoned (3), a raider on a town (4) (king.c) */
     u8 kingstep;     /* a lieutenant: 1 + its step */
     /* a dragon (dragon.c): its kind and size, what it is doing, its fight's phase */
     u8 dkind, dsize, dstate, dphase, heads, revived, grounded;
@@ -298,6 +298,7 @@ typedef struct Stats {
      * (PT_* and PE_* bits) */
     u8 forge[FG_COUNT];
     int smith_xp;
+    u8 armour, armour_el;   /* dragon-scale armour (forge.c): 0 none, 1-3 its make; the element its scales ward off */
     u8 pick;   /* the pickaxe: 1 iron, 2 steel, 3 mithril (docs/DESTRUCTION.md) */
     int bombs;
     /* temperature and wetness (docs/SIMULATION.md) */
@@ -450,6 +451,8 @@ typedef struct PlayerSlot {
     float realm_note_t;     /* the realms: until the next warning of the same kind */
     float shake;            /* the view shakes (a dragon's tread, its roar) */
     float credits_t;        /* the Old King settled: the ending and the credits are showing (king.c) */
+    float returned_at;      /* when "back where you fell" was last used (once in 5 minutes) */
+    u8 track;               /* the line at the top: 0 the Old King, 1 the chronicle, 2 a town's task (Y) */
     float king_talk_t;      /* spoken to the Old King: a second blow within this settles it */
     u8 realm_notes;         /* the realms: warnings already given this visit (bits) */
     float ritual_t;         /* opening the Sanctum Door: seconds left of the ritual */
@@ -464,6 +467,8 @@ typedef struct PlayerSlot {
     char domain_name[STORY_NAME];
     int motive_sel, story_scroll;
     int parley, parley_sel; /* 1 + the monster that yielded to this player, the choice under the cursor */
+    int parley_vote;        /* co-op: 1 + this player's choice, waiting for the others (quests.c) */
+    u8 king_vote;           /* co-op: 1 + the end this player asked for at the faltering king (king.c) */
     bool pick_out;          /* the pickaxe in hand (the fourth slot): attack digs, the alternate throws a bomb */
     float bomb_cd;
     float breath, drown_t;
@@ -741,7 +746,7 @@ void story_draw_picker(Game *g, PlayerSlot *ps, int W, int H);
 void story_tab_nav(Game *g, PlayerSlot *ps, int nav);
 void story_draw_tab(Game *g, PlayerSlot *ps, int W, int H, int top);
 void story_draw_panel(Game *g, PlayerSlot *ps, int W, int H);
-void story_draw_tracker(Game *g, PlayerSlot *ps, int W, int H, int y);
+int story_draw_tracker(Game *g, PlayerSlot *ps, int W, int H, int y); /* H 0: only whether it has a line */
 void story_draw_plates(Game *g, PlayerSlot *viewer, int W, int H);
 void story_map_markers(Game *g, PlayerSlot *ps, float cx, float cy, int pxw, int pyw, int pzw, int px, float x0, float y0, float x1, float y1);
 void story_on_kill(Game *g, Monster *m);
@@ -862,6 +867,11 @@ void king_provoked(Game *g, Monster *m);
 void king_draw(Game *g, PlayerSlot *viewer);
 int king_draw_tracker(Game *g, PlayerSlot *ps, int W, int H, int y); /* lines drawn */
 void king_draw_credits(Game *g, PlayerSlot *ps, int W, int H);
+void king_heir(Game *g);
+bool king_raids_on(Game *g);
+bool king_bot_target(Game *g, PlayerSlot *ps, vec3 *at, bool *talk);
+int king_raid(Game *g, vec3 at, int level, int n, u64 key); /* raiders (king 4) */
+bool king_faltering(const Monster *m);
 void king_lore_text(Game *g, int a, char *out, int n);
 bool king_won(const Game *g);
 /* dragon.c: dragons (dragons.h, docs/DRAGONS.md) */
@@ -883,8 +893,10 @@ void town_update(Game *g, float dt);
 void town_draw(Game *g, PlayerSlot *viewer);
 bool town_use(Game *g, PlayerSlot *ps);         /* talk to whoever is in front of you */
 void town_on_kill(Game *g, Monster *m);
-void town_draw_tracker(Game *g, PlayerSlot *ps, int W, int H, int y);
-int town_market(Game *g, PlayerSlot *ps, int *discount); /* the people whose market you stand in, or -1 */
+int town_draw_tracker(Game *g, PlayerSlot *ps, int W, int H, int y);
+void game_next_track(Game *g, PlayerSlot *ps);
+int town_market(Game *g, PlayerSlot *ps, int *special); /* the people whose market you stand in, or -1; which of its special wares are open to you (bits) */
+u64 town_special_key(Game *g, PlayerSlot *ps, int ware);
 bool town_buy(Game *g, PlayerSlot *ps, int ware);
 void gate_init(Game *g);                       /* the realms joined to this world */
 void gate_update(Game *g, float dt);           /* travel, rifts, each realm's rules */
@@ -1077,6 +1089,9 @@ void forge_strike(Game *g, PlayerSlot *ps);
 void forge_bellows(Game *g, PlayerSlot *ps);
 bool forge_smelt(Game *g, PlayerSlot *ps, int ore);
 bool forge_salvage(Game *g, PlayerSlot *ps, int bag_slot);
+bool forge_armour(Game *g, PlayerSlot *ps);       /* make dragon-scale armour at the anvil */
+float forge_armour_taken(const Stats *s);          /* the share of a blow it takes */
+void forge_armour_name(const Stats *s, char *out, int n);
 void forge_window(const PlayerSlot *ps, float *lo, float *hi);
 int forge_region_ore(Game *g, int x, int y, int z, u64 h); /* FG_* ore of the region round a cell */
 

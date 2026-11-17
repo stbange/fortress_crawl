@@ -17,7 +17,8 @@ shrines, an explored-cells map, split-screen co-op for up to four players, savin
 generated stories: a motive per character, an endless metaplot of named enemies, inscriptions,
 notes of the dead and bounty boards**, and **sound**: every monster, weapon, spell, trap and
 place has its own sound effects, made with ElevenLabs (see [Sound](#sound)). See [`docs/PLAN.md`](docs/PLAN.md)
-for the full plan and [`docs/STORY.md`](docs/STORY.md) for how the stories work.
+for the full plan and [`docs/STORY.md`](docs/STORY.md) for how the stories work. How it all fits
+together today, and what the main story is (the Old King's), is in [`docs/DESIGN.md`](docs/DESIGN.md).
 
 ## Screenshots
 
@@ -423,6 +424,7 @@ last and shows what is saved; *New characters* (press twice) deletes the save of
 | V / O | drink an elixir (the last one brewed or drunk) / the ALCHEMY tab (brewing at a shrine or at home) |
 | U | the FORGE tab (at the anvil: X or LEFT the bellows, ENTER or UP strikes) |
 | G | Golden Thread: a fading line to your story target (again: next mission) |
+| Y | the line at the top follows the next of: the Old King's way, the chronicle, a town's task |
 | TAB, I, B, L | character menu: last tab, inventory, spellbook, story; SHOP, FOOD, ALCHEMY and FORGE are the fifth to eighth tabs (Q/E or [ ] switch tabs) |
 | in the menu | arrows or WASD select, Enter equips / uses / learns / makes a spell active, Del or X scraps a weapon |
 | M | map of the cells you have seen |
@@ -511,7 +513,8 @@ shows the touch controls from the start.
 Shrines (glowing rune stones) are respawn points: walk up to one to attune it. When you die,
 you return to the last attuned shrine (or the Sanctum bed, if you slept there) with half your
 health and mana, and lose a fifth of the gold you carry. For 15 seconds after that, the Golden
-Thread key (G, right stick click, PATH) takes you back where you fell, for another fifth.
+Thread key (G, right stick click, PATH) takes you back where you fell, for another fifth, but
+only once in five minutes.
 
 **The shop** (the SHOP tab of the character menu): anywhere, scrap every weapon in the bag
 worse than the one you wear. At a shrine: health potions (you carry at most 5) and mana
@@ -614,9 +617,15 @@ first you don't know which. Ten steps lead to his throne, and the tracker shows 
 - steps 8 and 9: two of his lieutenant, his seal and the wyrm before his throne
 - step 10: the throne
 
-Settle with him by the sword, by his true name, or with the artefact his kind needs. Any ending
-wins the game; the credits roll, and then you can explore on. See
-[docs/OLD_KING.md](docs/OLD_KING.md); `--demo kingtest` walks a seed's way to the end.
+Each step teaches a part of the game the first time the line at the top follows it. Once you know
+what he is, his servants raid the towns. At the throne he will not listen standing: bring him to
+his knees, then speak his true name, raise the artefact his kind needs, or finish him. Each ending
+has its own reward (his crown and hoard; his knights sworn to the towns; every town freed and
+grateful), and any of them wins the game: the credits roll, the Astral Shore opens, and you can
+explore on. Before long an heir of another kind takes the throne, and a new, longer way begins.
+See [docs/OLD_KING.md](docs/OLD_KING.md) and, for how all of the game fits together,
+[docs/DESIGN.md](docs/DESIGN.md); `--demo kingtest` walks a seed's way to the end, `--bot king`
+plays it.
 
 ## Towns of the friendly peoples
 
@@ -633,8 +642,11 @@ follows you in. Strike at someone to talk to them:
 - the elder asks for help: beasts to drive off, goods to bring, someone lost, a beast in its lair
 - everyone else talks of their lives and the history
 
-Help a town and its people call you friend, then honoured, and it costs you less and at last
-nothing. See [docs/TOWNS.md](docs/TOWNS.md); `--demo town` puts you in the first town.
+Help a town (its tasks, a raid driven off, gold for its works: new houses, arms for the guards,
+a caravan) and its people call you friend, then honoured, then kin. Trust opens wares sold to
+no one else (moonsilver, epic weapons, keystones, formula pages...), healing and the inn become
+free, and kin come to live in your Sanctum with a gift from home every day. See
+[docs/TOWNS.md](docs/TOWNS.md); `--demo town` puts you in the first town.
 
 ## Dragons
 

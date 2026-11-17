@@ -73,8 +73,10 @@ them.**
   wake there, and the game is saved. Good company by the fire gives **15 % more XP and twice the
   healing for 15 minutes**, and someone tells a tale from the world's history.
 - **The healer:** wounds, burns, poison, cold and the after-effects of elixirs, for 10 gold plus 1
-  per danger level, free for friends. Honoured guests also get a blessing that takes the next blows.
-- **The merchants and the smith** open the market: the shop, with the people's own wares on top.
+  per danger level, half that for friends, free for the honoured, who also get a blessing that
+  takes the next blows.
+- **The merchants and the smith** open the market: the shop, with the people's own wares on top,
+  and more for those the town trusts (see Reputation).
   - dwarves: iron, steel, a rare weapon, bombs, wine
   - goblins: slime, bat wings, mushrooms
   - gnomes: frost salts, growth tonics, bombs, quicksilver, lenses
@@ -111,14 +113,51 @@ Each town remembers you:
 |---|---|---|
 | stranger | 0 | |
 | guest | 1-2 | (you spoke to them) |
-| friend | 3-5 | 20 % off at the market, free healing |
-| honoured | 6-9 | 35 % off, a free bed, a blessing from the healer |
-| kin | 10+ | |
+| friend | 3-5 | a ware sold only to friends; healing at half price |
+| honoured | 6-9 | a second, rarer ware (an epic weapon, a keystone, a formula page...); a free bed and free healing, and a blessing from the healer |
+| kin | 10+ | one of the town comes to live in your Sanctum, by the arrival, and has a gift from home for you every day |
 
-A task gives 1 reputation, or 2 for finding someone lost or killing a beast.
+There are no discounts: trust opens wares instead. Each special ware can be bought once a day.
+
+| People | For friends | For the honoured | From your caravan |
+|---|---|---|---|
+| dwarves | 2 moonsilver | an epic weapon | 2 mithril |
+| goblins | 6 bombs | a keystone | 2 void salt |
+| gnomes | a formula page | 2 rune ink | 2 brimstone |
+| elves | a mandrake | a formula page | a phoenix feather |
+| humans | 2 quenching oil | a keystone | an epic weapon |
+| halflings | 3 starfruit | 2 amber | a formula page |
+| orcs | 2 troll blood | an epic weapon | a titan heart |
+
+How reputation is won:
+- a task: 1, or 2 for finding someone lost or killing a beast
+- a raid of the Old King's servants driven off while you were in the town: 1 (see below)
+- the town's works: 2 each
+- the Old King settled by his artefact: 2 for every town (and every new town greets you as a
+  guest)
+
+## The town's works
+
+Crouch and speak to the elder to give gold to the town's next work. Each is more costly (and more
+so in towns deeper in), each gives 2 reputation, and each is seen:
+1. **rebuild the burned houses** (400 gold and up): a new family on the plaza
+2. **arm the guards** (900 and up): two more guards on the walls
+3. **send a caravan to the far halls** (1600 and up): a third special ware in the market, from
+   far away
+
+## Raids
+
+Once you know what the Old King is (the first three steps of his way, [OLD_KING.md](OLD_KING.md)),
+his servants raid the town you are standing in, about once in a quarter of an hour. They come in by
+the plaza; the guards shoot, and you drive them off for the town's thanks. If you leave, they are
+gone, and the town remembers nothing to your credit. If the king was settled by his true name, his
+knights guard every town (two more guards each).
+
+After the Old King is settled, the towns celebrate: lights burst over the plazas, and folk talk of
+nothing else.
 
 Reputation, the tasks, who asked them and the company at the inn are saved with the world (save
-version 26).
+version 26); the town's works with save version 29.
 
 ## How it is built
 

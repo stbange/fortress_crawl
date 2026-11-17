@@ -886,6 +886,22 @@ int main(int argc, char **argv) {
                 sanctum |= t == KS_VISION || t == KS_FORGE;
             }
             CHECK(dragon && town && sanctum, "a way without a dragon, a town or the Sanctum");
+            /* the heirs: each a valid way of another kind, to the same throne, farther out */
+            int first_kind = K->kind;
+            float first_far = 0;
+            for (int i = 0; i < 9; i++) first_far = fmaxf(first_far, sqrtf((float)(K->step[i].cx * K->step[i].cx + K->step[i].cz * K->step[i].cz)));
+            for (int gen = 1; gen <= 2; gen++) {
+                World h = w;
+                h.king_gen = (u8)gen;
+                const KingWay *H = king_way(&h, realm_pick(h.seed));
+                CHECK(H->valid, "seed %llu: no way for heir %d", (unsigned long long)w.seed, gen);
+                if (!H->valid) continue;
+                CHECK(H->kind != first_kind, "seed %llu: heir %d is of the Old King's own kind", (unsigned long long)w.seed, gen);
+                float far = 0;
+                for (int i = 0; i < 9; i++) far = fmaxf(far, sqrtf((float)(H->step[i].cx * H->step[i].cx + H->step[i].cz * H->step[i].cz)));
+                if (k == 0) printf("king: heir %d: %s, %s; farthest step %.0f chunks (the Old King's %.0f)\n", gen, H->name, KING_KINDS_DEF[H->kind].name, far, first_far);
+            }
+            K = king_way(&w, realm_pick(w.seed));
             if (k == 0) {
                 printf("king: %s, %s; throne at chunk %d %d %d\n", K->name, KING_KINDS_DEF[K->kind].name, K->step[9].cx, K->step[9].cy, K->step[9].cz);
                 for (int i = 0; i < KING_STEPS; i++)

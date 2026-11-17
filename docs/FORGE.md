@@ -95,6 +95,23 @@ as a rare found at that level; later it stays well ahead.
 your level and above it (half the metal's bonus, quality, a third of your smithing), keeping all
 it is; a perfect reforge also makes it a step rarer, up to epic.
 
+## Dragon-scale armour
+
+The one piece of armour in the game, made at the anvil (a row of the FORGE tab). Its scales are
+essences of one element (a great dragon leaves three to six of its own), and its make decides how
+much of every blow it takes:
+
+| Make | Smithing | Scales | Dragon's teeth | Metal | Takes |
+|---|---|---|---|---|---|
+| drake-scale mail | 2 | 6 | 2 | 3 steel | 10% |
+| dragon-scale mail | 5 | 10 | 4 | 2 mithril | 17% |
+| wyrm-scale plate | 8 | 14 | 6 | 2 adamant and a titan heart | 25% |
+
+The element is the one you hold most essences of. Its after-effects slide off the scales: fire
+mail does not burn, frost mail is not slowed, venom mail is not poisoned, and so on. Each make
+replaces the one before; wyrm-scale plate can be remade in another element at the same cost. It shows in the inventory and is saved with the
+character (save version 29).
+
 ## Code
 
 - `forge.c`: materials, metals, smithing levels, the plan, the session (`forge_start`,

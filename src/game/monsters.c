@@ -1414,7 +1414,7 @@ void monsters_update(Game *g, float dt) {
         }
         vec3 want = v3(0, 0, 0);
         float speed = d->speed * (m->elite ? 1.1f : 1.0f) * (m->slow_t > 0 ? 0.45f : 1.0f) * (m->rank >= 6 ? 1.15f : 1.0f) *
-                      (enraged ? 1.3f : 1.0f);
+                      (enraged ? 1.3f : 1.0f) * (m->king >= 2 && hdist > 6.0f ? 1.7f : 1.0f); /* the king's own close in at a run (king.c) */
         vec3 hdir = v3_norm(v3(feet.x - m->pos.x, 0, feet.z - m->pos.z));
         MCtx x = { tp, c, eye, feet, hdir, dist, hdist, dy, speed, dt, los, i };
         bool lured = m->alt_kind == 1 && g->effects[m->alt_idx].type == EF_LURE;

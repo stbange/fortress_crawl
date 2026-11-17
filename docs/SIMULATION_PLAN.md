@@ -1,5 +1,7 @@
 # The living world: implementation plan
 
+> A plan, kept as a record. What was built: [SIMULATION.md](SIMULATION.md); how it all fits: [DESIGN.md](DESIGN.md).
+
 Status: **built** (November 2026): all six steps (save versions 17 and 18; the
 later steps' versions move up by one). Builds on the simulation that exists
 ([SIMULATION.md](SIMULATION.md), [DESTRUCTION.md](DESTRUCTION.md)): breakable blocks, water and

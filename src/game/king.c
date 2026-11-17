@@ -32,6 +32,8 @@ static void upper(char *s) { for (; *s; s++) *s = (char)toupper((unsigned char)*
 void king_settle(Game *g, PlayerSlot *ps, int ending);
 static const KingWay *way(Game *g) { return king_way(&g->world, g->realms_joined); }
 bool king_won(const Game *g) { return g->world.king_ending != KE_NONE; }
+static int tracked_step(Game *g, const KingWay *K, const PlayerSlot *ps);
+static vec3 king_last_pos; /* where he was last (his hoard falls there) */
 static bool done(const Game *g, int i) { return (g->world.king_done >> i) & 1; }
 
 static bool group_done(const Game *g, const KingWay *K, int grp) {
@@ -114,6 +116,13 @@ static void fill(Game *g, const KingWay *K, const char *tmpl, char *out, int n) 
     out[o] = 0;
 }
 
+/* The chronicle (the motive's chapters, quests.c) is a way to step 8: its end, the opener, served him. */
+static bool chronicle_on(const Game *g) {
+    for (int k = 0; k < MAX_PLAYERS; k++)
+        if (g->players[k].active && g->players[k].st.motive) return true;
+    return false;
+}
+
 /* The short line of a step: what to do (the tracker, the STORY tab). */
 static void step_goal(Game *g, const KingWay *K, int i, char *out, int n) {
     const KingStep *st = &K->step[i];
@@ -133,9 +142,29 @@ static void step_goal(Game *g, const KingWay *K, int i, char *out, int n) {
     case KS_BREW: town_name(g, st, a, sizeof a); snprintf(out, (size_t)n, "bring dragon's blood and an orchid to the healer of %s", a); break;
     case KS_REALM: snprintf(out, (size_t)n, "defeat %s in %s, through the Gate", REALMS[st->arg].ruler, REALMS[st->arg].name); break;
     case KS_RELIC: snprintf(out, (size_t)n, "take %s from its guards", thing_of(K, KS_RELIC)); break;
-    case KS_LIEUTENANT: snprintf(out, (size_t)n, "kill the king's lieutenant"); break;
-    case KS_SEAL: snprintf(out, (size_t)n, "break the king's seal"); break;
+    case KS_LIEUTENANT: snprintf(out, (size_t)n, st->group == 2 && chronicle_on(g) ? "kill the king's lieutenant, or end the chronicle" : "kill the king's lieutenant"); break;
+    case KS_SEAL: snprintf(out, (size_t)n, st->group == 2 && chronicle_on(g) ? "break the king's seal, or end the chronicle" : "break the king's seal"); break;
     default: snprintf(out, (size_t)n, "go to %s", KING_KINDS_DEF[K->kind].throne); break;
+    }
+}
+
+/* How to do a step: the way teaches the game (said when its group opens). */
+static const char *step_hint(int type) {
+    switch (type) {
+    case KS_WITNESS: return "Someone who saw him waits in the halls, with his servants about.";
+    case KS_TRUENAME: return "His name is carved on a stele; what you read stays in the STORY tab.";
+    case KS_VISION: return "Sleep in the Sanctum's bed: the Sanctum Door takes you home.";
+    case KS_DRAGON: return "A great dragon sleeps on its hoard: crouch to come close unheard. Its heart is a titan heart for the forge.";
+    case KS_HOARD: return "Take the thing from a dragon's hoard crouching, or it wakes.";
+    case KS_ALLEGIANCE: return "A town's friendship: do its elder's tasks, or crouch before the elder and give to its works.";
+    case KS_FORGE: return "Build the forge in the Sanctum (after the island's second stage); at its anvil a titan heart, 3 essences of one element and 2 steel.";
+    case KS_BREW: return "A healer can brew it: dragon's blood (from a great dragon's body) and an orchid (the elves sell them).";
+    case KS_REALM: return "Rifts in the fortress lead behind the Gate; once one is walked, the Gate in the Sanctum's court goes there too.";
+    case KS_RELIC: return "A relic, held by his servants.";
+    case KS_LIEUTENANT: return "His lieutenant comes at you through the dark: stand your ground.";
+    case KS_SEAL: return "His seal is guarded by five.";
+    case KS_WYRM: return "A wyrm guards the way, the lair nearest his throne.";
+    default: return "";
     }
 }
 
@@ -148,8 +177,13 @@ static void step_told(Game *g, const KingWay *K, int i, char *out, int n) {
     switch (st->type) {
     case KS_HERALD:
         town_name(g, st, a, sizeof a);
-        snprintf(out, (size_t)n, "The elder of %s lowers her voice. 'There is a king in %s still. The Old King. He never died, and he never left. "
-                 "Find out what he is - his name is written somewhere, and someone saw him once - and then go to him. Nobody else will.'", a, f);
+        if (K->gen)
+            snprintf(out, (size_t)n, "The elder of %s shakes her head. 'You ended one king, and the throne of %s took another. Find out what this one is - "
+                     "his name is written somewhere too - and go to him again. Further out, this time.'", a, f);
+        else
+            snprintf(out, (size_t)n, "The elder of %s lowers her voice. 'There is a king in %s still. The Old King. He never died, and he never left. "
+                     "Find out what he is - his name is written somewhere, and someone saw him once - and then go to him. Nobody else will. "
+                     "Your Golden Thread (G) knows the way to what I ask; the Sanctum Door takes you home to rest between.'", a, f);
         break;
     case KS_WITNESS:
         snprintf(out, (size_t)n, "The witness grips your arm. 'I saw him. He is %s - %s. I ran. I have been running since.'", KD->name, KD->what);
@@ -171,8 +205,12 @@ static void step_told(Game *g, const KingWay *K, int i, char *out, int n) {
     case KS_BREW: town_name(g, st, a, sizeof a); snprintf(out, (size_t)n, "The healer of %s brews all night and gives you %s in a stoppered flask. 'Do not drink it. It is not for you.'", a, thing_of(K, KS_BREW)); break;
     case KS_REALM: snprintf(out, (size_t)n, "%s falls, and with its last breath names the Old King as the one it served. Through the Gate his hold is broken.", REALMS[st->arg].ruler); break;
     case KS_RELIC: snprintf(out, (size_t)n, "You take %s. Its guards served the Old King; it was hidden from him as much as for him.", thing_of(K, KS_RELIC)); break;
-    case KS_LIEUTENANT: snprintf(out, (size_t)n, "His lieutenant falls and in its hand are the king's orders: the way to %s.", KD->throne); break;
-    case KS_SEAL: snprintf(out, (size_t)n, "The seal cracks like ice. Far off, in %s, something stirs on a throne.", KD->throne); break;
+    case KS_LIEUTENANT: case KS_SEAL:
+        if (st->group == 2 && (g->world.king_flags & KF_CHRONICLE))
+            snprintf(out, (size_t)n, "The one who opened the seal of %s served the Old King all along. Among their papers are his orders, and the way to %s.", f, KD->throne);
+        else if (st->type == KS_LIEUTENANT) snprintf(out, (size_t)n, "His lieutenant falls and in its hand are the king's orders: the way to %s.", KD->throne);
+        else snprintf(out, (size_t)n, "The seal cracks like ice. Far off, in %s, something stirs on a throne.", KD->throne);
+        break;
     default: snprintf(out, (size_t)n, "The throne."); break;
     }
 }
@@ -209,7 +247,7 @@ static void complete(Game *g, PlayerSlot *ps, int i) {
     if (group_done(g, K, grp) && grp < 4) {
         static const char *NEXT[4] = { "Now you know what he is. Gather what you will need to face him (four things, in any order).",
                                        "You have what you need. Now the approach: his servants stand between you and the throne.",
-                                       "One more stands in the way.", "The way to the throne is open." };
+                                       "One more stands in the way.", "The way to the throne is open. He will not listen standing: bring him to his knees first." };
         snprintf(then, sizeof then, "%s", NEXT[grp]);
     }
     for (int k = 0; k < MAX_PLAYERS; k++)
@@ -415,6 +453,7 @@ void king_on_kill(Game *g, Monster *m) {
         if (step_open(g, K, i)) complete(g, game_nearest_player(g, m->pos, 1e9f), i);
     }
     if (m->king == 1 && !king_won(g)) {
+        king_last_pos = m->pos;
         king_settle(g, game_nearest_player(g, m->pos, 1e9f), KE_FIGHT);
     }
 }
@@ -438,8 +477,16 @@ static Monster *the_king(Game *g) {
     return NULL;
 }
 
+/* He falters: brought to his knees (half his life, then a fifth), he listens for a while. Only
+ * then do his true name and the artefact reach him; or he can be finished from afar. */
+static int falters;
+static float falter_t;
+bool king_faltering(const Monster *m) { return m && m->king == 1 && falter_t > 0; }
+
 static void spawn_king(Game *g, const KingWay *K, vec3 seat) {
-    int level = chunk_level(g, K->step[9].cx, K->step[9].cy, K->step[9].cz) + 5;
+    int level = chunk_level(g, K->step[9].cx, K->step[9].cy, K->step[9].cz) + 5 + 6 * MINI(K->gen, 4);
+    falters = 0;
+    falter_t = 0;
     Monster *m;
     if (K->kind == KK_DRAGON) {
         m = dragon_spawn(g, DK_GOLD, DS_ANCIENT, v3(seat.x - 12.0f, seat.y - 3.0f, seat.z), level, g->world.seed ^ 0xD4A60);
@@ -501,6 +548,23 @@ float king_damage(Game *g, Monster *m, float dmg) {
     }
     int f = find_step(g, K, KS_FORGE);
     if (f >= 0 && done(g, f)) dmg *= 1.4f; /* the King-Breaker */
+    /* brought to his knees: at half his life, and again at a fifth, he falters and listens */
+    bool can_speak = (g->world.king_flags & KF_NAME) || artefact_held(g, K);
+    float thr = falters == 0 ? 0.5f : falters == 1 ? 0.2f : -1.0f;
+    if (can_speak && thr > 0 && falter_t <= 0 && m->hp - dmg <= m->maxhp * thr) {
+        dmg = fmaxf(0.0f, m->hp - m->maxhp * thr);
+        falters++;
+        falter_t = 12.0f;
+        m->state = MS_STUN;
+        m->timer = 12.0f;
+        char b[128];
+        snprintf(b, sizeof b, "%s FALTERS - STRIKE TO SPEAK%s, OR END HIM FROM AFAR", m->name, artefact_held(g, K) ? " (CROUCH: THE ARTEFACT)" : "");
+        game_banner_all(g, b);
+        particles_burst(g, v3_add(m->pos, v3(0, 2, 0)), v3(1.2f, 1.0f, 0.5f), 40, 3.0f, 0.06f, true);
+        sfx_at(g, SFX_MONSTER_STUN, m->pos, 1.0f);
+        for (int k = 0; k < MAX_PLAYERS; k++)
+            if (g->players[k].active) say(&g->players[k], "He sinks to one knee on the steps of his throne. For a moment he is only old, and he is listening.", NULL);
+    }
     /* at two thirds and one third his servants come */
     float before = (m->hp) / m->maxhp, after = (m->hp - dmg) / m->maxhp;
     if ((before > 0.66f && after <= 0.66f) || (before > 0.33f && after <= 0.33f)) {
@@ -518,13 +582,44 @@ void king_settle(Game *g, PlayerSlot *ps, int ending) {
     if (king_won(g)) return;
     g->world.king_ending = (u8)ending;
     g->world.king_done |= 1u << 9;
+    g->world.king_wins = (u8)MINI(255, g->world.king_wins + 1);
+    if (ending != KE_FIGHT) g->world.king_mercy = 1;
+    falter_t = 0;
     Monster *m = the_king(g);
+    vec3 at = m ? m->pos : king_last_pos;
+    vec3 up = v3_add(at, v3(0, 0.8f, 0));
+    float lvl = m ? m->level : (float)(chunk_level(g, K->step[9].cx, K->step[9].cy, K->step[9].cz) + 5);
+    switch (ending) {
+    case KE_FIGHT: { /* the sword: his crown, his own blade and the throne's hoard */
+        for (int k = 0; k < 14; k++) pickup_spawn(g, PK_GOLD, v3_add(up, v3(cosf(k * 0.9f) * 2.5f, 0, sinf(k * 0.9f) * 2.5f)), 80 + (int)lvl * 12, NULL, 0, 0);
+        for (int k = 0; k < 4; k++) loot_drop(g, at, lvl + 5.0f, true, 1.0f);
+        int tier, region = world_region(&g->world, floordiv(fl(at.x), CHUNK), floordiv(fl(at.y), CHUNK), floordiv(fl(at.z), CHUNK), &tier);
+        Item it = item_roll_region(mix64(g->world.seed ^ 0xC20A ^ (u64)K->gen), lvl + 10.0f, RAR_LEGENDARY, tier, region);
+        pickup_spawn(g, PK_WEAPON, v3_add(up, v3(0, 0.6f, 0)), 0, &it, 0, 0);
+        pickup_spawn(g, PK_RELIC, v3_add(up, v3(0.8f, 0, 0)), 0, NULL, 0, 0); /* the crown */
+        pickup_spawn(g, PK_FORGE, v3_add(up, v3(-0.8f, 0, 0)), FG_TITAN_HEART, NULL, 0, 0);
+        for (int k = 0; k < 3; k++) pickup_spawn(g, PK_KEYSTONE, v3_add(up, v3(0, 0, 0.7f * (k - 1))), 1, NULL, 0, 0);
+        sanctum_trophy_named(g, g->world.seed ^ 0xC20A ^ (u64)K->gen);
+        break;
+    }
+    case KE_WORD: /* his knights swear to the towns; his treasury is yours */
+        g->world.king_flags |= KF_SWORN;
+        for (int k = 0; k < 8; k++) pickup_spawn(g, PK_GOLD, v3_add(up, v3(cosf(k * 0.8f) * 2.0f, 0, sinf(k * 0.8f) * 2.0f)), 100 + (int)lvl * 8, NULL, 0, 0);
+        for (int k = 0; k < 2; k++) pickup_spawn(g, PK_KEYSTONE, v3_add(up, v3(0, 0, 0.7f * k)), 1, NULL, 0, 0);
+        break;
+    case KE_ARTEFACT: /* the bound are free: every town knows it was you */
+        g->world.king_flags |= KF_FREED;
+        for (int i = 0; i < g->world.ntowns; i++) g->world.towns[i].rep = (i8)MINI(100, g->world.towns[i].rep + 2);
+        pickup_spawn(g, PK_KEYSTONE, up, 1, NULL, 0, 0);
+        loot_drop(g, at, lvl + 3.0f, true, 1.0f);
+        break;
+    }
     if (m && ending != KE_FIGHT) {
         particles_burst(g, v3_add(m->pos, v3(0, 2, 0)), v3(1.2f, 1.0f, 0.6f), 60, 4.0f, 0.08f, true);
         m->alive = false;
     }
-    for (int i = 0; i < MAX_MONSTERS; i++) /* his servants are gone with him */
-        if (g->mons[i].alive && g->mons[i].king == 3) { particles_burst(g, g->mons[i].pos, v3(0.8f, 0.8f, 0.8f), 10, 2.0f, 0.05f, false); g->mons[i].alive = false; }
+    for (int i = 0; i < MAX_MONSTERS; i++) /* his servants (and raiders) are gone with him */
+        if (g->mons[i].alive && (g->mons[i].king == 3 || g->mons[i].king == 4)) { particles_burst(g, g->mons[i].pos, v3(0.8f, 0.8f, 0.8f), 10, 2.0f, 0.05f, false); g->mons[i].alive = false; }
     char text[STORY_TEXT];
     const KingKind *KD = &KING_KINDS_DEF[K->kind];
     fill(g, K, ending == KE_WORD ? KD->word_end : ending == KE_ARTEFACT ? KD->art_end : KD->fight_end, text, sizeof text);
@@ -539,34 +634,145 @@ void king_settle(Game *g, PlayerSlot *ps, int ending) {
 
 bool king_use(Game *g, PlayerSlot *ps) {
     Monster *m = the_king(g);
-    if (!m || !m->resident) return false;
-    if (v3_len(v3_sub(m->pos, ps->pl.pos)) > 9.0f) return false;
+    if (!m) return false;
+    if (v3_len(v3_sub(m->pos, ps->pl.pos)) > (m->type == MON_DRAGON ? 14.0f : 9.0f)) return false;
     const KingWay *K = way(g);
     bool name = g->world.king_flags & KF_NAME, art = artefact_held(g, K);
-    char called[64];
+    if (falter_t > 0) { /* on his knees, he listens: the word or the artefact settles it */
+        if (!name && !art) return false;
+        int end = ps->pl.stance != STANCE_STAND && art ? KE_ARTEFACT : name ? KE_WORD : KE_ARTEFACT;
+        /* in co-op the most of those at the throne must want it (the sword needs no vote) */
+        int present = 0, agree = 0;
+        ps->king_vote = (u8)end;
+        for (int k = 0; k < MAX_PLAYERS; k++) {
+            PlayerSlot *p = &g->players[k];
+            if (!p->active || p->st.dead || v3_len(v3_sub(p->pl.pos, m->pos)) > 40.0f) continue;
+            present++;
+            agree += p->king_vote == end;
+        }
+        if (agree * 2 > present) { king_settle(g, ps, end); return true; }
+        char b[96];
+        snprintf(b, sizeof b, "%d OF %d WANT TO %s - THE OTHERS MUST STRIKE TOO", agree, present, end == KE_WORD ? "SPEAK HIS NAME" : "RAISE THE ARTEFACT (CROUCHED)");
+        game_banner_all(g, b);
+        return true;
+    }
+    if (!m->resident) return false;
+    char called[64], line[STORY_TEXT];
     king_called(g, K, called, sizeof called);
-    if (ps->king_talk_t > 0) { /* the second blow: it is settled */
-        ps->king_talk_t = 0;
-        if (ps->pl.stance != STANCE_STAND && art) king_settle(g, ps, KE_ARTEFACT);
-        else if (name) king_settle(g, ps, KE_WORD);
-        else if (art) king_settle(g, ps, KE_ARTEFACT);
-        else king_provoked(g, m);
-        return true;
-    }
-    char line[STORY_TEXT], opts[STORY_TEXT];
-    snprintf(line, sizeof line, "%s looks down at you from the throne: %s. 'So. You came the whole way. Most do not. Say what you came to say.'", called,
+    snprintf(line, sizeof line, "%s looks down at you from the throne: %s. 'So. You came the whole way. Most do not. And you think words will move me?'", called,
              KING_KINDS_DEF[K->kind].what);
-    if (!name && !art) {
-        say(ps, line, "You have nothing to say to him that he will hear. He rises.");
-        king_provoked(g, m);
-        return true;
-    }
-    snprintf(opts, sizeof opts, "%s%s%s", name ? "STRIKE AGAIN: SPEAK HIS TRUE NAME. " : "", art ? "CROUCH AND STRIKE: RAISE " : "", art ? KING_KINDS_DEF[K->kind].artefact : "");
-    say(ps, line, "Or fight him: a blow from afar, a spell.");
-    upper(opts);
-    game_banner(ps, opts);
-    ps->king_talk_t = 12.0f;
+    say(ps, line, name || art ? "He will not listen standing. Bring him to his knees - then speak his name, or raise the artefact crouched. Or finish it." :
+                                "You have nothing to say to him that he will hear. He rises.");
+    if (name || art) game_banner(ps, "BRING HIM TO HIS KNEES, THEN SPEAK");
+    king_provoked(g, m);
     return true;
+}
+
+/* ---------- the bot on the main way (bot.c, --bot king) ---------- */
+
+/* Where the bot should go for the nearest step it can do now, and whether to strike there (to
+ * talk). Steps that need home (the vision, the forge), the Gate, a town's tasks or a brew's
+ * reagents are left to the rest of its play. */
+bool king_bot_target(Game *g, PlayerSlot *ps, vec3 *at, bool *talk) {
+    const KingWay *K = way(g);
+    if (!K->valid || king_won(g)) return false;
+    int best = -1;
+    float bd = 1e9f;
+    vec3 bp = ps->pl.pos;
+    bool btalk = false;
+    for (int i = 0; i < KING_STEPS; i++) {
+        if (!step_open(g, K, i)) continue;
+        const KingStep *st = &K->step[i];
+        vec3 p = step_centre(st);
+        bool t = false;
+        switch (st->type) {
+        case KS_VISION: case KS_FORGE: case KS_REALM: case KS_ALLEGIANCE: continue;
+        case KS_BREW: if (!(ps->st.reag[RG_PHOENIX] || ps->st.reag[RG_HEARTSTONE]) || !ps->st.reag[RG_ORCHID]) continue; /* fall through */
+        case KS_HERALD: {
+            int role = st->type == KS_HERALD ? FR_ELDER : FR_HEALER;
+            for (int k = 0; k < MAX_FOLK; k++) {
+                Folk *f = &g->folk[k];
+                if (f->alive && f->role == role && f->rec >= 0 && f->rec < g->world.ntowns && g->world.towns[f->rec].key == st->key) { p = f->pos; t = true; }
+            }
+            break;
+        }
+        case KS_WITNESS:
+            for (int k = 0; k < MAX_FOLK; k++) if (g->folk[k].alive && g->folk[k].rec == -100 - i) { p = g->folk[k].pos; t = true; }
+            break;
+        case KS_THRONE: {
+            vec3 seat, centre;
+            Monster *m = the_king(g);
+            if (m) { p = m->pos; t = m->resident || falter_t > 0; }
+            else if (throne_place(g, K, &seat, &centre)) p = centre;
+            break;
+        }
+        default:
+            for (int k = 0; k < MAX_MARKS; k++) if (marks[k].on && marks[k].step == i) p = marks[k].pos;
+            if (st->type == KS_DRAGON || st->type == KS_WYRM) {
+                Structure s;
+                Lair L;
+                if (world_structure_at(&g->world, st->cx, st->cy, st->cz, &s) && lair_from_structure(&s, &L)) p = v3(L.cx + 0.5f, (float)L.floor, L.cz + 0.5f);
+            }
+            break;
+        }
+        float d = v3_len(v3_sub(p, ps->pl.pos));
+        if (d < bd) { bd = d; best = i; bp = p; btalk = t; }
+    }
+    if (best < 0) return false;
+    *at = bp;
+    *talk = btalk;
+    return true;
+}
+
+/* ---------- raids on the towns ---------- */
+
+/* Once you know what he is (steps 1-3 done), his servants raid the towns now and then. */
+bool king_raids_on(Game *g) {
+    const KingWay *K = way(g);
+    return K->valid && !king_won(g) && group_done(g, K, 0);
+}
+
+int king_raid(Game *g, vec3 at, int level, int n, u64 key) {
+    const KingWay *K = way(g);
+    int made = 0;
+    for (int k = 0; k < n; k++) {
+        float a = k * 6.283f / n;
+        vec3 p = v3_add(at, v3(cosf(a) * 2.5f, 0, sinf(a) * 2.5f));
+        if (!standable(g, fl(p.x), fl(p.y), fl(p.z))) p = at;
+        Monster *m = monster_spawn(g, minion_type(K->kind), p, level, k == 0, v3(0.5f, 0.45f, 0.35f), key);
+        if (m) { m->king = 4; m->awake = true; m->state = MS_CHASE; made++; }
+    }
+    return made;
+}
+
+/* ---------- the heir ---------- */
+
+void king_heir(Game *g) {
+    const KingWay *old = way(g);
+    char was[40];
+    snprintf(was, sizeof was, "%s", old->name);
+    g->world.king_gen++;
+    g->world.king_done = 0;
+    g->world.king_flags &= KF_SWORN | KF_FREED; /* what the last one's end changed stays */
+    g->world.king_ending = KE_NONE;
+    marks_seed = 0;
+    const KingWay *K = way(g);
+    if (!K->valid) return;
+    /* the lairs on his way are taken again: new dragons, his */
+    for (int i = 0; i < KING_STEPS; i++) {
+        int t = K->step[i].type;
+        if (t != KS_DRAGON && t != KS_WYRM && t != KS_HOARD) continue;
+        for (int k = 0; k < g->world.ndragons_slain; k++)
+            if (g->world.dragons_slain[k] == K->step[i].key) g->world.dragons_slain[k--] = g->world.dragons_slain[--g->world.ndragons_slain];
+    }
+    char f[64], text[STORY_TEXT];
+    fortress(g, f, sizeof f);
+    snprintf(text, sizeof text, "Word comes up from the towns: the throne of %s did not stay empty. One who served %s has taken it - an heir no one named, and %s. "
+             "The way to him is new, and longer. The elders will know more.", f, was, KING_KINDS_DEF[K->kind].what);
+    for (int k = 0; k < MAX_PLAYERS; k++)
+        if (g->players[k].active) say(&g->players[k], text, NULL);
+    game_banner_all(g, "AN HEIR ON THE THRONE - THE WAY BEGINS AGAIN");
+    g->autosave_timer = 1e9f;
 }
 
 /* ---------- each frame ---------- */
@@ -584,9 +790,13 @@ void king_update(Game *g, float dt) {
             bool now = false;
             if (st->type == KS_DRAGON || st->type == KS_WYRM)
                 for (int k = 0; k < g->world.ndragons_slain; k++) now |= g->world.dragons_slain[k] == st->key;
-            if (st->type == KS_ALLEGIANCE)
-                for (int k = 0; k < g->world.ntowns; k++) now |= g->world.towns[k].key == st->key && g->world.towns[k].rep >= 3;
+            if (st->type == KS_ALLEGIANCE) /* (an heir asks more: the town must honour you) */
+                for (int k = 0; k < g->world.ntowns; k++) now |= g->world.towns[k].key == st->key && g->world.towns[k].rep >= (K->gen ? 6 : 3);
             if (st->type == KS_REALM) now = (g->world.realm_beaten >> st->arg) & 1;
+            if (st->group == 2 && !K->gen && story_chapter_deed(&g->world, 8)) { /* the chronicle's end: the opener served him */
+                g->world.king_flags |= KF_CHRONICLE;
+                now = true;
+            }
             if (now) complete(g, game_nearest_player(g, g->players[0].pl.pos, 1e9f), i);
         }
         place_things(g, K);
@@ -601,6 +811,61 @@ void king_update(Game *g, float dt) {
         if (!marks[k].on) continue;
         PlayerSlot *ps = game_nearest_player(g, marks[k].pos, 1.8f);
         if (ps && !ps->st.dead) touch(g, ps, k);
+    }
+    /* the king on his knees */
+    Monster *km = the_king(g);
+    if (km) {
+        king_last_pos = km->pos;
+        if (falter_t > 0) {
+            falter_t -= dt;
+            km->state = MS_STUN;
+            km->timer = fmaxf(km->timer, 0.2f);
+            if (falter_t <= 0) {
+                for (int k = 0; k < MAX_PLAYERS; k++) g->players[k].king_vote = 0;
+                char b[96];
+                snprintf(b, sizeof b, "%s RISES AGAIN", km->name);
+                game_banner_all(g, b);
+                km->state = MS_CHASE;
+            }
+        }
+    }
+    /* his lieutenants do not let an archer keep them at a distance: they step through the dark to you */
+    static float blink_t[MAX_MONSTERS];
+    for (int i = 0; i < MAX_MONSTERS; i++) {
+        Monster *m = &g->mons[i];
+        if (!m->alive || m->king != 2 || !m->awake || m->resident) continue;
+        if ((blink_t[i] -= dt) > 0) continue;
+        PlayerSlot *ps = game_nearest_player(g, m->pos, 40.0f);
+        if (!ps || v3_len(v3_sub(ps->pl.pos, m->pos)) < 9.0f) continue;
+        blink_t[i] = 7.0f;
+        float a = ps->pl.yaw + PI_F * (0.5f + 0.5f * (float)(i & 1));
+        vec3 to = v3_add(ps->pl.pos, v3(cosf(a) * 3.0f, 0, sinf(a) * 3.0f));
+        if (!standable(g, fl(to.x), fl(to.y), fl(to.z))) continue;
+        particles_burst(g, v3_add(m->pos, v3(0, 1, 0)), v3(0.3f, 0.1f, 0.4f), 18, 3.0f, 0.06f, true);
+        m->pos = to;
+        particles_burst(g, v3_add(m->pos, v3(0, 1, 0)), v3(0.3f, 0.1f, 0.4f), 18, 3.0f, 0.06f, true);
+        sfx_at(g, SFX_SPELL_BLINK, m->pos, 0.8f);
+    }
+    /* an heir: some while after a king is settled, the throne does not stay empty */
+    static float heir_t;
+    bool credits = false;
+    for (int i = 0; i < MAX_PLAYERS; i++) credits |= g->players[i].active && g->players[i].credits_t > 0;
+    if (king_won(g) && !credits && g->world.king_gen < 9) {
+        heir_t += dt;
+        if (heir_t > KING_HEIR_DELAY) { heir_t = 0; king_heir(g); }
+    } else if (!king_won(g)) heir_t = 0;
+    /* the way teaches: the first time the line follows a step, how it is done */
+    static u16 hinted[MAX_PLAYERS];
+    static int hinted_gen = -1;
+    if (hinted_gen != K->gen || marks_seed == 0) { memset(hinted, 0, sizeof hinted); hinted_gen = K->gen; }
+    for (int i = 0; i < MAX_PLAYERS; i++) {
+        PlayerSlot *ps = &g->players[i];
+        if (!ps->active || ps->st.dead || ps->msg_t > 0 || king_won(g)) continue;
+        int s = tracked_step(g, K, ps);
+        if (s < 0 || ((hinted[i] >> s) & 1)) continue;
+        hinted[i] |= (u16)(1u << s);
+        const char *h = step_hint(K->step[s].type);
+        if (h[0]) say(ps, h, NULL);
     }
     for (int i = 0; i < MAX_PLAYERS; i++) {
         PlayerSlot *ps = &g->players[i];
@@ -675,10 +940,8 @@ void king_draw(Game *g, PlayerSlot *viewer) {
     }
 }
 
-int king_draw_tracker(Game *g, PlayerSlot *ps, int W, int H, int y) {
-    const KingWay *K = way(g);
-    if (!K->valid || ps->st.dead || king_won(g)) return 0;
-    /* the nearest open step with a place; else the first open one */
+/* The step the line at the top follows: the nearest open one with a place, else the first open. */
+static int tracked_step(Game *g, const KingWay *K, const PlayerSlot *ps) {
     int best = -1;
     float bd = 1e9f;
     for (int i = 0; i < KING_STEPS; i++) {
@@ -688,14 +951,22 @@ int king_draw_tracker(Game *g, PlayerSlot *ps, int W, int H, int y) {
         float d = placed ? v3_len(v3_sub(step_centre(st), ps->pl.pos)) : 5e8f;
         if (best < 0 || d < bd) { bd = d; best = i; }
     }
+    return best;
+}
+
+int king_draw_tracker(Game *g, PlayerSlot *ps, int W, int H, int y) {
+    const KingWay *K = way(g);
+    if (!K->valid || ps->st.dead || king_won(g)) return 0;
+    int best = tracked_step(g, K, ps);
     if (best < 0) return 0;
+    if (!H) return 1;
     const KingStep *st = &K->step[best];
     char goal[160], buf[220], dir[64] = "";
     step_goal(g, K, best, goal, sizeof goal);
     if (st->type == KS_VISION || st->type == KS_FORGE) snprintf(dir, sizeof dir, "in the Sanctum");
     else if (st->type == KS_REALM) snprintf(dir, sizeof dir, "through the Gate");
     else story_direction(ps->pl.pos.x, ps->pl.pos.y + 1.0f, ps->pl.pos.z, st->cx, st->cy, st->cz, dir, sizeof dir);
-    snprintf(buf, sizeof buf, "* THE OLD KING %d/10: %s - %s", st->group == 0 ? 1 : st->group == 1 ? 4 : st->group == 2 ? 8 : st->group == 3 ? 9 : 10, goal, dir);
+    snprintf(buf, sizeof buf, K->gen ? "* THE HEIR %d/10: %s - %s" : "* THE OLD KING %d/10: %s - %s", st->group == 0 ? 1 : st->group == 1 ? 4 : st->group == 2 ? 8 : st->group == 3 ? 9 : 10, goal, dir);
     upper(buf);
     int maxc = (W - 8) / 6;
     if ((int)strlen(buf) > maxc) buf[maxc] = 0;
@@ -736,7 +1007,7 @@ void king_draw_credits(Game *g, PlayerSlot *ps, int W, int H) {
     int maxc = MINI(90, (W - 16) / 6);
     char text[STORY_TEXT], f[64];
     fortress(g, f, sizeof f);
-    snprintf(lines[n], 100, "THE OLD KING IS NO MORE"); col[n++] = 1.0f;
+    snprintf(lines[n], 100, K->gen ? "THE HEIR IS NO MORE" : "THE OLD KING IS NO MORE"); col[n++] = 1.0f;
     lines[n++][0] = 0;
     const KingKind *KD = &KING_KINDS_DEF[K->kind];
     int e = g->world.king_ending;
@@ -747,6 +1018,8 @@ void king_draw_credits(Game *g, PlayerSlot *ps, int W, int H) {
     lines[n++][0] = 0;
     snprintf(lines[n], 100, "%s, %s", K->name, KD->name); upper(lines[n]); col[n++] = 1.0f;
     snprintf(lines[n], 100, "settled by %s", e == KE_WORD ? "his true name" : e == KE_ARTEFACT ? KD->artefact : "the sword"); col[n++] = 0.7f;
+    snprintf(lines[n], 100, "%s", e == KE_WORD ? "his knights are sworn to the towns, his treasury is yours" :
+                                  e == KE_ARTEFACT ? "the bound are free, and every town knows your name" : "his crown, his blade and his hoard are yours"); col[n++] = 0.7f;
     lines[n++][0] = 0;
     snprintf(lines[n], 100, "THE WAY"); col[n++] = 1.0f;
     for (int i = 0; i < KING_STEPS && n < 80; i++) {

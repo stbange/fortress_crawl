@@ -64,6 +64,7 @@ typedef struct World {
         i16 tx, ty, tz;     /* TQ_LOST, TQ_PEST: the chunk */
         u16 done;           /* tasks done */
         u32 qseq;           /* when it was asked (the newest shows) */
+        u8 projects;        /* the works you paid for (town.c): the bits of TP_* */
         i32 px, py, pz;     /* the plaza */
     } towns[32];
     int ntowns;
@@ -75,10 +76,16 @@ typedef struct World {
     u16 king_done;
     u8 king_flags;    /* KF_* */
     u8 king_ending;   /* KE_*: 0 not yet */
+    u8 king_gen;      /* 0 the Old King; 1, 2... his heirs, each a new way after the last was settled */
+    u8 king_wins;     /* kings settled in this world (the Astral Shore opens with the first) */
+    u8 king_mercy;    /* a king was ever settled by a word or the artefact (the Dream opens) */
 } World;
-enum { KF_KIND = 1, KF_NAME = 2 };
+/* KF_SWORN: his knights swore to the towns (the word); KF_FREED: the bound are free (the
+ * artefact), every town's reputation rose; KF_CHRONICLE: the mystery's end gave step 8 */
+enum { KF_KIND = 1, KF_NAME = 2, KF_SWORN = 4, KF_FREED = 8, KF_CHRONICLE = 16 };
 enum { KE_NONE, KE_FIGHT, KE_WORD, KE_ARTEFACT };
 enum { TQ_NONE, TQ_HUNT, TQ_FETCH, TQ_LOST, TQ_PEST, TQ_COUNT };
+enum { TP_HOUSE = 1, TP_ARMS = 2, TP_CARAVAN = 4 }; /* a town's works, paid for in gold (town.c) */
 #define MAX_TOWN_RECS 32
 typedef struct TownRec TownRec;
 #define MAX_DEEDS 128

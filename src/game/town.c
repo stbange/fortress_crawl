@@ -59,13 +59,19 @@ static TownRec *rec_of(Game *g, const Town *t, int level) {
     r->people = (u8)t->people;
     r->level = (u8)MINI(255, level);
     r->px = t->px; r->py = t->floor; r->pz = t->pz;
+    if (g->world.king_flags & KF_FREED) r->rep = 2; /* the bound you freed (king.c) came from here too */
     return r;
 }
 
 static const char *standing(int rep) {
     return rep >= 10 ? "KIN" : rep >= 6 ? "HONOURED" : rep >= 3 ? "FRIEND" : rep >= 1 ? "GUEST" : "STRANGER";
 }
-static int discount_of(int rep) { return rep >= 6 ? 35 : rep >= 3 ? 20 : 0; }
+/* What the market shows a guest of this standing (no discounts: the trusted see more). */
+static int special_open(const TownRec *r) { return (r->rep >= 3 ? 1 : 0) | (r->rep >= 6 ? 2 : 0) | ((r->projects & TP_CARAVAN) ? 4 : 0); } /* bits: friend, honoured, caravan */
+
+/* The works a town can be given gold for: each costs more, and each is remembered. */
+static const char *WORKS[3] = { "rebuild the burned houses", "arm the guards", "send a caravan to the far halls" };
+static int work_cost(const TownRec *r, int k) { static const int C[3] = { 400, 900, 1600 }, L[3] = { 20, 40, 60 }; return C[k] + L[k] * r->level; }
 
 /* A line with the history's names and the town's. */
 static void fill(Game *g, const char *tmpl, const char *town, char *out, int n) {
@@ -140,10 +146,13 @@ void town_spawn_chunk(Game *g, Chunk *c) {
     }
     for (int k = 0; k < 2; k++) /* merchants at the stalls */
         folk_new(g, t.people, FR_MERCHANT, v3(t.stall_x[k] + 0.5f, y, t.stall_z[k] + 1.5f), mix64(t.key ^ (u64)(200 + k)), ri);
-    for (int k = 0; k < 3; k++) { /* guards on the road round the walls */
-        Folk *f = folk_new(g, t.people, FR_GUARD, v3(t.x0 + 4.5f + k * 30, y, t.z0 + 2.5f), mix64(t.key ^ (u64)(300 + k)), ri);
-        if (f) f->state = (u8)k;
+    int nguards = 3 + ((r->projects & TP_ARMS) ? 2 : 0) + ((g->world.king_flags & KF_SWORN) ? 2 : 0);
+    for (int k = 0; k < nguards; k++) { /* guards on the road round the walls (with arms bought, and the Old King's sworn knights) */
+        Folk *f = folk_new(g, t.people, FR_GUARD, v3(t.x0 + 4.5f + (k % 3) * 30 + (k / 3) * 8, y, t.z0 + 2.5f), mix64(t.key ^ (u64)(300 + k)), ri);
+        if (f) f->state = (u8)(k % 3);
     }
+    if (r->projects & TP_HOUSE) /* the houses rebuilt: a new family */
+        for (int k = 0; k < 3; k++) folk_new(g, t.people, k ? FR_CHILD : FR_FOLK, v3(t.px - 4.5f + k, y, t.pz + 6.5f), mix64(t.key ^ (u64)(500 + k)), ri);
     for (int k = 0; k < 5; k++, n++) /* folk about the plaza */
         folk_new(g, t.people, k < 4 ? FR_FOLK : FR_CHILD, v3(t.px + 5.5f - k * 2.5f, y, t.pz - 6.5f + (k & 1) * 12), mix64(t.key ^ (u64)(400 + k)), ri);
 }
@@ -195,6 +204,28 @@ static void ask(Game *g, TownRec *r, const char *town, char *line, int n) {
     }
 }
 
+/* What a people gives: their own craft (a task's reward, a kin's gift). */
+static void town_gift(Game *g, PlayerSlot *ps, TownRec *r, int salt, char *gift, int n) {
+    Stats *s = &ps->st;
+    vec3 at = v3_add(ps->pl.pos, v3(0, 0.6f, 0));
+    switch (r->people) {
+    case PE_DWARF: forge_give(g, ps, FG_STEEL, 1); snprintf(gift, (size_t)n, "an ingot of dwarven steel"); break;
+    case PE_GNOME: for (int k = 0; k < 3; k++) s->flasks[k] = (u8)MINI(30, s->flasks[k] + 2); snprintf(gift, (size_t)n, "a crate of gnomish flasks"); break;
+    case PE_ELF: alchemy_give(g, ps, RG_ORCHID, 1); pickup_spawn(g, PK_POTION_MP, at, 1, NULL, 0, 0); snprintf(gift, (size_t)n, "an elven orchid and a draught"); break;
+    case PE_GOBLIN: snprintf(gift, (size_t)n, "a heavy purse (goblins pay well)"); break;
+    case PE_HUMAN: for (int k = 0; k < 2; k++) pickup_spawn(g, PK_POTION_HP, at, 1, NULL, 0, 0); snprintf(gift, (size_t)n, "two healing potions"); break;
+    case PE_HALFLING: food_give(g, ps, FD_HONEY, 2); food_give(g, ps, FD_STARFRUIT, 1); s->seeds = (u8)MINI(99, s->seeds + 5); snprintf(gift, (size_t)n, "a hamper of honey, starfruit and seeds"); break;
+    default: {
+        int tier, region = world_region(&g->world, floordiv(r->px, CHUNK), floordiv(r->py, CHUNK), floordiv(r->pz, CHUNK), &tier);
+        Item it = item_roll_region(mix64(r->key ^ (u64)salt * 0xA77), (float)r->level + 2.0f, RAR_MAGIC, tier, region);
+        pickup_spawn(g, PK_WEAPON, at, 0, &it, 0, 0);
+        snprintf(gift, (size_t)n, "a weapon from the clan's own forge");
+        break;
+    }
+    }
+    (void)s;
+}
+
 static void reward(Game *g, PlayerSlot *ps, TownRec *r, const char *town) {
     Stats *s = &ps->st;
     int gold = 40 + 12 * r->level + (r->qtype >= TQ_LOST ? 40 : 0);
@@ -204,23 +235,8 @@ static void reward(Game *g, PlayerSlot *ps, TownRec *r, const char *town) {
     r->rep = (i8)MINI(100, r->rep + (r->qtype >= TQ_LOST ? 2 : 1));
     r->done++;
     r->qstate = 0;
-    vec3 at = v3_add(ps->pl.pos, v3(0, 0.6f, 0));
     char gift[96] = "";
-    switch (r->people) {
-    case PE_DWARF: forge_give(g, ps, FG_STEEL, 1); snprintf(gift, sizeof gift, "an ingot of dwarven steel"); break;
-    case PE_GNOME: for (int k = 0; k < 3; k++) s->flasks[k] = (u8)MINI(30, s->flasks[k] + 2); snprintf(gift, sizeof gift, "a crate of gnomish flasks"); break;
-    case PE_ELF: alchemy_give(g, ps, RG_ORCHID, 1); pickup_spawn(g, PK_POTION_MP, at, 1, NULL, 0, 0); snprintf(gift, sizeof gift, "an elven orchid and a draught"); break;
-    case PE_GOBLIN: snprintf(gift, sizeof gift, "a heavy purse (goblins pay well)"); break;
-    case PE_HUMAN: for (int k = 0; k < 2; k++) pickup_spawn(g, PK_POTION_HP, at, 1, NULL, 0, 0); snprintf(gift, sizeof gift, "two healing potions"); break;
-    case PE_HALFLING: food_give(g, ps, FD_HONEY, 2); food_give(g, ps, FD_STARFRUIT, 1); s->seeds = (u8)MINI(99, s->seeds + 5); snprintf(gift, sizeof gift, "a hamper of honey, starfruit and seeds"); break;
-    default: {
-        int tier, region = world_region(&g->world, floordiv(r->px, CHUNK), floordiv(r->py, CHUNK), floordiv(r->pz, CHUNK), &tier);
-        Item it = item_roll_region(mix64(r->key ^ (u64)r->done * 0xA77), (float)r->level + 2.0f, RAR_MAGIC, tier, region);
-        pickup_spawn(g, PK_WEAPON, at, 0, &it, 0, 0);
-        snprintf(gift, sizeof gift, "a weapon from the clan's own forge");
-        break;
-    }
-    }
+    town_gift(g, ps, r, r->done, gift, sizeof gift);
     char line[STORY_TEXT], then[160];
     snprintf(line, sizeof line, "It is done, and %s will remember it. Take %d gold, and %s.", town, gold, gift);
     if (standing(before) != standing(r->rep)) snprintf(then, sizeof then, "The %s of %s call you %s now.", PEOPLES[r->people].plural, town, standing(r->rep));
@@ -234,14 +250,52 @@ static void reward(Game *g, PlayerSlot *ps, TownRec *r, const char *town) {
     g->autosave_timer = 1e9f;
 }
 
+/* Crouched before the elder: give gold to the town's next work. Each is remembered and seen. */
+static void works(Game *g, PlayerSlot *ps, TownRec *r, const char *town) {
+    int k = 0;
+    while (k < 3 && (r->projects >> k) & 1) k++;
+    if (k == 3) { say(ps, "You have done more for us than any. There is nothing left to build that your gold could buy - only your company.", NULL); return; }
+    int cost = work_cost(r, k);
+    char line[STORY_TEXT], b[96];
+    if (ps->st.gold < cost) {
+        snprintf(line, sizeof line, "We mean to %s, if we had the coin: %d gold. %s would not forget who gave it.", WORKS[k], cost, town);
+        say(ps, line, NULL);
+        snprintf(b, sizeof b, "THE TOWN'S WORKS: %d GOLD TO %s", cost, WORKS[k]);
+        upper(b);
+        game_banner(ps, b);
+        return;
+    }
+    ps->st.gold -= cost;
+    r->projects |= (u8)(1 << k);
+    int before = r->rep;
+    r->rep = (i8)MINI(100, r->rep + 2);
+    static const char *DONE[3] = { "The burned houses of %s are built again, and a family moves into the first of them.",
+                                   "The guards of %s have new arms, and two more stand the walls.",
+                                   "The caravan sets out from %s for the far halls. Its goods will be in the market when it is back - for you first." };
+    snprintf(line, sizeof line, DONE[k], town);
+    char then[160] = "";
+    if (standing(before) != standing(r->rep)) snprintf(then, sizeof then, "The %s of %s call you %s now.", PEOPLES[r->people].plural, town, standing(r->rep));
+    say(ps, line, then);
+    snprintf(b, sizeof b, "-%d GOLD - %s", cost, standing(r->rep));
+    game_banner(ps, b);
+    sfx_at(g, SFX_CHAPTER_DONE, ps->pl.pos, 0.6f);
+    g_tele.town_works++;
+    g->autosave_timer = 1e9f;
+}
+
 static void elder(Game *g, PlayerSlot *ps, Folk *f, TownRec *r, const char *town) {
     Stats *s = &ps->st;
     const PeopleDef *P = &PEOPLES[r->people];
+    if (ps->pl.stance != STANCE_STAND) { works(g, ps, r, town); return; }
     if (!r->qstate) {
         char greet[STORY_TEXT], task[STORY_TEXT];
         fill(g, P->greet, town, greet, sizeof greet);
         ask(g, r, town, task, sizeof task);
-        if (r->done == 0) say(ps, greet, task); /* the first time: a welcome, then the task */
+        if (r->done == 0) { /* the first time: a welcome, then the task, and the town's works */
+            char t2[STORY_TEXT];
+            snprintf(t2, sizeof t2, "%s (Crouch and speak to me to give to the town's works.)", task);
+            say(ps, greet, t2);
+        }
         else say(ps, task, NULL);
         return;
     }
@@ -301,7 +355,7 @@ static void innkeeper(Game *g, PlayerSlot *ps, Folk *f, TownRec *r, const char *
 
 static void healer(Game *g, PlayerSlot *ps, Folk *f, TownRec *r) {
     Stats *s = &ps->st;
-    int price = r->rep >= 3 ? 0 : 10 + r->level;
+    int price = r->rep >= 6 ? 0 : r->rep >= 3 ? (10 + r->level) / 2 : 10 + r->level;
     bool hurt = s->hp < s->maxhp - 0.5f || s->burn_t > 0 || s->poison_t > 0 || s->chill_t > 0 || s->cold > 0.05f || s->tox_t > 0;
     if (!hurt) { say(ps, "You are whole. Go carefully, and come back so.", NULL); return; }
     if (s->gold < price) { char b[64]; snprintf(b, sizeof b, "HEALING: %d GOLD", price); game_banner(ps, b); return; }
@@ -313,7 +367,7 @@ static void healer(Game *g, PlayerSlot *ps, Folk *f, TownRec *r) {
     if (r->rep >= 6) { s->ward = fmaxf(s->ward, s->maxhp * 0.25f); s->ward_t = fmaxf(s->ward_t, 300.0f); }
     particles_burst(g, player_eye(&ps->pl), v3(0.9f, 1.0f, 0.7f), 24, 2.0f, 0.06f, true);
     sfx_at(g, SFX_REALM_BATH, ps->pl.pos, 1.0f);
-    say(ps, price ? "There. Hold still. ... There." : "There: no charge for a friend of ours.", r->rep >= 6 ? "And a blessing to keep the next blow off." : NULL);
+    say(ps, price ? "There. Hold still. ... There." : "There: no charge for one of ours.", r->rep >= 6 ? "And a blessing to keep the next blow off." : NULL);
     g_tele.town_heals++;
     (void)f;
 }
@@ -329,6 +383,14 @@ static void chatter(Game *g, PlayerSlot *ps, Folk *f, TownRec *r, const char *to
         story_direction(ps->pl.pos.x, ps->pl.pos.y + 1.0f, ps->pl.pos.z, ps->target.cx, ps->target.cy, ps->target.cz, dir, sizeof dir);
         snprintf(line, sizeof line, "Looking for %s? Someone saw them %s, not long ago.", ps->target.name, dir);
     } else if (k == 7 && r->qstate) snprintf(line, sizeof line, "Have you spoken to the elder? We need help, and you look like help.");
+    else if (king_won(g) && k < 5) {
+        static const char *J[5] = { "Did you hear? The king on the throne is no more! They say it was you. Drink with us!",
+                                    "Lanterns all night, and nobody's working tomorrow. The old dread is gone.",
+                                    "My mother never thought she'd see it: the Old King settled. Thank you.",
+                                    "We'll sing about this for a hundred years. Badly, but we'll sing it.",
+                                    "The children want to know if the throne was gold. Was it?" };
+        snprintf(line, sizeof line, "%s", J[k]);
+    }
     else fill(g, P->chatter[k % 6], town, line, sizeof line);
     if (strstr(line, "%s")) { char tmp[STORY_TEXT]; snprintf(tmp, sizeof tmp, line, town); snprintf(line, sizeof line, "%s", tmp); }
     char who[96];
@@ -337,6 +399,8 @@ static void chatter(Game *g, PlayerSlot *ps, Folk *f, TownRec *r, const char *to
     snprintf(full, sizeof full, "%s%s", who, line);
     say(ps, full, NULL);
 }
+
+static bool kin_talk(Game *g, PlayerSlot *ps, Folk *f);
 
 bool town_use(Game *g, PlayerSlot *ps) {
     vec3 fw = v3(cosf(ps->pl.yaw), 0, sinf(ps->pl.yaw));
@@ -353,6 +417,7 @@ bool town_use(Game *g, PlayerSlot *ps) {
         bd = d;
         best = f;
     }
+    if (best && best->rec <= -60 && best->rec > -100) return kin_talk(g, ps, best); /* one of your kin in the Sanctum */
     if (best && best->rec < 0) return king_folk_talk(g, ps, best); /* the Old King's witness, or allies (king.c) */
     if (!best || best->rec >= g->world.ntowns) return false;
     Folk *f = best;
@@ -389,6 +454,130 @@ bool town_use(Game *g, PlayerSlot *ps) {
     return true;
 }
 
+/* ---------- kin: one of a town that calls you kin lives in the Sanctum ---------- */
+
+static bool kin_talk(Game *g, PlayerSlot *ps, Folk *f) {
+    int ri = -60 - f->rec;
+    if (ri < 0 || ri >= g->world.ntowns) return false;
+    TownRec *r = &g->world.towns[ri];
+    f->talk_t = 5.0f;
+    f->yaw = atan2f(ps->pl.pos.z - f->pos.z, ps->pl.pos.x - f->pos.x);
+    u64 day = mix64(r->key ^ 0x6111F7ULL ^ ((u64)(g->play_time / 1200.0f) << 4) ^ ((u64)ps->index << 40)) | 1;
+    char line[STORY_TEXT];
+    if (looted_has(g, day)) {
+        snprintf(line, sizeof line, "%s, of the %s: 'It is quiet up here, and the view! Come back tomorrow - I will have something for you.'", f->name, PEOPLES[r->people].plural);
+        say(ps, line, NULL);
+        return true;
+    }
+    looted_mark(g, day);
+    char gift[96];
+    town_gift(g, ps, r, (int)(g->play_time / 1200.0f) + 7, gift, sizeof gift);
+    snprintf(line, sizeof line, "%s, of the %s, kin to you now: 'From home - they send it with their love: %s.'", f->name, PEOPLES[r->people].plural, gift);
+    say(ps, line, NULL);
+    sfx_at(g, SFX_CHAPTER_DONE, ps->pl.pos, 0.4f);
+    return true;
+}
+
+static void kin_update(Game *g) {
+    bool home = false;
+    for (int i = 0; i < MAX_PLAYERS; i++) home |= g->players[i].active && realm_has(g->players[i].pl.pos);
+    if (!home) return;
+    int slot = 0;
+    for (int i = 0; i < g->world.ntowns && slot < 4; i++) {
+        TownRec *r = &g->world.towns[i];
+        if (r->rep < 10) continue;
+        int s = slot++;
+        bool there = false;
+        for (int k = 0; k < MAX_FOLK && !there; k++) there = g->folk[k].alive && g->folk[k].rec == -60 - i;
+        if (there) continue;
+        for (int t = 0; t < 12; t++) {
+            int x = (int)POCKET_ARRIVE_X + 4 + s * 2 + (t % 3), z = (int)POCKET_ARRIVE_Z - 4 - t / 3;
+            if (game_solid(g, x, POCKET_G - 1, z) != 1 || game_solid(g, x, POCKET_G, z) || game_solid(g, x, POCKET_G + 1, z)) continue;
+            Folk *f = folk_new(g, r->people, FR_FOLK, v3(x + 0.5f, (float)POCKET_G, z + 0.5f), mix64(r->key ^ 0x6111ULL), -60 - i);
+            if (f) f->timer = 1e9f;
+            break;
+        }
+    }
+}
+
+/* ---------- raids: the Old King's servants come for the towns (king.c) ---------- */
+
+static struct { int rec; float cd; bool on; } raid = { -1, 300.0f, false };
+
+static void raid_update(Game *g, float dt) {
+    if (raid.on) {
+        TownRec *r = raid.rec >= 0 && raid.rec < g->world.ntowns ? &g->world.towns[raid.rec] : NULL;
+        int left = 0;
+        for (int i = 0; i < MAX_MONSTERS; i++) left += g->mons[i].alive && g->mons[i].king == 4;
+        PlayerSlot *ps = r ? game_nearest_player(g, v3((float)r->px, (float)r->py, (float)r->pz), 160.0f) : NULL;
+        if (!r || !ps) { /* you left them to it: the guards hold, but no one forgets */
+            for (int i = 0; i < MAX_MONSTERS; i++) if (g->mons[i].alive && g->mons[i].king == 4) g->mons[i].alive = false;
+            raid.on = false;
+            return;
+        }
+        if (left == 0) {
+            raid.on = false;
+            r->rep = (i8)MINI(100, r->rep + 1);
+            Town t;
+            char town[64] = "the town";
+            if (town_here(g, v3((float)r->px + 0.5f, (float)r->py, (float)r->pz + 0.5f), &t)) snprintf(town, sizeof town, "%s", t.name);
+            char line[STORY_TEXT];
+            snprintf(line, sizeof line, "The raiders are dead or gone, and %s stands. The %s will not forget who stood with them.", town, PEOPLES[r->people].plural);
+            for (int k = 0; k < MAX_PLAYERS; k++) if (g->players[k].active) say(&g->players[k], line, NULL);
+            game_banner_all(g, "THE RAID IS DRIVEN OFF - THE TOWN IS GRATEFUL");
+            g_tele.town_raids++;
+            g->autosave_timer = 1e9f;
+        }
+        return;
+    }
+    if ((raid.cd -= dt) > 0 || !king_raids_on(g)) return;
+    /* a town with you in it */
+    for (int i = 0; i < MAX_PLAYERS; i++) {
+        PlayerSlot *ps = &g->players[i];
+        Town t;
+        if (!ps->active || ps->st.dead || !town_here(g, ps->pl.pos, &t)) continue;
+        int ri = -1;
+        for (int k = 0; k < g->world.ntowns; k++) if (g->world.towns[k].key == t.key) ri = k;
+        if (ri < 0) continue;
+        TownRec *r = &g->world.towns[ri];
+        /* they come in by the gate side of the plaza */
+        vec3 at = v3((float)t.px + 0.5f, (float)t.floor, (float)t.pz - 11.5f);
+        if (!standable(g, fl(at.x), fl(at.y), fl(at.z))) at = v3((float)t.px + 0.5f, (float)t.floor, (float)t.pz + 0.5f);
+        int n = king_raid(g, at, (int)r->level + 1, 4 + r->level / 6, mix64(t.key ^ 0x7A1D));
+        if (!n) return;
+        raid.on = true;
+        raid.rec = ri;
+        raid.cd = 900.0f;
+        char line[STORY_TEXT];
+        snprintf(line, sizeof line, "Horns at the gate of %s: the Old King's servants are in the town! The guards cannot hold them alone.", t.name);
+        for (int k = 0; k < MAX_PLAYERS; k++) if (g->players[k].active) say(&g->players[k], line, NULL);
+        game_banner_all(g, "A RAID ON THE TOWN - DRIVE THEM OFF");
+        sfx_at(g, SFX_NAMED_DEATH, at, 0.8f);
+        return;
+    }
+}
+
+/* ---------- after the Old King: the towns celebrate ---------- */
+
+static void celebrate(Game *g, float dt) {
+    static float t;
+    if (!king_won(g) || (t -= dt) > 0) return;
+    t = 0.7f;
+    for (int i = 0; i < MAX_PLAYERS; i++) {
+        PlayerSlot *ps = &g->players[i];
+        Town town;
+        if (!ps->active || !town_here(g, ps->pl.pos, &town)) continue;
+        u64 h = mix64((u64)(g->time * 1000.0f));
+        vec3 at = v3(town.px + (float)(h % 24) - 12.0f, (float)town.floor + 9.0f + (float)((h >> 8) % 5), town.pz + (float)((h >> 16) % 24) - 12.0f);
+        static const float C[5][3] = { { 1.4f, 0.5f, 0.3f }, { 0.4f, 1.2f, 0.5f }, { 0.5f, 0.6f, 1.4f }, { 1.4f, 1.2f, 0.4f }, { 1.2f, 0.5f, 1.2f } };
+        const float *c = C[(h >> 24) % 5];
+        particles_burst(g, at, v3(c[0], c[1], c[2]), 40, 6.0f, 0.06f, true);
+        flash_add(g, at, v3(c[0], c[1], c[2]), 12.0f, 0.4f);
+        sfx_at(g, SFX_SPELL_BLINK, at, 0.25f);
+        break;
+    }
+}
+
 /* ---------- monsters killed for a town ---------- */
 
 void town_on_kill(Game *g, Monster *m) {
@@ -409,21 +598,34 @@ void town_on_kill(Game *g, Monster *m) {
 
 /* ---------- the market ---------- */
 
-int town_market(Game *g, PlayerSlot *ps, int *discount) {
+int town_market(Game *g, PlayerSlot *ps, int *special) {
     Town t;
     if (!town_here(g, ps->pl.pos, &t)) return -1;
-    int rep = 0;
-    for (int i = 0; i < g->world.ntowns; i++)
-        if (g->world.towns[i].key == t.key) rep = g->world.towns[i].rep;
-    if (discount) *discount = discount_of(rep);
+    if (special) {
+        *special = 0;
+        for (int i = 0; i < g->world.ntowns; i++)
+            if (g->world.towns[i].key == t.key) *special = special_open(&g->world.towns[i]);
+    }
     return t.people;
 }
 
+/* The key that marks today's special ware of this town bought. */
+u64 town_special_key(Game *g, PlayerSlot *ps, int k) {
+    Town t;
+    if (!town_here(g, ps->pl.pos, &t)) return 0;
+    return mix64(t.key ^ 0x5BEC1A1ULL ^ ((u64)(g->play_time / 1200.0f) << 4) ^ (u64)k ^ ((u64)ps->index << 40)) | 1;
+}
+
 bool town_buy(Game *g, PlayerSlot *ps, int ware) {
-    int disc;
-    int people = town_market(g, ps, &disc);
-    if (people < 0 || ware < 0 || ware >= 5) return false;
-    const Ware *w = &PEOPLES[people].wares[ware];
+    int open;
+    int people = town_market(g, ps, &open);
+    if (people < 0 || ware < 0 || ware >= 8 || (ware >= 5 && !((open >> (ware - 5)) & 1))) return false;
+    const Ware *w = ware < 5 ? &PEOPLES[people].wares[ware] : &PEOPLE_SPECIAL[people][ware - 5];
+    if (ware >= 5) {
+        u64 k = town_special_key(g, ps, ware);
+        if (looted_has(g, k)) return false;
+        looted_mark(g, k);
+    }
     Stats *s = &ps->st;
     vec3 at = v3_add(ps->pl.pos, v3(0, 0.6f, 0));
     switch (w->kind) {
@@ -440,10 +642,12 @@ bool town_buy(Game *g, PlayerSlot *ps, int ware) {
         break;
     case WA_WEAPON: {
         int tier, region = world_region(&g->world, floordiv(fl(ps->pl.pos.x), CHUNK), floordiv(fl(ps->pl.pos.y), CHUNK), floordiv(fl(ps->pl.pos.z), CHUNK), &tier);
-        Item it = item_roll_region(mix64((u64)(g->play_time * 1000.0f) ^ (u64)ps->index), (float)MAXI(3, s->level) + 2.0f, RAR_RARE, tier, region);
+        Item it = item_roll_region(mix64((u64)(g->play_time * 1000.0f) ^ (u64)ps->index), (float)MAXI(3, s->level) + 2.0f, w->id == 1 ? RAR_EPIC : RAR_RARE, tier, region);
         pickup_spawn(g, PK_WEAPON, at, 0, &it, 0, 0);
         break;
     }
+    case WA_FORMULA: pickup_spawn(g, PK_FORMULA, at, -1, NULL, 0, 0); break;
+    case WA_KEYSTONE: pickup_spawn(g, PK_KEYSTONE, at, 1, NULL, 0, 0); break;
     }
     g_tele.town_trades++;
     return true;
@@ -549,10 +753,26 @@ void town_update(Game *g, float dt) {
         PlayerSlot *ps = &g->players[i];
         if (ps->active && ps->st.company_t > 0) ps->st.company_t -= dt;
     }
+    kin_update(g);
+    raid_update(g, dt);
+    celebrate(g, dt);
     for (int i = 0; i < MAX_FOLK; i++) {
         Folk *f = &g->folk[i];
         if (!f->alive) continue;
         if (!game_nearest_player(g, f->pos, 130.0f) && f->rec != -50) { f->alive = false; continue; } /* (they come again with their town) */
+        if (f->rec <= -60 && f->rec > -100) { /* kin in the Sanctum: at ease, and they look at you */
+            f->anim += dt;
+            if (f->talk_t > 0) f->talk_t -= dt;
+            PlayerSlot *ps = game_nearest_player(g, f->pos, 5.0f);
+            if (ps) f->yaw = atan2f(ps->pl.pos.z - f->pos.z, ps->pl.pos.x - f->pos.x);
+            if (ps && ps->banner_time <= 0 && ps->msg_t <= 0 && v3_len(v3_sub(ps->pl.pos, f->pos)) < 3.0f) {
+                char b[96];
+                snprintf(b, sizeof b, "%s, YOUR KIN - STRIKE TO TALK", f->name);
+                upper(b);
+                game_banner(ps, b);
+            }
+            continue;
+        }
         f->anim += dt;
         if (f->talk_t > 0) { f->talk_t -= dt; continue; } /* listening */
         Town t;
@@ -696,14 +916,15 @@ void town_draw(Game *g, PlayerSlot *viewer) {
 }
 
 /* The newest task under the story's line. */
-void town_draw_tracker(Game *g, PlayerSlot *ps, int W, int H, int y) {
-    if (ps->st.dead) return;
+int town_draw_tracker(Game *g, PlayerSlot *ps, int W, int H, int y) {
+    if (ps->st.dead) return 0;
     const TownRec *best = NULL;
     for (int i = 0; i < g->world.ntowns; i++) {
         const TownRec *r = &g->world.towns[i];
         if (r->qstate == 1 && (!best || r->qseq > best->qseq)) best = r;
     }
-    if (!best) return;
+    if (!best) return 0;
+    if (!H) return 1;
     char buf[160], dir[64];
     const char *home = "THE ELDER";
     switch (best->qtype) {
@@ -728,4 +949,5 @@ void town_draw_tracker(Game *g, PlayerSlot *ps, int W, int H, int y) {
     font_begin(W, H);
     font_text((W - font_text_width(buf)) / 2, y, buf, 0.75f, 0.9f, 0.55f);
     font_end();
+    return 1;
 }

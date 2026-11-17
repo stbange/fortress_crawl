@@ -18,7 +18,7 @@ enum { TB_NONE, TB_PLAZA, TB_INN, TB_TEMPLE, TB_ELDER, TB_WORKSHOP, TB_HOUSE, TB
 enum { FR_INNKEEPER, FR_HEALER, FR_ELDER, FR_SMITH, FR_MERCHANT, FR_GUARD, FR_FOLK, FR_CHILD, FR_LOST, FR_COUNT };
 
 /* What a market sells. */
-enum { WA_FOOD, WA_REAGENT, WA_FORGE, WA_SUPPLY, WA_WEAPON, WA_POTION };
+enum { WA_FOOD, WA_REAGENT, WA_FORGE, WA_SUPPLY, WA_WEAPON, WA_POTION, WA_FORMULA, WA_KEYSTONE };
 typedef struct Ware { u8 kind; i16 id; u8 n; i16 price; } Ware;
 
 typedef struct PeopleDef {
@@ -38,6 +38,9 @@ typedef struct PeopleDef {
     const char *chatter[6];           /* what folk say; %F, %B, %S, %N from the history, %T the town */
     const char *greet;                /* the elder's greeting */
 } PeopleDef;
+/* What a people sells only to those it trusts: a friend (reputation 3), the honoured (6), and what
+ * comes with the caravan you paid for (town.c). One of each a day. WA_WEAPON id 1: an epic. */
+extern const Ware PEOPLE_SPECIAL[][3];
 extern const PeopleDef PEOPLES[PEOPLE_COUNT];
 
 /* A town as built: from its structure (world_structure_at, variant HALL_TOWN). */

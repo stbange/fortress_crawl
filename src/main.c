@@ -1321,7 +1321,7 @@ static void screenshot_step(App *a, float frame_dt) {
         }
     }
     if (g->opt.demo && a->demo_done && !strcmp(kind, "kingtest")) {
-        static int stage = -1, step = -1;
+        static int stage = -1, step = -1, kt_tries;
         static float wait;
         const KingWay *K = king_way(&g->world, g->realms_joined);
         p1->st.hp = p1->st.maxhp;
@@ -1333,6 +1333,7 @@ static void screenshot_step(App *a, float frame_dt) {
         if (wait > 0) return;
         /* the next open step */
         if (stage == 0) {
+            kt_tries = 0;
             step = -1;
             for (int i = 0; i < KING_STEPS && step < 0; i++) {
                 bool open = !((g->world.king_done >> i) & 1);
@@ -1341,7 +1342,18 @@ static void screenshot_step(App *a, float frame_dt) {
                 if (open) step = i;
             }
             if (step < 0 || g->world.king_ending) {
-                SDL_Log("kingtest: settled: ending %d, steps done %03x, credits %.1f", g->world.king_ending, g->world.king_done, p1->credits_t);
+                SDL_Log("kingtest: settled: ending %d, steps done %03x, credits %.1f, flags %d, wins %d, gold %d, keystones %d", g->world.king_ending,
+                        g->world.king_done, p1->credits_t, g->world.king_flags, g->world.king_wins, p1->st.gold, g->sanctum.keystones);
+                if (getenv("KINGTEST_HEIR") && g->world.king_gen == 0) { /* and the heir: his way, walked too */
+                    p1->credits_t = 0;
+                    king_heir(g);
+                    const KingWay *H = king_way(&g->world, g->realms_joined);
+                    SDL_Log("kingtest: THE HEIR: %s, %s; valid %d; steps done %03x", H->name, KING_KINDS_DEF[H->kind].name, H->valid, g->world.king_done);
+                    for (int i = 0; i < KING_STEPS; i++)
+                        SDL_Log("kingtest:   heir step %d: %s at chunk %d %d %d", i + 1, KING_STEP_NAMES[H->step[i].type], H->step[i].cx, H->step[i].cy, H->step[i].cz);
+                    wait = 2.0f;
+                    return;
+                }
                 stage = 9;
                 return;
             }
@@ -1403,7 +1415,7 @@ static void screenshot_step(App *a, float frame_dt) {
             extern void king_test_touch(Game *g, PlayerSlot *ps);
             king_test_touch(g, p1);
             if ((g->world.king_done >> step) & 1) { SDL_Log("kingtest:   done: %s", p1->msg); stage = 0; wait = 0.5f; }
-            else { wait = 1.0f; static int tries; if (++tries > 30) { SDL_Log("kingtest:   STUCK at step %d", step + 1); stage = 9; } }
+            else { wait = 1.0f; if (++kt_tries > 30) { SDL_Log("kingtest:   STUCK at step %d", step + 1); stage = 9; } }
             return;
         }
         if (stage == 3) { /* a town: the elder or the healer */
@@ -1432,7 +1444,7 @@ static void screenshot_step(App *a, float frame_dt) {
             return;
         }
         if (stage == 4) { /* friendship: as if its tasks were done */
-            for (int i = 0; i < g->world.ntowns; i++) if (g->world.towns[i].key == st->key) g->world.towns[i].rep = 3;
+            for (int i = 0; i < g->world.ntowns; i++) if (g->world.towns[i].key == st->key) g->world.towns[i].rep = g->world.king_gen ? 6 : 3;
             SDL_Log("kingtest:   (the town's friendship by hand: %d towns known)", g->world.ntowns);
             stage = 0; wait = 1.5f;
             return;
@@ -1454,8 +1466,13 @@ static void screenshot_step(App *a, float frame_dt) {
                     return;
                 }
                 if (how && !strcmp(how, "art")) { g->world.king_flags &= (u8)~KF_NAME; p1->pl.stance = STANCE_CROUCH; }
-                king_use(g, p1);
+                king_use(g, p1); /* he speaks, and rises: words do not move him standing */
                 SDL_Log("kingtest:   at the throne: %s | %s", p1->msg, p1->msg_next);
+                bool early = king_use(g, p1) && king_won(g);
+                SDL_Log("kingtest:   a word before he falters: %s", early ? "SETTLED (WRONG)" : "not heard (right)");
+                for (int k = 0; k < 50 && !king_faltering(m) && m->alive; k++) monster_damage(g, m, m->maxhp * 0.2f, p1->pl.pos, 0, 0);
+                SDL_Log("kingtest:   he falters at %.0f%% of his life: %s", 100.0f * m->hp / m->maxhp, king_faltering(m) ? "yes" : "NO");
+                p1->pl.pos = v3_add(m->pos, v3_scale(f, 4.0f));
                 king_use(g, p1);
                 SDL_Log("kingtest:   the ending: %s", p1->msg);
                 stage = 0; wait = 2.0f;
@@ -1463,8 +1480,7 @@ static void screenshot_step(App *a, float frame_dt) {
             }
             Structure sst;
             if (world_structure_at(&g->world, st->cx, st->cy, st->cz, &sst)) p1->pl.pos = v3(st->cx * CHUNK + 16.5f, (float)sst.floor_y + 1, st->cz * CHUNK + 16.5f);
-            static int tries;
-            if (++tries > 20) { SDL_Log("kingtest:   no king on the throne"); stage = 9; }
+            if (++kt_tries > 20) { SDL_Log("kingtest:   no king on the throne"); stage = 9; }
             wait = 1.0f;
         }
     }

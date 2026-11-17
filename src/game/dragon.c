@@ -543,6 +543,13 @@ static void great_update(Game *g, Monster *m, PlayerSlot *tp, float dt) {
         }
         return;
     }
+    /* the Dragon-King on his knees (king.c): down to the ground, and still */
+    if (king_faltering(m)) {
+        if (m->pos.y > m->dhome.y + 0.5f) fly_to(g, m, v3(m->pos.x, m->dhome.y, m->pos.z), S->speed * 0.5f, dt);
+        m->dstate = DST_GROUND;
+        m->anim += dt * 0.2f;
+        return;
+    }
     /* the phase of the fight */
     float frac = m->hp / m->maxhp;
     int phase = frac > 0.66f ? 0 : frac > 0.33f ? 1 : 2;

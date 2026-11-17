@@ -173,6 +173,7 @@ void game_thread_key(Game *g, PlayerSlot *ps) {
         int cost = s->gold / 5;
         s->gold -= cost;
         s->fell_t = 0;
+        ps->returned_at = g->time;
         particles_burst(g, player_eye(&ps->pl), v3(0.9f, 0.8f, 0.5f), 20, 3.0f, 0.05f, true);
         ps->pl.pos = s->fell_pos;
         ps->pl.vel = v3(0, 0, 0);
@@ -194,6 +195,7 @@ void game_hurt_player(Game *g, PlayerSlot *ps, float dmg, vec3 from) {
     if (s->ranks[SK_LAST_STAND] && s->hp < s->maxhp * 0.3f) dmg *= 0.5f;
     if (s->stoneskin_t > 0) dmg *= 0.5f;
     dmg *= 1.0f + food_fx(s, ME_TAKEN); /* the chili's price */
+    dmg *= 1.0f - forge_armour_taken(s); /* dragon-scale armour (forge.c) */
     s->scry_t = 0; /* a blow breaks Clairvoyance */
     utility_ritual_break(g, ps); /* and the Sanctum ritual */
     if (s->ward > 0) {
@@ -258,6 +260,7 @@ void player_element_hit(Game *g, PlayerSlot *ps, int el, float dmg) {
         if (el == EL_LIGHTNING) game_hurt_player(g, ps, dmg * 0.5f, v3_add(ps->pl.pos, v3(0, 2, 0)));
         if (el == EL_FROST && food_fx(s, ME_FROST_RES) <= 0) { s->chill_t = fmaxf(s->chill_t, 5.0f); s->cold = fminf(1.0f, s->cold + 0.3f); }
     }
+    if (s->armour && el == s->armour_el) return; /* the scales of its own element ward it off (forge.c) */
     if (el == EL_FIRE && food_fx(s, ME_FIRE_RES) > 0) return; /* a fire broth in you */
     if (el == EL_FROST && food_fx(s, ME_FROST_RES) > 0) return;
     if (el == EL_POISON && food_fx(s, ME_POISON_IMM) > 0) return;
@@ -582,6 +585,7 @@ void game_event(Game *g, const SDL_Event *e) {
         case SDLK_G: game_thread_key(g, ps); break;
         case SDLK_J: drink_potion(g, ps, true); break;
         case SDLK_K: food_eat_best(g, ps); break;
+        case SDLK_Y: game_next_track(g, ps); break;
         case SDLK_N: open_menu(ps, TAB_FOOD); break;
         case SDLK_V: alchemy_drink_quick(g, ps); break;
         case SDLK_O: open_menu(ps, TAB_ALCHEMY); break;
@@ -628,6 +632,17 @@ void game_event(Game *g, const SDL_Event *e) {
         default: break;
         }
     }
+}
+
+/* Y: the line at the top follows the next of the Old King's way, the chronicle and a town's task. */
+void game_next_track(Game *g, PlayerSlot *ps) {
+    int (*const T[3])(Game *, PlayerSlot *, int, int, int) = { king_draw_tracker, story_draw_tracker, town_draw_tracker };
+    static const char *N[3] = { "THE LINE FOLLOWS THE OLD KING", "THE LINE FOLLOWS THE CHRONICLE", "THE LINE FOLLOWS THE TOWN'S TASK" };
+    for (int k = 1; k <= 3; k++) {
+        int t = (ps->track + k) % 3;
+        if (T[t](g, ps, 0, 0, 0)) { ps->track = (u8)t; game_banner(ps, N[t]); return; }
+    }
+    game_banner(ps, "NOTHING ELSE TO FOLLOW");
 }
 
 void game_look(Game *g, float dx, float dy) {
@@ -784,6 +799,9 @@ static void update_player(Game *g, PlayerSlot *ps, const PlayerInput *in, float 
             bool home = realm_has(s->respawn);
             s->fell_pos = s->safe_pos;
             s->fell_t = realm_has(s->safe_pos) || v3_len(v3_sub(s->safe_pos, s->respawn)) < 20.0f ? 0.0f : 15.0f;
+            /* not back into the same pack again and again: once in five minutes */
+            bool soon = ps->returned_at > 0 && g->time - ps->returned_at < 300.0f;
+            if (soon) s->fell_t = 0;
             int lost = s->gold / 5;
             s->gold -= lost;
             /* dying again within two minutes: no second weakening (no death loops) */
@@ -807,6 +825,7 @@ static void update_player(Game *g, PlayerSlot *ps, const PlayerInput *in, float 
             char buf[96];
             if (s->fell_t > 0)
                 snprintf(buf, sizeof buf, "-%d GOLD. %s: BACK WHERE YOU FELL (-%d MORE)", lost, ps->pad && !ps->keyboard ? "R-STICK" : "G", s->gold / 5);
+            else if (soon) snprintf(buf, sizeof buf, "-%d GOLD. NO WAY BACK SO SOON - GATHER YOURSELF FIRST", lost);
             else if (home) snprintf(buf, sizeof buf, "YOU WAKE IN YOUR OWN BED (-%d GOLD)", lost);
             else snprintf(buf, sizeof buf, "THE SHRINE BRINGS YOU BACK, WEAKENED (-%d GOLD)", lost);
             game_banner(ps, buf);
@@ -1240,9 +1259,19 @@ static void draw_hud(Game *g, PlayerSlot *ps, int W, int H) {
     for (int i = 0; i < ARRAY_LEN(g->idle_pads); i++) idle_pad |= g->idle_pads[i] != NULL;
     font_end();
     int ty = g->hud && ps->index == 0 ? 4 + 8 * FONT_LINE : (touch ? 30 : 4) + (idle_pad ? 10 : 0);
-    ty += 10 * king_draw_tracker(g, ps, W, H, ty); /* the Old King first: the main way (king.c) */
-    story_draw_tracker(g, ps, W, H, ty);
-    town_draw_tracker(g, ps, W, H, ty + 10);
+    { /* one line at the top: the Old King's way (the main story) unless Y picked another */
+        int (*const T[3])(Game *, PlayerSlot *, int, int, int) = { king_draw_tracker, story_draw_tracker, town_draw_tracker };
+        int has = 0;
+        for (int k = 0; k < 3; k++) has += T[k](g, ps, W, 0, ty);
+        for (int k = 0; k < 3; k++)
+            if (T[(ps->track + k) % 3](g, ps, W, H, ty)) break;
+        if (has > 1 && !small && !touch) {
+            font_begin(W, H);
+            const char *t = "(Y: ANOTHER LINE)";
+            font_text((W - font_text_width(t)) / 2, ty + 10, t, 0.45f, 0.42f, 0.35f);
+            font_end();
+        }
+    }
     font_begin(W, H);
     if (idle_pad && ps->index == 0 && g->nplayers < MAX_PLAYERS) {
         const char *t = "GAMEPAD READY: PRESS START TO JOIN";

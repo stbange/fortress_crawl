@@ -1,5 +1,9 @@
 # Fortress Crawl: Development Plan (v0.8)
 
+> **Superseded as the overview.** This is the plan the game grew from, kept for its record of
+> decisions and of the world generator. How the game fits together today is in
+> [DESIGN.md](DESIGN.md); each system has its own document (listed there).
+
 An endless, procedurally generated 3D dungeon crawler written in C with SDL3 and OpenGL 3.3.
 The player starts in front of a giant castle built into a mountain. The gate is
 **danger level 0**. Every direction (including up and down) leads deeper, and the farther you
@@ -450,12 +454,14 @@ Done:
   statues|beam|darts|spikes|flames|mechtest|cast|realmtest`, `--shot-time`,
   `--players n`, `--test-pad` with a scripted virtual gamepad).
 
+Since this list was first written: gold has many uses (the Sanctum, the forge, sealed weapons,
+the towns' works and markets), water drowns, dragons and the Old King are bosses with attacks of
+their own, there is one piece of armour (dragon-scale, from the forge), and the main story is the
+Old King's ([OLD_KING.md](OLD_KING.md)).
+
 Known gaps:
-- Gold has no use yet besides scrapping value (a shrine shop would fit).
-- No armour, rings or amulets yet; spells have no visual for every element/form pairing
-  beyond colour.
-- No summoners yet; named enemies are scaled-up monsters with a name, not bosses with their own attacks.
-- Water is still harmless; traps cannot be spotted or disarmed by a skill yet.
+- No rings or amulets; spells have no visual for every element/form pairing beyond colour.
+- Traps cannot be spotted or disarmed by a skill yet.
 - Puzzles are not yet mission steps (S5), and a half-solved puzzle resets when everyone
   leaves.
 - Saves do not keep killed monsters, dropped loot lying around or spell effects; a world
@@ -494,7 +500,11 @@ Known gaps:
 
 ---
 
-## 9. Open questions for the next phase
+## 9. Open questions for the next phase (answered)
+
+These were answered by what was built: random items with affixes and world legendaries (loot);
+named enemies, realm rulers, dragons and the Old King (bosses); everyone starts the same and picks a
+motive (character creation); one save per world, saved automatically (saves).
 
 1. **Loot:** Diablo-style random items with affixes (rarity colours, many drops), or rarer
    hand-crafted uniques with a few clear effects?

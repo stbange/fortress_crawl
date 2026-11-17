@@ -65,6 +65,15 @@ const char *KING_STEP_NAMES[KS_COUNT] = { "the herald", "the witness", "the true
 
 int king_kind_of(u64 seed) { return (int)(mix64(seed ^ 0x01D1C) % KING_KINDS); }
 
+/* The kind of the king of a generation: each heir is of another kind than the one before him. */
+static int king_kind_gen(u64 seed, int gen) {
+    if (!gen) return king_kind_of(seed);
+    int prev = king_kind_gen(seed, gen - 1), k = king_kind_of(mix64(seed ^ 0x4E1E5 * (u64)gen));
+    if (k == prev || k == king_kind_of(seed)) k = (k + 1 + gen) % KING_KINDS;
+    if (k == prev || k == king_kind_of(seed)) k = (k + 1) % KING_KINDS;
+    return k;
+}
+
 void king_throne_cell(u64 seed, int *gx, int *gy, int *gz) {
     u64 h = mix64(seed ^ 0x7A0E);
     int kind = king_kind_of(seed);
@@ -147,12 +156,17 @@ static bool in(const u8 *a, int n, int v) {
 static bool make_way(const struct World *w, u32 realms, int attempt, KingWay *K) {
     memset(K, 0, sizeof *K);
     u64 seed = w->seed;
+    int gen = w->king_gen;
     K->seed = seed;
-    K->kind = king_kind_of(seed);
-    king_name(K->kind, seed, K->name, sizeof K->name);
+    K->gen = gen;
+    /* an heir (gen 1, 2...) is of another kind, takes the same throne, and his way lies farther out */
+    u64 hs = gen ? mix64(seed ^ 0x4E1E5 * (u64)gen) : seed;
+    K->kind = king_kind_gen(seed, gen);
+    king_name(K->kind, hs, K->name, sizeof K->name);
     king_throne_cell(seed, &K->tgx, &K->tgy, &K->tgz);
     const KingKind *KD = &KING_KINDS_DEF[K->kind];
-    Rng r = rng_make(mix64(seed ^ 0x6A11) + (u64)attempt * 0x9E37);
+    Rng r = rng_make(mix64(hs ^ 0x6A11) + (u64)attempt * 0x9E37);
+    float far = 8.0f * (float)MINI(gen, 3);
     float throne_ang = atan2f((float)K->tgz, (float)K->tgx);
     /* the kinds of step */
     u8 A[3], B[4], C[2];
@@ -184,11 +198,11 @@ static bool make_way(const struct World *w, u32 realms, int attempt, KingWay *K)
     u64 herald_town = 0;
     for (int i = 0; i < KING_STEPS; i++) {
         KingStep *st = &K->step[i];
-        float lo = st->group == 0 ? 4 : st->group == 1 ? 10 : 18, hi = st->group == 0 ? 14 : st->group == 1 ? 26 : 34;
+        float lo = (st->group == 0 ? 4 : st->group == 1 ? 10 : 18) + far, hi = (st->group == 0 ? 14 : st->group == 1 ? 26 : 34) + far;
         switch (st->type) {
         case KS_HERALD: case KS_ALLEGIANCE: case KS_BREW: {
             int k = -1;
-            if (st->type == KS_HERALD) { /* the nearest town: the one east of the gate */
+            if (st->type == KS_HERALD && !gen) { /* the nearest town: the one east of the gate */
                 float bd = 1e9f;
                 for (int j = 0; j < nt; j++) if (towns[j].d < bd) { bd = towns[j].d; k = j; }
             } else k = pick(towns, nt, lo, hi, used, nused, &r);
@@ -253,7 +267,7 @@ static bool make_way(const struct World *w, u32 realms, int attempt, KingWay *K)
 const KingWay *king_way(const struct World *w, u32 realms) {
     static KingWay cache;
     static u32 cache_realms;
-    if (cache.valid && cache.seed == w->seed && cache_realms == realms) return &cache;
+    if (cache.valid && cache.seed == w->seed && cache.gen == w->king_gen && cache_realms == realms) return &cache;
     for (int attempt = 0; attempt < 16; attempt++)
         if (make_way(w, realms, attempt, &cache)) { cache_realms = realms; return &cache; }
     /* (a way without the realm or a second lair, at worst: the fortress always has towns) */

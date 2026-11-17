@@ -185,3 +185,13 @@ bool world_town_at(const struct World *w, int cx, int cy, int cz, Town *out) {
     if (!world_structure_at(w, cx, cy, cz, &s)) return false;
     return town_from_structure(&s, out);
 }
+
+const Ware PEOPLE_SPECIAL[PEOPLE_COUNT][3] = {
+    [PE_DWARF] = { { WA_FORGE, FG_MOONSILVER, 2, 420 }, { WA_WEAPON, 1, 1, 1600 }, { WA_FORGE, FG_MITHRIL, 2, 500 } },
+    [PE_GOBLIN] = { { WA_SUPPLY, 100, 6, 160 }, { WA_KEYSTONE, 0, 1, 1400 }, { WA_REAGENT, RG_VOIDSALT, 2, 300 } },
+    [PE_GNOME] = { { WA_FORMULA, -1, 1, 450 }, { WA_FORGE, FG_RUNE_INK, 2, 500 }, { WA_REAGENT, RG_BRIMSTONE, 2, 260 } },
+    [PE_ELF] = { { WA_REAGENT, RG_MANDRAKE, 1, 240 }, { WA_FORMULA, -1, 1, 500 }, { WA_REAGENT, RG_PHOENIX, 1, 650 } },
+    [PE_HUMAN] = { { WA_FORGE, FG_QUENCH_OIL, 2, 200 }, { WA_KEYSTONE, 0, 1, 1500 }, { WA_WEAPON, 1, 1, 1700 } },
+    [PE_HALFLING] = { { WA_FOOD, FD_STARFRUIT, 3, 150 }, { WA_REAGENT, RG_AMBER, 2, 300 }, { WA_FORMULA, -1, 1, 450 } },
+    [PE_ORC] = { { WA_REAGENT, RG_TROLLBLOOD, 2, 200 }, { WA_WEAPON, 1, 1, 1500 }, { WA_FORGE, FG_TITAN_HEART, 1, 900 } },
+};

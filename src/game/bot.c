@@ -16,8 +16,8 @@
  * summary at the end. It finds its way with a breadth-first search over the cells a
  * player can stand in, around itself. */
 
-enum { BS_EXPLORER, BS_DELVER, BS_ARCHER, BS_CASTER, BS_QUESTER, BS_CAUTIOUS, BS_COUNT };
-static const char *STYLE_NAMES[BS_COUNT] = { "explorer", "delver", "archer", "caster", "quester", "cautious" };
+enum { BS_EXPLORER, BS_DELVER, BS_ARCHER, BS_CASTER, BS_QUESTER, BS_CAUTIOUS, BS_KING, BS_COUNT };
+static const char *STYLE_NAMES[BS_COUNT] = { "explorer", "delver", "archer", "caster", "quester", "cautious", "king" };
 
 /* ---------- the search grid ---------- */
 
@@ -381,6 +381,18 @@ static void plan(PlayerSlot *ps) {
         tgt = v3(ps->target.cx * CHUNK + 16.0f, ps->target.cy * CHUNK + 8.0f, ps->target.cz * CHUNK + 16.0f);
         has_tgt = true;
     }
+    bool talk;
+    if (B.style == BS_KING && king_bot_target(G, ps, &tgt, &talk)) { /* the Old King's way (king.c) */
+        has_tgt = true;
+        int ri = reach_index(tgt);
+        if (ri >= 0 && dist_[ri] > 1) { /* in reach: straight there */
+            B.goal_kind = 0;
+            set_path_to(ri);
+            B.goal = tgt;
+            return;
+        }
+        if (fabsf(tgt.y - feet.y) > 6.0f) B.vertical_until = B.t + 20.0f;
+    }
     float here_gate = gate_dist(feet);
     best = -1;
     float bs = -1e9f;
@@ -419,6 +431,7 @@ static const int SKILL_ORDER[BS_COUNT][16] = {
     [BS_ARCHER] = { SK_STEADY_AIM, SK_MULTISHOT, SK_STEADY_AIM, SK_PIERCING, SK_FLEET_FOOT, SK_TOUGHNESS, SK_ARROW_STORM, SK_SECOND_WIND, -1 },
     [BS_CASTER] = { SK_FOCUS, SK_FIREBALL, SK_FOCUS, SK_CHAIN, SK_TOUGHNESS, SK_NOVA, SK_FOCUS, SK_SECOND_WIND, -1 },
     [BS_QUESTER] = { SK_KEEN_EDGE, SK_TOUGHNESS, SK_STEADY_AIM, SK_CLEAVE, SK_SECOND_WIND, SK_FOCUS, SK_LAST_STAND, -1 },
+    [BS_KING] = { SK_KEEN_EDGE, SK_TOUGHNESS, SK_STEADY_AIM, SK_CLEAVE, SK_SECOND_WIND, SK_FOCUS, SK_LAST_STAND, -1 },
     [BS_CAUTIOUS] = { SK_TOUGHNESS, SK_SECOND_WIND, SK_TOUGHNESS, SK_LAST_STAND, SK_KEEN_EDGE, SK_FLEET_FOOT, SK_CLEAVE, -1 },
 };
 
@@ -1033,6 +1046,8 @@ static void summary(PlayerSlot *ps) {
           g_tele.food, g_tele.hunted, g_tele.harvested, g_tele.cooked, g_tele.eaten, __builtin_popcount(s->recipes),
           g_tele.reagents, g_tele.brewed, g_tele.elixirs, __builtin_popcount(s->formulae), g_tele.forge_mats, g_tele.forged, g_tele.masterworks,
           smith_level(s->smith_xp), B.digs, B.blasts, G->map.edits_total, B.warmed, B.harvests, B.throws, s->cloak);
+    logf_("KING steps=%d done=%03x gen=%d won=%d ending=%d town_works=%d raids=%d armour=%d\n", g_tele.king_steps, G->world.king_done, G->world.king_gen,
+          G->world.king_wins, G->world.king_ending, g_tele.town_works, g_tele.town_raids, s->armour);
     float total = 0;
     for (int i = 0; i < HS_COUNT; i++) total += g_tele.taken[i];
     logf_("DAMAGE_TAKEN total=%.0f", total);
@@ -1277,6 +1292,20 @@ bool bot_step(Game *g, PlayerInput *in, float dt) {
     if (bot_food(g, ps, in, dt)) return true;
     if (bot_warm(g, ps, in, dt)) return true;
     if (bot_harvest(g, ps, in, dt)) return true;
+    if (B.style == BS_KING) { /* at someone of the way: strike to talk */
+        vec3 at;
+        bool talk;
+        if (king_bot_target(g, ps, &at, &talk) && talk) {
+            vec3 d = v3_sub(at, ps->pl.pos);
+            d.y = 0;
+            if (v3_len(d) < 2.3f) {
+                face(ps, v3_add(at, v3(0, 1.2f, 0)), 8.0f, dt);
+                ps->pad_attack = facing(ps, v3_add(at, v3(0, 1.2f, 0)), 0.3f) && fmodf(B.t, 1.0f) < dt * 2.0f;
+                if (ps->pad_attack) logf_("%7.1f KING talk at %.0f %.0f %.0f\n", B.t, at.x, at.y, at.z);
+                return true;
+            }
+        }
+    }
 
     /* stuck: dig (or blast) a way toward the goal for a moment */
     if (B.t < B.dig_until) {

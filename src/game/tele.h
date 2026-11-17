@@ -23,7 +23,7 @@ typedef struct Tele {
     int reagents, brewed, murky, elixirs, formulae;
     int forge_mats, forged, masterworks;
     int realm_trips, rulers;
-    int town_tasks, town_rests, town_heals, town_trades;
+    int town_tasks, town_rests, town_heals, town_trades, town_works, town_raids;
     int dragons, drakes;
     int king_steps, king_won;
 } Tele;

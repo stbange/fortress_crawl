@@ -22,6 +22,7 @@ enum {
     KS_THRONE, KS_COUNT
 };
 #define KING_STEPS 10
+#define KING_HEIR_DELAY 900.0f /* seconds of play after a king is settled before an heir takes the throne */
 
 typedef struct KingKind {
     const char *name;        /* "the Tyrant" */
@@ -52,6 +53,7 @@ typedef struct KingWay {
     char name[40];           /* "Aldric the Ninth" */
     KingStep step[KING_STEPS];
     int tgx, tgy, tgz;       /* the throne's placement cell (layout.c) */
+    int gen;                 /* 0 the Old King; 1, 2... an heir who took the empty throne */
     bool valid;
 } KingWay;
 

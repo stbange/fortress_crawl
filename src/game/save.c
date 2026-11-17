@@ -12,7 +12,7 @@
  * user's preference folder. The world itself never needs saving: the seed rebuilds it. */
 
 #define SAVE_MAGIC 0x56534346u /* "FCSV" */
-#define SAVE_VERSION 28 /* 28: the Old King (the steps done, what is known, the ending); 27: the great dragons slain; 26: the towns of the friendly peoples (reputation, tasks), company at an inn; 25: the realms behind the Gate (attuned, rulers fallen, plants and animals met; where you went through from); 24: seeds; 23: firewood; 22: insect swarms; 21: the numbers of animals and plants per chunk; 20: the marks on cells (wet, soot, scorch, plants' age); 19: flasks to throw; 18: the fur cloak, warmth and cold of each character; 17: when each chunk was last seen (the world goes on while you are away); 16: the clouds of gas in the air; 15: what was broken in the world, the pickaxe and bombs; 14: the ledger of deeds (choices); 13: the story generator of the world; 12: the forge (materials, smithing, blueprints, runes); 11: the Sanctum's decorations, keystones bought; 10: meal variety, toxicity, torn formulae; 9: alchemy (reagents, elixirs, formulae, the elixir working); 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms;
+#define SAVE_VERSION 29 /* 29: the heirs of the Old King, kings settled, mercy, all king flags; the towns' works; dragon-scale armour; 28: the Old King (the steps done, what is known, the ending); 27: the great dragons slain; 26: the towns of the friendly peoples (reputation, tasks), company at an inn; 25: the realms behind the Gate (attuned, rulers fallen, plants and animals met; where you went through from); 24: seeds; 23: firewood; 22: insect swarms; 21: the numbers of animals and plants per chunk; 20: the marks on cells (wet, soot, scorch, plants' age); 19: flasks to throw; 18: the fur cloak, warmth and cold of each character; 17: when each chunk was last seen (the world goes on while you are away); 16: the clouds of gas in the air; 15: what was broken in the world, the pickaxe and bombs; 14: the ledger of deeds (choices); 13: the story generator of the world; 12: the forge (materials, smithing, blueprints, runes); 11: the Sanctum's decorations, keystones bought; 10: meal variety, toxicity, torn formulae; 9: alchemy (reagents, elixirs, formulae, the elixir working); 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms;
                           6: weapons with materials, powers, legendaries and memory; 7: the Sanctum per world (written by one
                           build still marked 6); 8: food (the larder, dishes, recipes, the meal) */
 #define EXPLORED_BUDGET (1200 * 1024)
@@ -191,6 +191,7 @@ static void write_player(Buf *b, const Stats *s, const Player *pl) {
     w8(b, s->seeds); /* v24 */
     w8(b, s->gate_from_set); wv(b, s->gate_from); wf(b, s->gate_from_yaw); wf(b, s->sunward_t); wf(b, s->gills_t); /* v25 */
     wf(b, s->company_t); /* v26 */
+    w8(b, s->armour); w8(b, s->armour_el); /* v29 */
 }
 
 /* Explored cells: per chunk a 512-byte mask of the non-zero bytes, then those bytes. */
@@ -337,6 +338,10 @@ bool game_save(Game *g) {
     for (int i = 0; i < g->world.ndragons_slain; i++) w64(&b, g->world.dragons_slain[i]);
     /* v28: the Old King */
     w16(&b, g->world.king_done); w8(&b, g->world.king_flags); w8(&b, g->world.king_ending);
+    /* v29: the heirs, kings settled, mercy; the towns' works (in the order of the towns above) */
+    w8(&b, g->world.king_gen); w8(&b, g->world.king_wins); w8(&b, g->world.king_mercy);
+    w8(&b, (u8)g->world.ntowns);
+    for (int i = 0; i < g->world.ntowns; i++) w8(&b, g->world.towns[i].projects);
     char key[64];
     save_key(g->opt.seed, key, sizeof key);
     bool ok = store_write(key, b.d, b.n);
@@ -497,6 +502,7 @@ static void read_player(Rd *r, SavedPlayer *sp) {
         s->gills_t = clampf(rf(r), 0, 3600);
     }
     if (r->ver >= 26) s->company_t = clampf(rf(r), 0, 3600);
+    if (r->ver >= 29) { s->armour = (u8)MINI(r8(r), 3); s->armour_el = (u8)(r8(r) % EL_COUNT); }
     if (!s->blueprints) s->blueprints = (1u << WB_DAGGER) | (1u << WB_SWORD) | (1u << WB_SHORTBOW) | (1u << WB_STAFF);
     /* sanity: a save from a broken build must not crash the game */
     if (s->level < 1 || s->level > 999) s->level = 1;
@@ -689,9 +695,23 @@ bool game_load(Game *g) {
         g->world.king_done = 0; g->world.king_flags = 0; g->world.king_ending = 0;
         if (r.ver >= 28) {
             g->world.king_done = (u16)(r16(&r) & 0x3FF);
-            g->world.king_flags = r8(&r) & 3;
+            g->world.king_flags = r8(&r) & (r.ver >= 29 ? 31 : 3);
             u8 e = r8(&r);
             g->world.king_ending = e <= KE_ARTEFACT ? e : KE_NONE;
+        }
+        g->world.king_gen = g->world.king_wins = g->world.king_mercy = 0;
+        if (r.ver >= 29) {
+            g->world.king_gen = (u8)MINI(r8(&r), 9);
+            g->world.king_wins = r8(&r);
+            g->world.king_mercy = r8(&r) != 0;
+            int np = r8(&r);
+            for (int i = 0; i < np && !r.bad; i++) {
+                u8 p = r8(&r) & 7;
+                if (i < g->world.ntowns) g->world.towns[i].projects = p;
+            }
+        } else if (g->world.king_ending != KE_NONE) { /* (a v28 save that settled him) */
+            g->world.king_wins = 1;
+            g->world.king_mercy = g->world.king_ending != KE_FIGHT;
         }
         if (r.bad) { /* a broken tail: the Sanctum as a new world has it */
             u8 gen = r.ver >= 13 ? g->world.story_gen : 0;

@@ -1,5 +1,7 @@
 # The Sanctum: implementation plan
 
+> A plan, kept as a record. How the game fits together today: [DESIGN.md](DESIGN.md).
+
 Status: **implemented** (steps 1-6 of section 5, November 2026). The Sanctum is one per
 world, starts as a ruin and is built up plot by plot in the SHOP tab at home; keystones drop
 from vault hoards, named enemies and bosses; the door is a ritual. Still open: the drafting

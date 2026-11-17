@@ -156,19 +156,23 @@ static int shop_items(Game *g, PlayerSlot *ps, ShopItem *out) {
     }
     add(out, &n, SH_SCRAP, 0, -gold, worse > 0, worse ? NULL : "NOTHING WORSE IN THE BAG", "SCRAP %d WEAPONS WORSE THAN YOURS", worse);
     bool home = realm_has(ps->pl.pos);
-    int disc = 0, people = town_market(g, ps, &disc);
+    int open = 0, people = town_market(g, ps, &open);
     if (!home && shrine_here(g, ps) < 0 && people < 0) return n;
-    if (people >= 0) { /* a town's market (town.c): the people's own wares, cheaper for their friends */
+    if (people >= 0) { /* a town's market (town.c): the people's own wares, and more for those they trust */
         const PeopleDef *P = &PEOPLES[people];
-        for (int k = 0; k < 5; k++) {
-            const Ware *w = &P->wares[k];
+        for (int k = 0; k < 8; k++) {
+            if (k >= 5 && !((open >> (k - 5)) & 1)) continue;
+            const Ware *w = k < 5 ? &P->wares[k] : &PEOPLE_SPECIAL[people][k - 5];
+            bool sold = k >= 5 && looted_has(g, town_special_key(g, ps, k));
             char what[64];
             switch (w->kind) {
             case WA_FOOD: snprintf(what, sizeof what, "%d %s", w->n, FOODS[w->id].name); break;
             case WA_REAGENT: snprintf(what, sizeof what, "%d %s", w->n, REAGENTS[w->id].name); break;
             case WA_FORGE: snprintf(what, sizeof what, "%d %s", w->n, FORGE_MATS[w->id].name); break;
             case WA_POTION: snprintf(what, sizeof what, "A %s POTION", w->id ? "MANA" : "HEALTH"); break;
-            case WA_WEAPON: snprintf(what, sizeof what, "A WEAPON OF %s CRAFT", P->adj); break;
+            case WA_WEAPON: snprintf(what, sizeof what, "A%s WEAPON OF %s CRAFT", w->id == 1 ? "N EPIC" : "", P->adj); break;
+            case WA_FORMULA: snprintf(what, sizeof what, "A PAGE OF A FORMULA"); break;
+            case WA_KEYSTONE: snprintf(what, sizeof what, "A KEYSTONE"); break;
             default: {
                 static const char *SUP[] = { [100] = "BOMBS", [103] = "A WARMING DRAUGHT", [104] = "OIL FLASKS", [105] = "FROST SALTS", [106] = "GROWTH TONICS", [107] = "BUNDLES OF FIREWOOD", [108] = "SEEDS" };
                 if (w->id == 103) snprintf(what, sizeof what, "%s", SUP[103]);
@@ -176,7 +180,8 @@ static int shop_items(Game *g, PlayerSlot *ps, ShopItem *out) {
                 break;
             }
             }
-            add(out, &n, SH_TOWN, k, w->price * (100 - disc) / 100, true, NULL, "%s MARKET: %s%s", P->adj, what, disc ? " (A FRIEND'S PRICE)" : "");
+            add(out, &n, SH_TOWN, k, w->price, !sold, sold ? "SOLD: MORE TOMORROW" : NULL, "%s MARKET: %s%s", P->adj, what,
+                k == 7 ? " (FROM YOUR CARAVAN)" : k == 6 ? " (FOR THE HONOURED)" : k == 5 ? " (FOR FRIENDS)" : "");
         }
     }
     char why[40];

@@ -542,6 +542,9 @@ bool story_parley_begin(Game *g, Monster *m) {
     return true;
 }
 
+static float vote_t[MAX_MONSTERS];
+static bool parley_tally(Game *g, int k, bool force);
+
 static Monster *parley_monster(Game *g, const PlayerSlot *ps) {
     if (ps->parley <= 0 || ps->parley > MAX_MONSTERS) return NULL;
     Monster *m = &g->mons[ps->parley - 1];
@@ -551,12 +554,17 @@ static Monster *parley_monster(Game *g, const PlayerSlot *ps) {
 /* Opens the choice for whoever stands near a yielded target, and closes it if they leave. */
 static void update_parley(Game *g) {
     g->parley_hold = false;
+    for (int k = 0; k < MAX_MONSTERS; k++) /* (those who chose do not wait forever) */
+        if (g->mons[k].alive && g->mons[k].parley == 1 && vote_t[k] > 0 && g->time - vote_t[k] > 25.0f) {
+            vote_t[k] = 0;
+            parley_tally(g, k, true);
+        }
     for (int i = 0; i < MAX_PLAYERS; i++) {
         PlayerSlot *ps = &g->players[i];
         if (!ps->active) continue;
         if (ps->parley) {
             Monster *m = parley_monster(g, ps);
-            if (!m || v3_len(v3_sub(m->pos, ps->pl.pos)) > 9.0f || ps->st.dead) ps->parley = 0;
+            if (!m || v3_len(v3_sub(m->pos, ps->pl.pos)) > 9.0f || ps->st.dead) { ps->parley = 0; ps->parley_vote = 0; }
             else g->parley_hold = g->nplayers > 1;
             continue;
         }
@@ -564,17 +572,56 @@ static void update_parley(Game *g) {
         for (int k = 0; k < MAX_MONSTERS; k++) {
             Monster *m = &g->mons[k];
             if (!m->alive || m->parley != 1 || v3_len(v3_sub(m->pos, ps->pl.pos)) > 6.0f + m->scale) continue;
-            bool taken = false; /* one player chooses */
-            for (int j = 0; j < MAX_PLAYERS; j++) taken |= j != i && g->players[j].active && g->players[j].parley == k + 1;
-            if (taken) continue;
-            ps->parley = k + 1;
+            ps->parley = k + 1; /* everyone near chooses; together they decide (story_parley_choose) */
             ps->parley_sel = 0;
+            ps->parley_vote = 0;
             break;
         }
     }
 }
 
+static void parley_resolve(Game *g, PlayerSlot *ps, int choice);
+
+/* In co-op every player at the one who yielded chooses, and the most decide (a tie spares;
+ * after 25 s those who chose decide). Alone, the choice is made at once. */
+static bool parley_tally(Game *g, int k, bool force) {
+    int voters = 0, voted = 0, count[CH_COUNT] = { 0 };
+    PlayerSlot *first = NULL;
+    for (int j = 0; j < MAX_PLAYERS; j++) {
+        PlayerSlot *p = &g->players[j];
+        if (!p->active || p->parley != k + 1) continue;
+        voters++;
+        if (p->parley_vote) { voted++; count[p->parley_vote - 1]++; if (!first) first = p; }
+    }
+    if (!voted || (voted < voters && !force)) return false;
+    int best = 0;
+    for (int c = 1; c < CH_COUNT; c++) if (count[c] > count[best] || (count[c] == count[best] && c == CH_SPARE)) best = c;
+    for (int j = 0; j < MAX_PLAYERS; j++) {
+        PlayerSlot *p = &g->players[j];
+        if (p->active && p->parley == k + 1 && p != first) { p->parley = 0; p->parley_vote = 0; }
+    }
+    if (voters > 1) {
+        static const char *W[CH_COUNT] = { "TOGETHER YOU CHOSE: KILL", "TOGETHER YOU CHOSE: SPARE", "TOGETHER YOU CHOSE: THE BARGAIN" };
+        game_banner_all(g, W[best]);
+    }
+    first->parley_vote = 0;
+    parley_resolve(g, first, best);
+    return true;
+}
+
 void story_parley_choose(Game *g, PlayerSlot *ps, int choice) {
+    Monster *m = parley_monster(g, ps);
+    if (!m) { ps->parley = 0; return; }
+    int k = (int)(m - g->mons);
+    choice = CLAMPI(choice, 0, CH_COUNT - 1);
+    bool first = true;
+    for (int j = 0; j < MAX_PLAYERS; j++) first &= !(g->players[j].active && g->players[j].parley == k + 1 && g->players[j].parley_vote);
+    if (first) vote_t[k] = g->time;
+    ps->parley_vote = choice + 1;
+    parley_tally(g, k, false);
+}
+
+static void parley_resolve(Game *g, PlayerSlot *ps, int choice) {
     Monster *m = parley_monster(g, ps);
     ps->parley = 0;
     if (!m) return;
@@ -695,6 +742,15 @@ void story_draw_parley(Game *g, PlayerSlot *ps, int W, int H) {
         char ln[2][WRAP_MAX];
         int k = wrap(dash ? dash + 3 : "", (int)(w - 12) / 6, ln, compact ? 1 : 2);
         for (int j = 0; j < k; j++) font_text((int)x + 6, (int)y + (compact ? 12 : 12) + j * 8, ln[j], 0.65f * cl, 0.6f * cl, 0.52f * cl);
+    }
+    if (ps->parley_vote) { /* chosen: waiting for the others */
+        int voters = 0, voted = 0;
+        for (int j = 0; j < MAX_PLAYERS; j++) {
+            const PlayerSlot *p = &g->players[j];
+            if (p->active && p->parley == ps->parley) { voters++; voted += p->parley_vote != 0; }
+        }
+        snprintf(buf, sizeof buf, "YOU CHOSE - WAITING FOR THE OTHERS (%d OF %d)", voted, voters);
+        font_text((W - font_text_width(buf)) / 2, (int)(H * 0.4f) + PARLEY_ROWS * (compact ? 30 : 38) + 18, buf, 0.9f, 0.8f, 0.5f);
     }
     const char *help = ps->keyboard && g->touch.active ? "TAP TWICE TO CHOOSE"
                        : ps->pad && !(ps->keyboard && g->mouse) ? "D-PAD AND A TO CHOOSE" : "UP/DOWN AND ENTER TO CHOOSE";
@@ -1049,9 +1105,10 @@ void story_draw_panel(Game *g, PlayerSlot *ps, int W, int H) {
     font_end();
 }
 
-void story_draw_tracker(Game *g, PlayerSlot *ps, int W, int H, int y) {
-    if (!ps->st.motive || ps->st.dead || ps->target_chapter != ps->st.chapter + 1) return;
-    if (realm_has(ps->pl.pos)) return; /* no quarry in the Sanctum: you are out of the world */
+int story_draw_tracker(Game *g, PlayerSlot *ps, int W, int H, int y) {
+    if (!ps->st.motive || ps->st.dead || ps->target_chapter != ps->st.chapter + 1) return 0;
+    if (realm_has(ps->pl.pos)) return 0; /* no quarry in the Sanctum: you are out of the world */
+    if (!H) return 1;
     char dir[64], buf[160];
     story_direction(ps->pl.pos.x, ps->pl.pos.y + 1.0f, ps->pl.pos.z, ps->target.cx, ps->target.cy, ps->target.cz, dir, sizeof dir);
     /* the arrow says at a glance whether the way leads up or down */
@@ -1064,6 +1121,7 @@ void story_draw_tracker(Game *g, PlayerSlot *ps, int W, int H, int y) {
     font_begin(W, H);
     font_text((W - font_text_width(buf)) / 2, y, buf, 0.95f, 0.55f, 0.4f);
     font_end();
+    return 1;
 }
 
 /* Names and health bars over named enemies in view. */

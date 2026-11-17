@@ -18,7 +18,7 @@ gets is part of what makes that world its own.
   the realm it shows, if the Gate is attuned to it.
 - **Back.** In every realm you arrive in front of an arch with a swirl of light. Walk back through it to return
   where you came from: the rift, or the Gate. If you fall out of a realm you are put back at the arch.
-- **Sealed realms.** The Astral Shore opens only after the end of the story. The Dream of the Sleeper opens only
+- **Sealed realms.** The Astral Shore opens only once the Old King is settled (docs/OLD_KING.md). The Dream of the Sleeper opens only
   after an end that spared. Their rifts show, thin and closed, until then.
 
 Attunement, the rulers you have beaten, the realms you have seen and the plants and animals you have met are

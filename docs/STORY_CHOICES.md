@@ -153,9 +153,19 @@ caster; bots choose by policy). No crashes; every consequence turned up:
 The bots still reach few chapters (one to four), so the finale and the arcs after it were
 checked with `worldmap choices` and the tests rather than in play.
 
+## In co-op
+
+Everyone who stands at the one who yielded gets the choice. Each chooses, and the most decide (a
+tie spares). Whoever has chosen waits for the others; after 25 seconds those who chose decide.
+The banner says what was chosen together. The same holds at the faltering Old King
+([OLD_KING.md](OLD_KING.md)): more than half of those at the throne must strike for the same
+ending.
+
+The end of the chronicle (the opener) also completes step 8 of the Old King's way: the opener
+served him.
+
 ## Not done
 
-- The other characters in co-op are not asked; whoever chooses first decides.
 - Domain lords do not yield; only the chapter targets of the mystery do.
 - The resentful come back once. A grateful one is not yet useful beyond what it says and the
   warnings.

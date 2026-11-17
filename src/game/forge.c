@@ -456,9 +456,76 @@ void forge_monster_drop(Game *g, const Monster *m) {
         pickup_spawn(g, PK_FORGE, p, forge_region_ore(g, (int)floorf(m->pos.x), (int)floorf(m->pos.y), (int)floorf(m->pos.z), h >> 32), NULL, 0, 0);
 }
 
+/* ---------- dragon-scale armour ---------- */
+
+/* The one piece of armour: scales (essences of one element), dragon's teeth and a metal; each make
+ * takes less of every blow, and its element's after-effects (burning, frost, poison...) slide off. */
+static const struct { const char *name; int ess, teeth, metal, metal_n, heart, smith; float taken; } ARMOURS[4] = {
+    { "none", 0, 0, 0, 0, 0, 0, 0.0f },
+    { "drake-scale mail", 6, 2, FG_STEEL, 3, 0, 2, 0.10f },
+    { "dragon-scale mail", 10, 4, FG_MITHRIL, 2, 0, 5, 0.17f },
+    { "wyrm-scale plate", 14, 6, FG_ADAMANT, 2, 1, 8, 0.25f },
+};
+
+float forge_armour_taken(const Stats *s) { return s->armour <= 3 ? ARMOURS[s->armour].taken : 0.0f; }
+
+void forge_armour_name(const Stats *s, char *out, int n) {
+    if (!s->armour) snprintf(out, (size_t)n, "no armour");
+    else snprintf(out, (size_t)n, "%s of %s", ARMOURS[MINI(3, s->armour)].name, ELEMENT_NAMES[s->armour_el % EL_COUNT]);
+}
+
+/* the essence held most of: the scales' element */
+static int armour_ess(const Stats *s) {
+    int best = 0;
+    for (int e = 1; e < FG_ESS_COUNT; e++) if (s->forge[FG_ESS0 + e] > s->forge[FG_ESS0 + best]) best = e;
+    return best;
+}
+
+static void armour_need(const Stats *s, int t, char *out, int n) {
+    int e = armour_ess(s);
+    out[0] = 0;
+    if (smith(s) < ARMOURS[t].smith) { snprintf(out, (size_t)n, "SMITHING %d", ARMOURS[t].smith); return; }
+    if (s->forge[FG_ESS0 + e] < ARMOURS[t].ess) snprintf(out + strlen(out), (size_t)n - strlen(out), "%d SCALES (ESSENCES OF ONE ELEMENT) ", ARMOURS[t].ess);
+    if (s->reag[RG_TOOTH] < ARMOURS[t].teeth) snprintf(out + strlen(out), (size_t)n - strlen(out), "%d DRAGON'S TEETH ", ARMOURS[t].teeth);
+    if (s->forge[ARMOURS[t].metal] < ARMOURS[t].metal_n) snprintf(out + strlen(out), (size_t)n - strlen(out), "%d %s ", ARMOURS[t].metal_n, FORGE_MATS[ARMOURS[t].metal].name);
+    if (ARMOURS[t].heart && !s->forge[FG_TITAN_HEART]) snprintf(out + strlen(out), (size_t)n - strlen(out), "A TITAN HEART");
+}
+
+bool forge_armour(Game *g, PlayerSlot *ps) {
+    Stats *s = &ps->st;
+    if (!forge_here(g, ps)) return false;
+    int t = MINI(3, s->armour + 1), e = armour_ess(s);
+    char need[160];
+    armour_need(s, t, need, sizeof need);
+    if (s->armour >= 3 && s->forge[FG_ESS0 + e] < ARMOURS[3].ess) { game_banner(ps, "THE BEST ARMOUR THERE IS"); return false; }
+    if (need[0]) {
+        char b[200];
+        snprintf(b, sizeof b, "NEEDED: %s", need);
+        upper(b);
+        game_banner(ps, b);
+        return false;
+    }
+    s->forge[FG_ESS0 + e] -= ARMOURS[t].ess;
+    s->reag[RG_TOOTH] -= ARMOURS[t].teeth;
+    s->forge[ARMOURS[t].metal] -= ARMOURS[t].metal_n;
+    if (ARMOURS[t].heart) s->forge[FG_TITAN_HEART]--;
+    s->armour = (u8)t;
+    s->armour_el = (u8)e;
+    gain_xp(g, ps, 40 * t);
+    char name[64], b[96];
+    forge_armour_name(s, name, sizeof name);
+    snprintf(b, sizeof b, "YOU WEAR %s", name);
+    upper(b);
+    game_banner(ps, b);
+    sfx_at(g, SFX_ANVIL, ps->pl.pos, 1.0f);
+    particles_burst(g, v3_add(ps->pl.pos, v3(0, 1, 0)), element_color(e), 30, 3.0f, 0.06f, true);
+    g->autosave_timer = 1e9f;
+    return true;
+}
+
 /* ---------- the FORGE tab ---------- */
 
-enum { RR_SMITH, RR_BASE, RR_METAL, RR_ESS, RR_RUNE, RR_HEART, RR_OIL, RR_FORGE, RR_REFORGE, RR_SMELT, RR_SALVAGE, RR_HEAD, RR_MAT, RR_AWAY };
+enum { RR_SMITH, RR_BASE, RR_METAL, RR_ESS, RR_RUNE, RR_HEART, RR_OIL, RR_FORGE, RR_REFORGE, RR_SMELT, RR_SALVAGE, RR_HEAD, RR_MAT, RR_AWAY, RR_ARMOUR };
 typedef struct FRow { u8 type; int a; } FRow;
 #define FROWS (16 + BAG_SIZE + FG_COUNT)
 
@@ -476,6 +543,7 @@ static int frows(Game *g, PlayerSlot *ps, FRow *r) {
         if (s->forge[FG_QUENCH_OIL]) r[n++] = (FRow){ RR_OIL, 0 };
         r[n++] = (FRow){ RR_FORGE, 0 };
         if (s->equipped[s->weapon].used) r[n++] = (FRow){ RR_REFORGE, 0 };
+        r[n++] = (FRow){ RR_ARMOUR, 0 };
         for (int o = FG_IRON_ORE; o <= FG_STAR_ORE; o++)
             if (s->forge[o] >= 2) r[n++] = (FRow){ RR_SMELT, o };
         for (int i = 0; i < BAG_SIZE; i++)
@@ -536,6 +604,7 @@ static void cycle(Game *g, PlayerSlot *ps, const FRow *row, int dir) {
 
 static void act(Game *g, PlayerSlot *ps, const FRow *row) {
     switch (row->type) {
+    case RR_ARMOUR: forge_armour(g, ps); break;
     case RR_FORGE: forge_start(g, ps, false); break;
     case RR_REFORGE: forge_start(g, ps, true); break;
     case RR_SMELT: forge_smelt(g, ps, row->a); break;
@@ -708,6 +777,18 @@ void forge_draw(Game *g, PlayerSlot *ps, int W, int H, int top) {
             snprintf(buf, sizeof buf, "BREAK UP %s", name);
             snprintf(rbuf, sizeof rbuf, "%s", bp ? "NEW BLUEPRINT" : s->bag[row->a].power[0] ? "RUNES" : "");
             cr = 0.75f; cg = 0.72f; cb = 0.68f;
+            break;
+        }
+        case RR_ARMOUR: {
+            char name[64], need[160];
+            forge_armour_name(s, name, sizeof name);
+            int tt = MINI(3, s->armour + 1);
+            armour_need(s, tt, need, sizeof need);
+            if (s->armour >= 3 && need[0]) snprintf(buf, sizeof buf, "ARMOUR: %s (THE BEST THERE IS)", name);
+            else snprintf(buf, sizeof buf, "%s %s OF %s (%d%% LESS HURT): %s", s->armour >= tt ? "REMAKE AS" : "MAKE", ARMOURS[tt].name,
+                          ELEMENT_NAMES[armour_ess(s)], (int)(ARMOURS[tt].taken * 100 + 0.5f), need[0] ? need : "READY");
+            snprintf(rbuf, sizeof rbuf, "%s", s->armour ? "WORN" : "");
+            cr = 0.8f; cg = 0.9f; cb = 0.7f;
             break;
         }
         case RR_HEAD: snprintf(buf, sizeof buf, "MATERIALS"); cr = 1.0f; cg = 0.7f; cb = 0.4f; break;

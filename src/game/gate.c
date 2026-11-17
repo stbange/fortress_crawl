@@ -67,9 +67,10 @@ static bool finale(const Game *g, int *choice) {
 bool gate_open(const Game *g, int r, const char **why) {
     int choice;
     bool done = finale(g, &choice);
-    /* the Old King settled (king.c) opens them as the story's end does; a merciful ending the Dream */
-    bool won = g->world.king_ending != KE_NONE, mercy = g->world.king_ending == KE_WORD || g->world.king_ending == KE_ARTEFACT;
-    if ((REALMS[r].rules & RR_STORY) && !done && !won) { if (why) *why = "SEALED UNTIL THE OLD KING IS SETTLED"; return false; }
+    /* the Astral Shore opens only with the Old King settled (king.c), the main story's end; the
+     * Dream with any end that spared: the chronicle's, or a king's by a word or the artefact */
+    bool won = g->world.king_wins > 0 || g->world.king_ending != KE_NONE, mercy = g->world.king_mercy || g->world.king_ending == KE_WORD || g->world.king_ending == KE_ARTEFACT;
+    if ((REALMS[r].rules & RR_STORY) && !won) { if (why) *why = "SEALED UNTIL THE OLD KING IS SETTLED"; return false; }
     if ((REALMS[r].rules & RR_SPARED) && !(done && choice == CH_SPARE) && !mercy) { if (why) *why = "IT SLEEPS - ONLY AN END THAT SPARED WAKES THIS DREAM"; return false; }
     return true;
 }
