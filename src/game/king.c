@@ -181,9 +181,9 @@ static void step_told(Game *g, const KingWay *K, int i, char *out, int n) {
             snprintf(out, (size_t)n, "The elder of %s shakes her head. 'You ended one king, and the throne of %s took another. Find out what this one is - "
                      "his name is written somewhere too - and go to him again. Further out, this time.'", a, f);
         else
-            snprintf(out, (size_t)n, "The elder of %s lowers her voice. 'There is a king in %s still. The Old King. He never died, and he never left. "
-                     "Find out what he is - his name is written somewhere, and someone saw him once - and then go to him. Nobody else will. "
-                     "Your Golden Thread (G) knows the way to what I ask; the Sanctum Door takes you home to rest between.'", a, f);
+            snprintf(out, (size_t)n, "The elder of %s lowers her voice. 'There is a king in %s still, the Old King, who never died. "
+                     "Find out what he is - his name is carved somewhere, and someone saw him - then go to him.' "
+                     "(The Golden Thread, G, leads the way; the Sanctum Door takes you home.)", a, f);
         break;
     case KS_WITNESS:
         snprintf(out, (size_t)n, "The witness grips your arm. 'I saw him. He is %s - %s. I ran. I have been running since.'", KD->name, KD->what);
@@ -683,12 +683,33 @@ bool king_use(Game *g, PlayerSlot *ps) {
  * reagents are left to the rest of its play. */
 /* Where a step happens now: the one to talk to, its marker, the lair, the king; and whether to
  * strike there (to talk). False for a step with no place in the fortress. */
-static bool step_place(Game *g, const KingWay *K, int i, vec3 *at, bool *talk) {
+static bool step_place(Game *g, const KingWay *K, int i, const PlayerSlot *ps, vec3 *at, bool *talk) {
     const KingStep *st = &K->step[i];
     vec3 p = step_centre(st);
     bool t = false;
     switch (st->type) {
-    case KS_VISION: case KS_REALM: return false;
+    case KS_VISION: return false;
+    case KS_REALM: { /* in the realm: its ruler, or the keep; at home: the Gate, if it shows the realm;
+                      * in the fortress: its rift (the Grand Vestibule has one to the gentlest realm) */
+        int r = st->arg, in = realm_at_w(ps->pl.pos.x, ps->pl.pos.y, ps->pl.pos.z);
+        if (in == r) {
+            int kx, ky, kz;
+            realm_keep(r, &kx, &ky, &kz);
+            p = v3(kx + 0.5f, (float)ky, kz + 0.5f);
+            for (int k = 0; k < MAX_MONSTERS; k++) if (g->mons[k].alive && g->mons[k].ruler == r + 1) p = g->mons[k].pos;
+            break;
+        }
+        if (in >= 0) return false; /* another realm: out first */
+        if (realm_has(ps->pl.pos)) {
+            if (!((g->world.realm_attuned >> r) & 1) || gate_dialed(g) != r) return false;
+            p = gate_ring_pos();
+            break;
+        }
+        p = v3(1 * CHUNK + 16.0f, (float)LAYER_FLOOR, 16.0f);
+        for (int k = 0; k < g->nrifts; k++)
+            if (g->rifts[k].alive && g->rifts[k].realm == r) p = g->rifts[k].pos;
+        break;
+    }
     case KS_FORGE: { /* the anvil, once its marker is there (the forge built, you at home) */
         bool on = false;
         for (int k = 0; k < MAX_MARKS; k++) if (marks[k].on && marks[k].step == i) { p = marks[k].pos; on = true; }
@@ -765,7 +786,7 @@ bool king_thread_goal(Game *g, PlayerSlot *ps, vec3 *at, char *name, int n) {
     if (!K->valid || king_won(g)) return false;
     int s = tracked_step(g, K, ps);
     bool talk;
-    if (s < 0 || !step_place(g, K, s, at, &talk)) return false;
+    if (s < 0 || !step_place(g, K, s, ps, at, &talk)) return false;
     char goal[160];
     step_goal(g, K, s, goal, sizeof goal);
     snprintf(name, (size_t)n, "%.40s", goal);
@@ -787,7 +808,7 @@ bool king_bot_target(Game *g, PlayerSlot *ps, vec3 *at, bool *talk) {
         if (t == KS_ALLEGIANCE && ps->st.gold < 500) continue; /* (the bot wins friendship with gold for the works) */
         vec3 p;
         bool tk;
-        if (!step_place(g, K, i, &p, &tk)) continue;
+        if (!step_place(g, K, i, ps, &p, &tk)) continue;
         float d = v3_len(v3_sub(p, ps->pl.pos));
         if (d < bd) { bd = d; best = i; *at = p; *talk = tk; }
     }

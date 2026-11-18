@@ -76,7 +76,7 @@ typedef struct Bot {
     bool hunting;    /* king bot: on its way to a great dragon for its heart and blood */
     u64 hunt_key;
     int hunts, dragons;
-    float next_hunt_note;
+    float next_hunt_note, next_realm_note, next_vision;
     float avoid_until;
     float vertical_until; /* the thread's end is reached: now go up or down the stairs */
     bool low;
@@ -277,11 +277,41 @@ static bool want_pickup(const PlayerSlot *ps, const Pickup *p) {
     }
 }
 
+/* A goal bigger than the search (the Sanctum, a realm): walk toward it through the nearest cell. */
+static void walk_toward(vec3 to) {
+    int best = -1;
+    float bd = 1e9f;
+    for (int i = 0; i < BN; i++) {
+        if (dist_[i] == 0xFFFF) continue;
+        int x, y, z;
+        cell_of(i, &x, &y, &z);
+        float d = v3_len(v3_sub(v3(x + 0.5f, (float)y, z + 0.5f), to)) + dist_[i] * 0.02f;
+        if (d < bd) { bd = d; best = i; }
+    }
+    B.goal_kind = 3;
+    B.goal = to;
+    set_path_to(best);
+}
+
 static void plan(PlayerSlot *ps) {
     B.replans++;
     vec3 feet = ps->pl.pos;
     bfs(feet);
     B.npath = 0;
+    /* in a realm behind the Gate: its ruler (the Old King's way), then back out through the arch */
+    int in_realm = realm_at_w(feet.x, feet.y, feet.z);
+    if (in_realm >= 0) {
+        vec3 to;
+        bool talk;
+        if (!(B.style == BS_KING && king_bot_target(G, ps, &to, &talk))) {
+            int ax, ay, az;
+            realm_arrival(in_realm, &ax, &ay, &az);
+            to = v3(ax + 0.5f, (float)ay, az + 0.5f);
+            if (B.t >= B.next_realm_note) { B.next_realm_note = B.t + 120.0f; logf_("%7.1f REALM %d: back to the arch\n", B.t, in_realm); }
+        } else if (B.t >= B.next_realm_note) { B.next_realm_note = B.t + 120.0f; logf_("%7.1f REALM %d: to its ruler at %.0f %.0f %.0f\n", B.t, in_realm, to.x, to.y, to.z); }
+        walk_toward(to);
+        return;
+    }
     /* in the Sanctum: feast, bath, then the door home */
     if (realm_has(feet)) {
         vec3 to;
@@ -291,20 +321,14 @@ static void plan(PlayerSlot *ps) {
         else if (s->refreshed_t <= 0 && bs >= 1) to = v3((POCKET_BATH_X0 + POCKET_BATH_X1) * 0.5f, POCKET_G - 1, (POCKET_BATH_Z0 + POCKET_BATH_Z1) * 0.5f);
         else if (!B.forged && sanctum_stage(G, SP_FORGE) >= 1 && sanctum_stage(G, SP_ISLAND) >= 2) to = v3(POCKET_ANVIL_X + 0.5f, POCKET_G, POCKET_ANVIL_Z + 2.5f);
         else if (B.realm_rested < 1) to = v3(POCKET_BED_X0 - 0.6f, POCKET_G, (POCKET_BED_Z0 + POCKET_BED_Z1) * 0.5f); /* (within the bed's reach: it counts 1.2 m round it) */
-        else to = v3(POCKET_EXIT_X, POCKET_G, POCKET_EXIT_Z);
-        /* the realm is bigger than the search: walk toward the far goal through the nearest cell */
-        int best = -1;
-        float bd = 1e9f;
-        for (int i = 0; i < BN; i++) {
-            if (dist_[i] == 0xFFFF) continue;
-            int x, y, z;
-            cell_of(i, &x, &y, &z);
-            float d = v3_len(v3_sub(v3(x + 0.5f, (float)y, z + 0.5f), to)) + dist_[i] * 0.02f;
-            if (d < bd) { bd = d; best = i; }
+        else {
+            bool talk;
+            vec3 gate;
+            /* the Old King's realm step: through the Gate, if it shows that realm (king.c says so) */
+            if (B.style == BS_KING && king_bot_target(G, ps, &gate, &talk) && v3_len(v3_sub(gate, gate_ring_pos())) < 1.0f) to = gate;
+            else to = v3(POCKET_EXIT_X, POCKET_G, POCKET_EXIT_Z);
         }
-        B.goal_kind = 3;
-        B.goal = to;
-        set_path_to(best);
+        walk_toward(to); /* the realm is bigger than the search */
         return;
     }
     /* gold to spend: the nearest shrine in reach */
@@ -703,7 +727,11 @@ static void survive(Game *g, PlayerSlot *ps, bool in_fight) {
     /* a trip home when worn out and nobody is close */
     bool worn = s->hp < s->maxhp * 0.5f && s->potions_hp == 0;
     bool rich = s->gold >= 2000 && B.t >= B.next_home; /* ranks, relics and building are sold at home */
-    if (B.style == BS_KING && king_bot_home(G) && B.t >= B.next_home) rich = true; /* the Old King's vision: a night at home */
+    if (B.style == BS_KING && king_bot_home(G) && B.t >= B.next_vision) { /* the Old King's vision: a night at home */
+        vec3 at;
+        bool talk;
+        if (B.t >= B.next_home || !king_bot_target(g, ps, &at, &talk)) { rich = true; B.next_vision = B.t + 180.0f; }
+    }
     if (!in_fight && !realm_has(ps->pl.pos) && (worn || rich) && s->spell_cd <= 0 && B.realm_phase == 0) {
         if (cast_util(g, ps, SU_SANCTUM)) {
             B.realm_phase = 1;

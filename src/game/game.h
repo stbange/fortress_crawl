@@ -912,6 +912,8 @@ void gate_update(Game *g, float dt);           /* travel, rifts, each realm's ru
 void gate_draw(Game *g, PlayerSlot *viewer);   /* the Gate in the Sanctum, the arches home, rifts */
 bool gate_use(Game *g, PlayerSlot *ps);        /* the Gate's dial; the orrery's moons */
 bool gate_go(Game *g, PlayerSlot *ps, int realm, vec3 from, float yaw);
+vec3 gate_ring_pos(void);
+int gate_dialed(const Game *g);
 void gate_spawn_chunk(Game *g, Chunk *c);      /* rifts in the fortress, rulers in their keeps */
 void gate_ruler_slain(Game *g, Monster *m);
 void gate_flora_broken(Game *g, PlayerSlot *ps, Block b, int x, int y, int z, u64 h);

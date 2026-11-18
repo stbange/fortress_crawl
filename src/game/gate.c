@@ -13,7 +13,7 @@
  *     it from realm to realm; through it to any realm it is attuned to.
  * In every realm you arrive in front of an arch: back through it goes back where you came
  * from. A realm keeps its rules: weight, air, heat, storms, tides; its keep has its ruler.
- * The Astral Shore opens only after the story's end; the Dream after an end that spared. */
+ * The Astral Shore opens only once the Old King is settled; the Dream after an end that spared. */
 
 #define GATE_X 38.5f
 #define GATE_Z 84.5f
@@ -25,6 +25,10 @@ static int fl(float v) { return (int)floorf(v); }
 static vec3 realm_col(int r) { return rgb3(REALM_FLORA[r * 3 + 2].col[0]); }
 
 static int here(vec3 p) { return realm_at_w(p.x, p.y, p.z); }
+
+/* Where the Gate stands in the Sanctum's court, and the realm its dial shows (the bot). */
+vec3 gate_ring_pos(void) { return v3(GATE_X, (float)POCKET_G, GATE_Z); }
+int gate_dialed(const Game *g) { return g->gate_sel; }
 
 static void upper(char *s) { for (; *s; s++) if (*s >= 'a' && *s <= 'z') *s -= 32; }
 
