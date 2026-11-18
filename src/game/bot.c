@@ -303,7 +303,7 @@ static void plan(PlayerSlot *ps) {
     if (in_realm >= 0) {
         vec3 to;
         bool talk;
-        if (!(B.style == BS_KING && king_bot_target(G, ps, &to, &talk))) {
+        if (!(B.style == BS_KING && king_bot_target(G, ps, &to, &talk) && realm_at_w(to.x, to.y, to.z) == in_realm)) { /* (a step back in the fortress: out first) */
             int ax, ay, az;
             realm_arrival(in_realm, &ax, &ay, &az);
             to = v3(ax + 0.5f, (float)ay, az + 0.5f);
@@ -434,6 +434,9 @@ static void plan(PlayerSlot *ps) {
     }
     if (B.style == BS_KING && !B.hunting && king_bot_target(G, ps, &tgt, &talk)) { /* the Old King's way (king.c) */
         has_tgt = true;
+        ps->waypoint_on = true; /* the thread leads to the step it can do, not the one on the line */
+        ps->waypoint = tgt;
+        snprintf(ps->waypoint_name, sizeof ps->waypoint_name, "THE OLD KING'S WAY");
         int ri = reach_index(tgt);
         if (ri >= 0 && dist_[ri] > 1) { /* in reach: straight there */
             B.goal_kind = 0;
