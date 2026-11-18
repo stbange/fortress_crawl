@@ -178,6 +178,7 @@ bool gate_go(Game *g, PlayerSlot *ps, int r, vec3 from, float yaw) {
 }
 
 /* Out through the arch: back to where you came from, else to the Gate in the Sanctum. */
+void gate_go_home(Game *g, PlayerSlot *ps);
 static void go_home(Game *g, PlayerSlot *ps) {
     Stats *s = &ps->st;
     vec3 to = v3(GATE_X, (float)POCKET_G, GATE_Z + 2.0f);
@@ -190,6 +191,9 @@ static void go_home(Game *g, PlayerSlot *ps) {
     sfx_at(g, SFX_GATE_OPEN, to, 1.0f);
     g->autosave_timer = 1e9f;
 }
+
+/* (the bot, when it cannot find the arch: as if it had walked through) */
+void gate_go_home(Game *g, PlayerSlot *ps) { if (here(ps->pl.pos) >= 0) go_home(g, ps); }
 
 /* ---------- rifts in the fortress ---------- */
 

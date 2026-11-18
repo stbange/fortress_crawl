@@ -913,6 +913,7 @@ void gate_draw(Game *g, PlayerSlot *viewer);   /* the Gate in the Sanctum, the a
 bool gate_use(Game *g, PlayerSlot *ps);        /* the Gate's dial; the orrery's moons */
 bool gate_go(Game *g, PlayerSlot *ps, int realm, vec3 from, float yaw);
 vec3 gate_ring_pos(void);
+void gate_go_home(Game *g, PlayerSlot *ps); /* out of a realm as through its arch (the bot) */
 int gate_dialed(const Game *g);
 void gate_spawn_chunk(Game *g, Chunk *c);      /* rifts in the fortress, rulers in their keeps */
 void gate_ruler_slain(Game *g, Monster *m);

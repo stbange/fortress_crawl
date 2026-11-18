@@ -76,7 +76,8 @@ typedef struct Bot {
     bool hunting;    /* king bot: on its way to a great dragon for its heart and blood */
     u64 hunt_key;
     int hunts, dragons;
-    float next_hunt_note, next_realm_note, next_vision;
+    float next_hunt_note, next_realm_note, next_vision, arch_since;
+    int arch_shortcuts;
     float avoid_until;
     float vertical_until; /* the thread's end is reached: now go up or down the stairs */
     bool low;
@@ -300,6 +301,7 @@ static void plan(PlayerSlot *ps) {
     B.npath = 0;
     /* in a realm behind the Gate: its ruler (the Old King's way), then back out through the arch */
     int in_realm = realm_at_w(feet.x, feet.y, feet.z);
+    if (in_realm < 0) B.arch_since = 0;
     if (in_realm >= 0) {
         vec3 to;
         bool talk;
@@ -307,6 +309,14 @@ static void plan(PlayerSlot *ps) {
             int ax, ay, az;
             realm_arrival(in_realm, &ax, &ay, &az);
             to = v3(ax + 0.5f, (float)ay, az + 0.5f);
+            if (B.arch_since <= 0) B.arch_since = B.t;
+            if (B.t - B.arch_since > 60.0f) { /* (it cannot find the arch: a bot's shortcut, counted) */
+                gate_go_home(G, ps);
+                B.arch_shortcuts++;
+                B.arch_since = 0;
+                logf_("%7.1f REALM %d: SHORTCUT out (the bot found no way to the arch in a minute)\n", B.t, in_realm);
+                return;
+            }
             if (B.t >= B.next_realm_note) { B.next_realm_note = B.t + 120.0f; logf_("%7.1f REALM %d: back to the arch\n", B.t, in_realm); }
         } else if (B.t >= B.next_realm_note) { B.next_realm_note = B.t + 120.0f; logf_("%7.1f REALM %d: to its ruler at %.0f %.0f %.0f\n", B.t, in_realm, to.x, to.y, to.z); }
         walk_toward(to);
@@ -1104,8 +1114,8 @@ static void summary(PlayerSlot *ps) {
           g_tele.food, g_tele.hunted, g_tele.harvested, g_tele.cooked, g_tele.eaten, __builtin_popcount(s->recipes),
           g_tele.reagents, g_tele.brewed, g_tele.elixirs, __builtin_popcount(s->formulae), g_tele.forge_mats, g_tele.forged, g_tele.masterworks,
           smith_level(s->smith_xp), B.digs, B.blasts, G->map.edits_total, B.warmed, B.harvests, B.throws, s->cloak);
-    logf_("KING steps=%d done=%03x gen=%d won=%d ending=%d town_works=%d raids=%d armour=%d hunts=%d dragons=%d\n", g_tele.king_steps, G->world.king_done,
-          G->world.king_gen, G->world.king_wins, G->world.king_ending, g_tele.town_works, g_tele.town_raids, s->armour, B.hunts, g_tele.dragons);
+    logf_("KING steps=%d done=%03x gen=%d won=%d ending=%d town_works=%d raids=%d armour=%d hunts=%d dragons=%d arch_shortcuts=%d\n", g_tele.king_steps, G->world.king_done,
+          G->world.king_gen, G->world.king_wins, G->world.king_ending, g_tele.town_works, g_tele.town_raids, s->armour, B.hunts, g_tele.dragons, B.arch_shortcuts);
     float total = 0;
     for (int i = 0; i < HS_COUNT; i++) total += g_tele.taken[i];
     logf_("DAMAGE_TAKEN total=%.0f", total);
