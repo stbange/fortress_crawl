@@ -150,33 +150,34 @@ at the end. `test_worldgen` checks the way of every seed and two heirs each.
 
 ## How long the way takes (bots, November 2026)
 
-`--bot king`, four seeds, three hours of play each (1337, 42, 777, 2024). The bot follows the
-Golden Thread to the step the line at the top follows; goes home for the vision; builds the
-island and the forge first and buys steel when the forge step is open; buys an orchid where one
-is sold; and, when the way needs a dragon's heart or blood, hunts the nearest great dragon whose
-lair is no more than two levels above its own (the thread leads it there). No bot has reached
-the throne yet. Minutes of play when each group was done, from the last batch:
+`--bot king`, four seeds (1337, 42, 777, 2024), three hours of play each. The bot follows the
+Golden Thread to the nearest step it can do (its own waypoint, not the line at the top); goes
+home for the vision as soon as nothing else can be done; builds the island and the forge first
+and buys steel for the forge step; buys an orchid where one is sold; hunts the nearest great
+dragon within two levels of its own when the way needs a dragon's heart or blood; and for the
+realm step walks through the Grand Vestibule's rift (it always leads to the gentlest joined
+realm, the one the way asks for) or the Gate, to the ruler, and out through the arch (if it
+cannot find the arch in a minute it is put through it, and counted).
 
-| Seed | Steps 1-3 | Steps 4-7 | Dragons slain | Where it stopped |
+**No bot has reached the throne in six batches.** The best runs:
+
+| Seed | Steps 1-3 | Further | Dragons slain | What held it |
 |---|---|---|---|---|
-| 1337 | 11 | 3 of 4 by 50 | 0 | the realm step (a ruler behind the Gate: the bot does not travel there) |
-| 42 | 24 | 2 of 4 by 91 | 2 (one hunted, then the way's own) | still on the means at the end |
-| 2024 | 21 | 0 | 0 | reached its lair (hunted at 31 min) but did not win there |
-| 777 | 2 of 3 by 17 | - | 0 | the vision (home trips come too seldom for it) |
+| 1337 | 11-16 min | 3 of 4 means by 50 min (one batch) | 1 | stairs: stuck 900 times on the way down to a hoard |
+| 42 | 9-24 min | 2 of 4 means (two batches) | up to 2 | the thread's end at a staircase, 187 times in one run |
+| 777 | 31-72 min | 2 of 4 means by 88 min | 0 | navigation between layers |
+| 2024 | 21-39 min | 0-2 of 4 | 0-1 | stairs; once lost in a realm for 1.7 hours (fixed) |
 
 What it shows:
-- **Finding out (steps 1-3) takes 10-25 minutes**: a first act.
-- **The means (steps 4-7) are the long part**, and their order is not free in practice: the
-  forge and the brew need a dragon's heart and blood, so a dragon comes first. Great dragons
-  near enough in danger are often 200-400 m away and a few layers off; the thread gets there,
-  but slowly. A player who reads the hints will do the same in fewer detours.
-- **Steps the bot still cannot do**: a realm's ruler behind the Gate, and the vision when its
-  home trips are rare. Both block a way until done.
-- A marker on the same layer can still be unreachable from the side one comes from (seen once,
-  seed 42 in an earlier batch), a known gap of the generator.
-
-Time to the throne is not measured yet: next for the bot are trips through the Gate for the realm
-step, and a home trip as soon as the vision is the only step left.
+- **Finding out (steps 1-3) takes 10-40 minutes.**
+- **The means (steps 4-7) are the long part.** The forge and the brew need a dragon's heart and
+  blood, so a dragon comes first; the great dragons a character can face are often 200-400 m off
+  and some layers away.
+- **What stops the bot now is changing layers**: it reaches the staircase the thread leads to and
+  does not take it. This is the bot's own old weakness (its stair following), not the way's; a
+  player takes the stairs. Until it is fixed the bot cannot measure the time to the throne.
+- The realm step's route (the Vestibule rift, the ruler, the arch) has not been reached by any
+  bot yet in these batches, so it is in place but not yet proven in play.
 
 ## Code
 
