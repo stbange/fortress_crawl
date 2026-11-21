@@ -18,7 +18,7 @@ Pillar Scores (0.00 - 1.00):
 - Loop Friction (M_loop):         [0.74] | TTFA=1.5-2.4s (desktop), Retry=3.0s
 
 COMPOSITE FUN SCORE: 63.4 / 100   (functional, lacks spark or balance)
-Projected after the P1 and P2 changes below: about 83 (engaging, solid loop)
+After P1 (section 5): 69.4. Projected after P2 as well: about 83 (engaging, solid loop)
 
 Top Bottlenecks Identified:
 1. M_feel  -> no input buffer: 39% of attack presses held for a human's 200 ms are lost to the cooldown
@@ -143,7 +143,7 @@ first loads 55 MB). Death always lasts 3.0 s before the respawn, with nothing to
 Ordered by what they do for the score and for players. Each names the place in the code, the
 change and the number it should move. Effort: S (hours), M (a day), L (days).
 
-### P1: feel and fairness (the foundations)
+### P1: feel and fairness (the foundations) - done 2026-11-21, see section 5
 
 1. **An attack input buffer** (S). `combat.c`, `update_player`: remember a press for 120 ms;
    when the cooldown ends inside that window, attack. The same for spells (`spell_cast`) and
@@ -224,7 +224,54 @@ change and the number it should move. Effort: S (hours), M (a day), L (days).
 With P1 and P2: feel ~0.92, flow ~0.92, fairness ~0.82, choice ~0.88, pacing ~0.74, loop ~0.9,
 a composite of about 83 (from 63). P3 adds choice and polish on top.
 
-## 5. Running it again
+## 5. After P1 (openspec change improve-feel-and-fairness)
+
+All seven P1 items are in (2026-11-21). The same personas and seeds, 30 minutes each, after:
+
+| | Before | After |
+|---|---|---|
+| Deaths (human proxy, oracle, spam: 15 runs) | 13 | 8 |
+| ... by skeleton arrows | 4 | 0 |
+| Human proxy: W (sd) | 0.59 (0.48) | 0.54 (0.29) |
+| Oracle: W (sd) | 0.56 (0.27) | 0.62 (0.24) |
+| Spam: W | 0.39 | 0.56 |
+| Near-misses a minute (human proxy) | 0.39 | 0.53 |
+| Attack presses lost, any time in the cooldown | 39% | 12% (20-minute runs, 4 seeds) |
+| Attack presses lost within 100 ms of readiness | - | 0.5% (1 of 189) |
+| Jump: coyote time, buffer, hang | none | checked in test_worldgen (40 frames tapped, 44 held) |
+| Dragon against the cave rock (median of its pixels) | 1.0-1.8:1 | 3.7:1 (darkest tenth 2.9:1) |
+| Slowest wind-up | 0 ms (wisps, shamans) | 350 ms |
+
+The first after-run counted 31% lost presses: the counter credited an attack to the previous
+window's waiting press. It was fixed, and the press counted near readiness was added (the
+skill's own measure); the 12% are presses made more than about 320 ms before the weapon is ready,
+which a 120 ms buffer is not meant to save.
+
+```text
+=== GAME FUN AUDIT REPORT (after P1) ===
+- Kinesthetics & Feel (M_feel):   [0.99] | Latency: 1 frame, DropRate: 0.5% near readiness (12% any time), Channels: 2.5 / 3.1
+- Flow & Skill Gap (M_flow):      [0.95] | Win/Surv: Rand=0%, Human=54%, Opt=62%   (sigma Human 0.29)
+- Strategic Entropy (M_choice):   [0.50] | H_norm=0.35, max p=0.57, SpamBot Ratio=1.04
+- Pacing & Tension (M_pace):      [0.42] | Tension CV=2.03 (human), Near-Misses=0.5/min
+- Fairness & Clarity (M_fair):    [0.90] | Hurtbox Ratio=0.69, Telegraph>=350ms, Contrast 3.7:1 (dragon)
+- Loop Friction (M_loop):         [0.74] | TTFA=1.5-2.4s, Retry=3.0s
+
+COMPOSITE FUN SCORE: 69.4 / 100   (from 63.4)
+```
+
+Two pillars fell, and both follow from fairer defence:
+- **The spam bot now does as well as the human proxy** (ratio 1.04 against 0.66). Arrows that
+  miss and blows one can step out of help a bot that only swings most. Fights are still won by
+  hitting; using spells and the rest buys little. P2 11 (longer fights with telegraphed area
+  attacks) and P3 16 (weapons with roles, alternate attacks from the start) are the remedy.
+- **Tension is flatter** (CV 2.03 for the human proxy): fewer hits taken means more calm. P2 11-13
+  (longer fights, more shots worth dodging, waves) give it its peaks back.
+
+The five-run batches are small: W moves by 0.05-0.1 between batches from chance alone (the human
+proxy's W fell from 0.59 to 0.54 while it died less), so the trends above, not the second
+decimal, are the finding.
+
+## 6. Running it again
 
 ```bash
 # one persona run (30 minutes of play, about 3 minutes of wall time)

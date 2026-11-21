@@ -474,10 +474,12 @@ static void update_projectiles(Game *g, float dt0) {
                     { /* (near-misses: within 1-1.5 times the box it hits, then away without hitting) */
                         float cx = fmaxf(fabsf(p->pos.x - f.x), fabsf(p->pos.z - f.z));
                         bool in_h = p->pos.y > f.y - 0.3f && p->pos.y < f.y + player_height(ps->pl.stance) + 0.4f;
-                        if (in_h && cx >= 0.45f && cx < 0.675f && !p->near) p->near = 1;
-                        else if (p->near == 1 && cx >= 0.675f) { p->near = 2; g_tele.near_miss++; }
+                        if (in_h && cx >= ENEMY_SHOT_HALF && cx < ENEMY_SHOT_HALF * 1.5f && !p->near) p->near = 1;
+                        else if (p->near == 1 && cx >= ENEMY_SHOT_HALF * 1.5f) { p->near = 2; g_tele.near_miss++; }
                     }
-                    if (fabsf(p->pos.x - f.x) < 0.45f && fabsf(p->pos.z - f.z) < 0.45f && p->pos.y > f.y &&
+                    /* the box an enemy shot hits: 0.25 m round the centre against a 0.3 m body, so a
+                     * shot that looks like a miss is one (openspec combat-fairness) */
+                    if (fabsf(p->pos.x - f.x) < ENEMY_SHOT_HALF && fabsf(p->pos.z - f.z) < ENEMY_SHOT_HALF && p->pos.y > f.y &&
                         p->pos.y < f.y + player_height(ps->pl.stance) + 0.1f) {
                         p->near = 2;
                         if (p->kind == PJ_BOULDER) {
@@ -808,6 +810,13 @@ void combat_update(Game *g, float dt) {
         bool touch = ps->keyboard && g->touch.active;
         bool attack = (mouse && ps->attack_held) || ps->pad_attack || (touch && g->touch.held[TB_ATTACK]);
         bool alt = (mouse && ps->alt_held) || ps->pad_alt || (touch && g->touch.held[TB_ALT]);
+        /* a press while the weapon cools is kept 120 ms and fires when it may (openspec player-input) */
+        bool pressed = attack && !ps->atk_prev;
+        ps->atk_prev = attack;
+        if (pressed && s->cooldown > 0) ps->atk_buf = INPUT_BUFFER_S;
+        else if (ps->atk_buf > 0) ps->atk_buf -= dt;
+        if (!attack && ps->atk_buf > 0 && s->cooldown <= 0 && !ps->pick_out) { attack = true; ps->atk_buf = 0; }
+        if (attack && s->cooldown <= 0) ps->atk_buf = 0;
         if (attack && s->cooldown <= 0 && (mech_use(g, ps) || king_use(g, ps) || town_use(g, ps) || gate_use(g, ps) || wildlife_use(g, ps))) {
             /* struck a lever, a statue or a mirror */
             s->cooldown = s->swing_len = s->swing = 0.45f;
@@ -816,7 +825,13 @@ void combat_update(Game *g, float dt) {
         else if (attack) try_attack(g, ps, false);
         else if (alt) try_attack(g, ps, true);
         bool spell = (ps->keyboard && ps->spell_held && (g->mouse || g->opt.demo)) || ps->pad_spell || (touch && g->touch.held[TB_SPELL]);
+        bool spressed = spell && !ps->spell_prev;
+        ps->spell_prev = spell;
+        if (spressed && s->spell_cd > 0) ps->spell_buf = INPUT_BUFFER_S;
+        else if (ps->spell_buf > 0) ps->spell_buf -= dt;
+        if (!spell && ps->spell_buf > 0 && s->spell_cd <= 0) { spell = true; ps->spell_buf = 0; }
         if (spell) spell_cast(g, ps);
+        throw_buffer_update(g, ps, dt); /* (and a throw pressed while the last one's arm is still back) */
     }
     spells_update(g, dt);
     bombs_update(g, dt);

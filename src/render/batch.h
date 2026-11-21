@@ -16,6 +16,7 @@ void batch_init(void);
 /* 3D: colours are final (already lit); emissive parts fog less. */
 void batch3d_begin(void);
 /* Box centred at c with half extents he, rotated by yaw around Y. shade: per-face lighting. */
+void batch3d_set_rim(vec3 cam, vec3 col, float strength); /* creatures' rim light; strength 0 turns it off */
 void batch3d_box(vec3 c, vec3 he, float yaw, vec3 col, bool emissive);
 /* Box with an arbitrary orientation given by three axes (each scaled by the half extent). */
 void batch3d_obox(vec3 c, vec3 ax, vec3 ay, vec3 az, vec3 col, bool emissive);

@@ -7,6 +7,8 @@
 /* For now monsters are simple shapes in strong colours. The family mix comes from the
  * stratum, the tint from the flavor, and toughness from the danger level. */
 
+#define WINDUP_VOLLEY 0.35f /* a caster's warning before its volley (openspec combat-fairness) */
+
 const MonsterDef MONSTERS[MON_TYPE_COUNT] = {
     /*               hw     h     hp   dmg  speed reach atk   xp  flies  colour                      windup lvl boss title */
     { "Crawler",    0.32f, 0.6f, 18,  5,  5.2f, 0.9f, 0.9f, 8,  false, { 0.85f, 0.6f, 0.25f },  0.35f, 0, "Crawler Queen" },
@@ -16,7 +18,7 @@ const MonsterDef MONSTERS[MON_TYPE_COUNT] = {
     { "Skeleton",   0.3f,  1.7f, 32,  8,  3.2f, 0.0f, 1.6f, 16, false, { 0.85f, 0.82f, 0.7f },  0.35f, 2, "Bone Lord" },
     { "Slime",      0.45f, 0.8f, 40,  7,  2.6f, 0.9f, 1.1f, 12, false, { 0.35f, 0.8f, 0.55f },  0.35f, 1, "Slime Mother" },
     { "Bat",        0.22f, 0.4f, 10,  4,  6.5f, 0.8f, 0.8f, 5,  true,  { 0.45f, 0.3f, 0.4f },   0.35f, 1, "Bat Sovereign" },
-    { "Spider",     0.4f,  0.5f, 26,  9,  4.6f, 0.9f, 1.0f, 14, false, { 0.35f, 0.3f, 0.32f },  0.3f,  2, "Broodmother" },
+    { "Spider",     0.4f,  0.5f, 26,  9,  4.6f, 0.9f, 1.0f, 14, false, { 0.35f, 0.3f, 0.32f },  0.35f, 2, "Broodmother" },
     { "Wraith",     0.35f, 1.6f, 34,  12, 3.0f, 1.1f, 1.4f, 22, true,  { 0.6f, 0.65f, 0.75f },  0.45f, 6, "Wraith Lord" },
     { "Golem",      0.6f,  2.2f, 140, 22, 1.9f, 1.6f, 2.4f, 45, false, { 0.52f, 0.5f, 0.46f },  1.0f,  8, "Elder Golem" },
     { "Shaman",     0.3f,  1.5f, 36,  7,  3.0f, 0.0f, 2.0f, 26, false, { 0.55f, 0.4f, 0.6f },   0.35f, 5, "High Shaman" },
@@ -24,7 +26,7 @@ const MonsterDef MONSTERS[MON_TYPE_COUNT] = {
     { "Eye",        0.4f,  0.8f, 44,  14, 1.6f, 0.0f, 3.0f, 28, true,  { 0.82f, 0.76f, 0.7f },  1.1f,  7, "Elder Eye" },
     { "Knight",     0.35f, 1.8f, 70,  15, 3.0f, 1.4f, 1.3f, 32, false, { 0.56f, 0.58f, 0.64f }, 0.4f,  6, "Black Knight" },
     { "Worm",       0.4f,  1.6f, 55,  16, 3.8f, 1.3f, 2.5f, 30, false, { 0.62f, 0.46f, 0.36f }, 0.5f,  6, "Great Wurm" },
-    { "Mimic",      0.45f, 0.8f, 60,  18, 4.2f, 1.0f, 0.9f, 35, false, { 0.45f, 0.28f, 0.14f }, 0.25f, 4, "King Mimic" },
+    { "Mimic",      0.45f, 0.8f, 60,  18, 4.2f, 1.0f, 0.9f, 35, false, { 0.45f, 0.28f, 0.14f }, 0.35f, 4, "King Mimic" },
     { "Necromancer",0.3f,  1.7f, 40,  8,  2.8f, 0.0f, 5.0f, 34, false, { 0.3f, 0.26f, 0.36f },  0.35f, 9, "Lich" },
     { "Harpy",      0.35f, 0.9f, 24,  12, 5.5f, 0.9f, 2.8f, 18, true,  { 0.62f, 0.5f, 0.4f },   0.35f, 5, "Harpy Queen" },
     { "Hound",      0.35f, 0.8f, 28,  8,  6.0f, 0.9f, 0.8f, 13, false, { 0.42f, 0.36f, 0.3f },  0.35f, 3, "Pack Alpha" },
@@ -1047,7 +1049,8 @@ static void sweep(Game *g, Monster *m, float r, float half_deg, float mult, floa
 /* What happens when a raised attack comes down. */
 static void windup_release(Game *g, Monster *m, const MCtx *x) {
     const MonsterDef *d = &MONSTERS[m->type];
-    bool in_reach = x->hdist < d->reach + d->hw * m->scale + 0.6f && fabsf(x->dy) < 2.0f;
+    /* the blow lands only on someone still there: reach + body + 0.25 m (openspec combat-fairness) */
+    bool in_reach = x->hdist < d->reach + d->hw * m->scale + 0.25f && fabsf(x->dy) < 2.0f;
     /* a blow needs a clear line, as the player's does: no biting through a ledge's edge */
     if (in_reach && !m->alt_kind) {
         vec3 top = v3_add(m->pos, v3(0, d->h * m->scale * 0.9f, 0)), chest = v3_add(x->feet, v3(0, 1.0f, 0));
@@ -1067,10 +1070,10 @@ static void windup_release(Game *g, Monster *m, const MCtx *x) {
     case MON_EYE: eye_beam(g, m); break;
     case MON_KNIGHT:
         if (in_reach) monster_strike(g, m, x->tp, m->dmg, x->c);
-        if (m->aux == 0) { /* and a second blow at once */
+        if (m->aux == 0) { /* and a second blow at once (with the same warning as any) */
             m->aux = 1;
             m->state = MS_WINDUP;
-            m->timer = 0.3f;
+            m->timer = 0.35f;
             m->cooldown = 0;
         } else m->aux = 0;
         break;
@@ -1081,6 +1084,10 @@ static void windup_release(Game *g, Monster *m, const MCtx *x) {
         break;
     case MON_SKELETON:
         if (x->los) monster_volley(g, m, v3_add(x->eye, v3(0, -0.2f, 0)));
+        m->cooldown = d->attack_time;
+        break;
+    case MON_WISP: case MON_SHAMAN: /* the volley, after its wind-up */
+        if (x->los) monster_volley(g, m, x->eye);
         m->cooldown = d->attack_time;
         break;
     case MON_BRUTE:
@@ -1161,11 +1168,14 @@ static int behave(Game *g, Monster *m, const MCtx *x, vec3 *want) {
                     particles_burst(g, monster_centre(o), v3(0.4f, 1.0f, 0.5f), 6, 1.5f, 0.05f, true);
                 }
                 sfx_at(g, SFX_SPELL_HEAL, m->pos, 1.0f);
-            } else {
+                m->cooldown = d->attack_time;
+            } else { /* an orb: 0.35 s of gathering first (openspec combat-fairness) */
                 sfx_monster(g, m, MSFX_ATTACK);
-                monster_volley(g, m, x->eye);
+                m->state = MS_WINDUP;
+                m->timer = WINDUP_VOLLEY;
+                m->cooldown = d->attack_time;
+                return BH_DONE;
             }
-            m->cooldown = d->attack_time;
         }
         *want = keep_range(x, x->speed, 7.0f, 12.0f, m->anim);
         return BH_MOVED;
@@ -1443,6 +1453,10 @@ void monsters_update(Game *g, float dt) {
                 m->timer -= dt;
                 m->yaw = atan2f(hdir.z, hdir.x);
                 if (m->type == MON_EYE) eye_telegraph(g, m);
+                if ((m->type == MON_WISP || m->type == MON_SHAMAN) && fmodf(m->timer, 0.07f) < dt) { /* sparks gather at the hand */
+                    vec3 hand = v3_add(monster_centre(m), v3(cosf(m->yaw) * 0.4f * m->scale, 0.2f * m->scale, sinf(m->yaw) * 0.4f * m->scale));
+                    particles_burst(g, hand, m->glow, 3, 0.8f, 0.04f, true);
+                }
                 if (m->timer <= 0) windup_release(g, m, &x);
                 break;
             case MS_CHARGE:
@@ -1493,10 +1507,12 @@ void monsters_update(Game *g, float dt) {
                     }
                     moved = true;
                 } else if (m->type == MON_WISP) {
-                    if (los && dist < 18.0f && m->cooldown <= 0) {
+                    if (los && dist < 18.0f && m->cooldown <= 0) { /* fire gathers 0.35 s before the volley */
                         sfx_monster(g, m, MSFX_ATTACK);
-                        monster_volley(g, m, eye);
+                        m->state = MS_WINDUP;
+                        m->timer = WINDUP_VOLLEY;
                         m->cooldown = d->attack_time;
+                        break;
                     }
                     if (los) {
                         vec3 dir3 = v3_norm(to);

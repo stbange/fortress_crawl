@@ -12,5 +12,5 @@ The fun audit scored feel 0.61 and fairness 0.55: 39% of attack presses at a hum
 - Creatures get a floor on their light and a rim in their glow colour; checked at 3.5:1 or better on the dragon fight frame.
 
 ## Impact
-- Affected specs: combat-fairness, creature-visibility, player-input
-- Affected code and docs: src/game/combat.c, player.c, player.h, game.c, game.h, spells.c, dig.c, monsters.c, monster_draw.c, dragon.c, render/batch.c, batch.h; docs/FUN_AUDIT.md; the near-miss band in combat.c follows the new box.
+- Affected specs: combat-fairness, creature-visibility, player-input, playtest-bots
+- Affected code and docs: src/game/combat.c, player.c, player.h, game.h, dig.c, monsters.c, monster_draw.c, render/batch.c, batch.h, bot.c; tests/test_worldgen.c (jump checks), CMakeLists.txt; docs/FUN_AUDIT.md; the near-miss band in combat.c follows the new box.

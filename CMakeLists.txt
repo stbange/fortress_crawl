@@ -139,7 +139,7 @@ if(EMSCRIPTEN)
 endif()
 
 if(FC_BUILD_TESTS)
-  add_executable(test_worldgen tests/test_worldgen.c src/game/physics.c)
+  add_executable(test_worldgen tests/test_worldgen.c src/game/physics.c src/game/player.c)
   target_link_libraries(test_worldgen PRIVATE fcworld)
   target_compile_options(test_worldgen PRIVATE ${FC_WARN})
 

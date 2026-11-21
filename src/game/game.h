@@ -130,6 +130,8 @@ typedef struct Monster {
     u64 lair_key;
 } Monster;
 
+#define INPUT_BUFFER_S 0.12f  /* how long a press waits for its cooldown (openspec player-input) */
+#define ENEMY_SHOT_HALF 0.25f /* half the box an enemy shot hits round the player's centre (openspec combat-fairness) */
 typedef struct Projectile {
     bool alive;
     u8 kind;
@@ -476,6 +478,11 @@ typedef struct PlayerSlot {
     u8 king_vote;           /* co-op: 1 + the end this player asked for at the faltering king (king.c) */
     bool pick_out;          /* the pickaxe in hand (the fourth slot): attack digs, the alternate throws a bomb */
     float bomb_cd;
+    /* input buffers (P1 of the fun audit, openspec player-input): a press while the cooldown runs
+     * is kept 120 ms and fires as soon as it may */
+    float atk_buf, spell_buf, throw_buf;
+    bool atk_prev, spell_prev;
+    u8 throw_buf_kind;
     float breath, drown_t;
     float crush_t; bool crush_guard; /* a collapse: the window of one, and whether it may not kill */  /* seconds of air left under water (BREATH_MAX), the next drowning hurt */
     int shop_sel;
@@ -1015,6 +1022,7 @@ bool dig_protected(Game *g, int x, int y, int z);
 int world_break_sphere(Game *g, PlayerSlot *ps, vec3 p, float r, int power);
 void world_explode(Game *g, vec3 p, float radius, int power, float dmg, int owner);
 void bomb_throw(Game *g, PlayerSlot *ps);
+void throw_buffer_update(Game *g, PlayerSlot *ps, float dt); /* a throw pressed a moment early */
 void throw_selected(Game *g, PlayerSlot *ps);     /* X: the bomb or flask chosen with C */
 void throw_cycle(PlayerSlot *ps);                 /* C */
 bool camp_light(Game *g, PlayerSlot *ps);         /* P: a campfire from firewood, in front of you */

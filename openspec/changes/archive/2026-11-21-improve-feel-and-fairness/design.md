@@ -18,10 +18,12 @@ are small, local changes with large effects on how the game feels and how fair h
   others stays instant.
 - **Melee release slack 0.25 m**, close to the 0.2 m at which a blow begins, so stepping out during
   the wind-up works.
-- **Rim light in the batch, not the shader.** The 3D batch shades by face; a rim term
-  (1 - |n.v|)^2 in the creature's glow colour is added per triangle for creatures only
-  (`batch3d_set_rim`), and their light floor rises from 0.16 to 0.3. The world's own lighting is
-  unchanged, so the rooms stay dark.
+- **Rim light in the batch, not the shader.** The 3D batch shades by face; a lift of
+  (0.55 + (1 - |n.v|)^2) x the creature's rim colour (grey mixed 35% with its glow) is added per
+  triangle for creatures only (`batch3d_set_rim`), and their light floor rises from 0.16 to 0.3.
+  The world's own lighting is unchanged, so the rooms stay dark. First tries with the edge term
+  alone measured 1.9:1 and 2.5:1 on the dragon fight; the even part was needed to reach 3.7:1,
+  because colours are display values and the cave rock is very dark (L 0.007).
 
 ## Risks
 - Brighter creatures make the game a little easier to read; the gloom of rooms is untouched.

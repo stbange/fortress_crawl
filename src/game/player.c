@@ -102,11 +102,26 @@ void player_update(Player *p, const PlayerInput *in, float dt, SolidFn solid, vo
         float vy = in->jump ? 3.2f : in->crouch ? -3.0f : p->water > 1.5f ? 0.9f : p->water < 1.3f ? -0.6f : 0.0f;
         p->vel.y += (vy - p->vel.y) * fminf(1.0f, 4.0f * dt);
     } else {
-        p->vel.y -= 25.0f * (p->gravity > 0 ? p->gravity : 1.0f) * dt;
+        /* a forgiving jump (openspec player-input): 100 ms of coyote time after leaving the ground,
+         * a press up to 120 ms before landing kept, and a hang at the top while jump is held */
+        bool pressed = in->jump && !p->jump_prev;
+        if (p->on_ground) p->coyote = 0.1f;
+        else if (p->coyote > 0) p->coyote -= dt;
+        if (pressed) p->jump_buf = 0.12f;
+        else if (p->jump_buf > 0) p->jump_buf -= dt;
+        float grav = 25.0f * (p->gravity > 0 ? p->gravity : 1.0f);
+        if (!p->on_ground && in->jump && fabsf(p->vel.y) < 1.5f) grav *= 0.6f;
+        p->vel.y -= grav * dt;
         if (p->vel.y < -p->max_fall) p->vel.y = -p->max_fall;
-        if (in->jump && p->on_ground && p->stance == STANCE_STAND) p->vel.y = 8.2f * p->jump_mult;
+        bool may = (p->on_ground || p->coyote > 0) && p->stance == STANCE_STAND;
+        if (may && ((in->jump && p->on_ground) || p->jump_buf > 0 || (pressed && p->coyote > 0))) {
+            p->vel.y = 8.2f * p->jump_mult;
+            p->coyote = 0;
+            p->jump_buf = 0;
+        }
     }
 
+    p->jump_prev = in->jump;
     for (int axis = 0; axis < 3; axis += 2) {
         float d = (axis == 0 ? p->vel.x : p->vel.z) * dt;
         vec3 before = p->pos;

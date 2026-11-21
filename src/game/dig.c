@@ -428,9 +428,20 @@ void throw_cycle(PlayerSlot *ps) {
 static void throw_kind(Game *g, PlayerSlot *ps, int kind);
 void throw_selected(Game *g, PlayerSlot *ps) { throw_kind(g, ps, ps->st.throw_sel); }
 void bomb_throw(Game *g, PlayerSlot *ps) { throw_kind(g, ps, THROW_BOMB); }
+void throw_buffer_update(Game *g, PlayerSlot *ps, float dt) {
+    if (ps->throw_buf <= 0) return;
+    ps->throw_buf -= dt;
+    if (ps->bomb_cd <= 0) throw_kind(g, ps, ps->throw_buf_kind);
+}
 
 static void throw_kind(Game *g, PlayerSlot *ps, int kind) {
     Stats *s = &ps->st;
+    if (ps->bomb_cd > 0) { /* the arm is still back: kept a moment, thrown when it may */
+        ps->throw_buf = INPUT_BUFFER_S;
+        ps->throw_buf_kind = (u8)kind;
+        return;
+    }
+    ps->throw_buf = 0;
     if (kind != THROW_BOMB) {
         if (s->flasks[kind - 1] == 0) {
             if (ps->banner_time <= 0) game_banner(ps, "NONE LEFT - THE SHOP SELLS FLASKS (C CHOOSES WHAT TO THROW)");

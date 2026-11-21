@@ -22,6 +22,8 @@ typedef struct Player {
     int stance;
     float eye_offset; /* smoothing for step-ups and stance changes */
     float bob;
+    float coyote, jump_buf; /* jump forgiveness (openspec player-input): time left to jump after leaving the ground, and a press waiting for the ground */
+    bool jump_prev;
     float speed_mult; /* from skills */
     /* set every tick by the game from the spells on the player */
     int move_mode;    /* MOVE_* */

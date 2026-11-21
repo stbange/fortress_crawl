@@ -15,6 +15,7 @@
 #include "world/towns.h"
 #include "world/dragons.h"
 #include "world/king.h"
+#include "game/player.h"
 #include "world/story.h"
 #include "world/history.h"
 #include "world/carve.h"
@@ -154,6 +155,12 @@ static bool r_stand(int x, int y, int z) {
     if (!r_open(x, y, z) || !r_open(x, y + 1, z)) return false;
     Block below = realm_block(x, y - 1, z);
     return block_solid(below) || realm_block(x, y, z) == B_WATER;
+}
+
+/* A floor at y < 1 for x < 5 (a ledge), for the jump tests. */
+static int ledge_solid(void *user, int x, int y, int z) {
+    (void)user; (void)z;
+    return y < 1 && x < 5 ? 1 : 0;
 }
 
 int main(int argc, char **argv) {
@@ -610,6 +617,64 @@ int main(int argc, char **argv) {
         }
         printf("story: choices give %d texts that fit; %d killed lords changed their domains (%d emptied)\n", texts, changed, emptied);
         CHECK(lords_tested > 4, "too few lords tested");
+    }
+
+    /* 6a. a forgiving jump (openspec player-input): coyote time, the jump buffer, the hang at the top */
+    {
+        const float dt = 1.0f / 60.0f;
+        PlayerInput walk = { 0 }, still = { 0 };
+        walk.move_z = 1.0f;
+        /* off a ledge: the floor ends at x = 5 */
+        int fell = -1, jumped_late = 0, jumped_coyote = 0;
+        for (int variant = 0; variant < 2; variant++) {
+            Player pl;
+            player_init(&pl, v3(4.2f, 1.0f, 0.5f), 0.0f);
+            for (int k = 0; k < 4; k++) player_update(&pl, &still, dt, ledge_solid, NULL);
+            int left = -1;
+            for (int f = 0; f < 120; f++) {
+                PlayerInput in = walk;
+                if (left >= 0 && f == left + (variant == 0 ? 3 : 12)) in.jump = true; /* 50 ms or 200 ms after leaving the ground */
+                float vy0 = pl.vel.y;
+                player_update(&pl, &in, dt, ledge_solid, NULL);
+                if (left < 0 && !pl.on_ground && pl.pos.x > 5.0f) left = f;
+                if (in.jump && pl.vel.y > 5.0f && vy0 <= 0.5f) { if (variant == 0) jumped_coyote = 1; else jumped_late = 1; }
+            }
+            if (variant == 0) fell = left;
+        }
+        CHECK(fell >= 0, "the player never walked off the ledge");
+        CHECK(jumped_coyote, "a jump 50 ms after leaving the ground did not jump (coyote time)");
+        CHECK(!jumped_late, "a jump 200 ms after leaving the ground jumped");
+        /* a press just before landing jumps on landing */
+        Player pl;
+        player_init(&pl, v3(2.5f, 3.0f, 0.5f), 0.0f);
+        int land = -1;
+        for (int f = 0; f < 120 && land < 0; f++) { player_update(&pl, &still, dt, ledge_solid, NULL); if (pl.on_ground) land = f; }
+        CHECK(land > 6, "the drop is too short to test (%d frames)", land);
+        player_init(&pl, v3(2.5f, 3.0f, 0.5f), 0.0f);
+        bool rebound = false;
+        for (int f = 0; f < land + 10; f++) {
+            PlayerInput in = still;
+            in.jump = f == land - 5; /* 83 ms before landing, then let go */
+            player_update(&pl, &in, dt, ledge_solid, NULL);
+            if (f >= land - 1 && pl.vel.y > 5.0f) rebound = true;
+        }
+        CHECK(rebound, "a jump pressed 83 ms before landing did not jump on landing (jump buffer)");
+        /* holding jump hangs a little longer at the top */
+        int air[2] = { 0, 0 };
+        for (int hold = 0; hold < 2; hold++) {
+            player_init(&pl, v3(2.5f, 1.0f, 0.5f), 0.0f);
+            for (int k = 0; k < 4; k++) player_update(&pl, &still, dt, ledge_solid, NULL);
+            PlayerInput in = still;
+            in.jump = true;
+            player_update(&pl, &in, dt, ledge_solid, NULL);
+            for (int f = 0; f < 200 && !pl.on_ground; f++) {
+                in.jump = hold != 0;
+                player_update(&pl, &in, dt, ledge_solid, NULL);
+                air[hold]++;
+            }
+        }
+        CHECK(air[1] > air[0], "holding jump did not hang at the top (%d vs %d frames)", air[1], air[0]);
+        printf("jump: coyote time ok, buffer ok, airtime %d frames tapped, %d held\n", air[0], air[1]);
     }
 
     /* 6b. the physics of broken blocks (docs/DESTRUCTION.md) */

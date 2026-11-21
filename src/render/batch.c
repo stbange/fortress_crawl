@@ -86,9 +86,21 @@ static float face_shade(vec3 n) {
     return 0.72f + 0.12f * fabsf(n.x);
 }
 
+/* A rim for creatures (openspec creature-visibility): faces seen edge-on take on a colour, so a
+ * silhouette reads against dark stone. Off unless set; the world is drawn without it. */
+static vec3 rim_cam, rim_col;
+static float rim_str;
+void batch3d_set_rim(vec3 cam, vec3 col, float strength) { rim_cam = cam; rim_col = col; rim_str = strength; }
+
 static void tri(vec3 a, vec3 b, vec3 c, vec3 col, bool e) {
     vec3 n = v3_norm(v3_cross(v3_sub(b, a), v3_sub(c, a)));
     vec3 lc = e ? col : v3_scale(col, face_shade(n));
+    if (!e && rim_str > 0) {
+        vec3 mid = v3_scale(v3_add(v3_add(a, b), c), 1.0f / 3.0f);
+        float ndv = fabsf(v3_dot(n, v3_norm(v3_sub(rim_cam, mid))));
+        float k = (0.55f + (1.0f - ndv) * (1.0f - ndv)) * rim_str; /* some on every face, most on the edges */
+        lc = v3_add(lc, v3_scale(rim_col, k));
+    }
     v3push(a, lc, e); v3push(b, lc, e); v3push(c, lc, e);
 }
 

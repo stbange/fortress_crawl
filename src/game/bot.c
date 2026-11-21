@@ -82,7 +82,10 @@ typedef struct Bot {
     double t_sum, t_sq;
     int t_n, t_high_run, t_high_max;
     int intents, intent_dropped;
-    bool intent_open, intent_fired;
+    int near_intents, near_dropped; /* presses within 100 ms of the weapon being ready (the skill's own measure) */
+    bool intent_near;
+    bool intent_open, intent_fired, intent_pending;
+    float pending_until;
     float nov_next;
     PlayerInput nov_in;
     bool nov_attack, nov_spell;
@@ -1132,9 +1135,9 @@ static void summary(PlayerSlot *ps) {
     {
         double mu = B.t_n ? B.t_sum / B.t_n : 0, var = B.t_n ? B.t_sq / B.t_n - mu * mu : 0;
         logf_("FUN react=%.0f tension_mean=%.3f tension_sd=%.3f tension_cv=%.3f tension_high_max=%d samples=%d near_miss=%d intents=%d dropped=%d "
-              "uses=%d,%d,%d,%d,%d,%d,%d,%d\n", B.react, mu, sqrt(var > 0 ? var : 0), mu > 0 ? sqrt(var > 0 ? var : 0) / mu : 0, B.t_high_max, B.t_n,
+              "uses=%d,%d,%d,%d,%d,%d,%d,%d near_intents=%d near_dropped=%d\n", B.react, mu, sqrt(var > 0 ? var : 0), mu > 0 ? sqrt(var > 0 ? var : 0) / mu : 0, B.t_high_max, B.t_n,
               g_tele.near_miss, B.intents, B.intent_dropped, g_tele.uses[0], g_tele.uses[1], g_tele.uses[2], g_tele.uses[3], g_tele.uses[4],
-              g_tele.uses[5], g_tele.uses[6], g_tele.uses[7]);
+              g_tele.uses[5], g_tele.uses[6], g_tele.uses[7], B.near_intents, B.near_dropped);
     }
     logf_("KING steps=%d done=%03x gen=%d won=%d ending=%d town_works=%d raids=%d armour=%d hunts=%d dragons=%d arch_shortcuts=%d\n", g_tele.king_steps, G->world.king_done,
           G->world.king_gen, G->world.king_wins, G->world.king_ending, g_tele.town_works, g_tele.town_raids, s->armour, B.hunts, g_tele.dragons, B.arch_shortcuts);
@@ -1209,7 +1212,11 @@ bool bot_step(Game *g, PlayerInput *in, float dt) {
     B.think_dt += dt;
     float cd = ps->st.cooldown;
     if (B.t + B.think_dt >= B.next_think) {
-        if (B.intent_open && !B.intent_fired) B.intent_dropped++;
+        if (B.intent_near && !B.intent_fired) B.near_dropped++;
+        if (B.intent_open && !B.intent_fired) { /* (not fired yet: the input buffer may still fire it) */
+            B.intent_pending = true;
+            B.pending_until = g->time + INPUT_BUFFER_S + 0.01f;
+        }
         float acc = B.think_dt;
         B.think_dt = 0;
         bool r = bot_step_inner(g, in, acc);
@@ -1220,6 +1227,8 @@ bool bot_step(Game *g, PlayerInput *in, float dt) {
         B.intent_open = h_attack;
         B.intent_fired = false;
         if (h_attack) B.intents++;
+        B.intent_near = h_attack && ps->st.cooldown > 0 && ps->st.cooldown <= 0.1f;
+        if (B.intent_near) B.near_intents++;
         return r;
     }
     *in = held;
@@ -1232,7 +1241,11 @@ bool bot_step(Game *g, PlayerInput *in, float dt) {
 void bot_after_frame(Game *g) {
     static float last_cd;
     float cd = g->players[0].st.cooldown;
-    if (B.intent_open && cd > last_cd + 0.01f) B.intent_fired = true;
+    if (cd > last_cd + 0.01f) { /* an attack fired: it answers the press held now and any still waiting */
+        B.intent_pending = false;
+        if (B.intent_open) B.intent_fired = true;
+    }
+    if (B.intent_pending && g->time > B.pending_until) { B.intent_pending = false; B.intent_dropped++; }
     last_cd = cd;
 }
 

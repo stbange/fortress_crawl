@@ -67,6 +67,9 @@ static void grade_marks(const Monster *m, const Body *b, vec3 col2, vec3 glow) {
     }
 }
 
+#define CREATURE_LIGHT_FLOOR 0.3f
+#define CREATURE_RIM 1.0f
+
 void monsters_draw(Game *g, vec3 eye) {
     for (int i = 0; i < MAX_MONSTERS; i++) {
         Monster *m = &g->mons[i];
@@ -87,8 +90,10 @@ void monsters_draw(Game *g, vec3 eye) {
         const MonsterDef *d = &MONSTERS[m->type];
         float s = m->scale;
         vec3 light = game_light_at(g, monster_centre(m));
-        /* a faint glow keeps silhouettes readable in pitch darkness */
-        light = v3(fmaxf(light.x, 0.16f), fmaxf(light.y, 0.14f), fmaxf(light.z, 0.14f));
+        /* creatures stand out of the dark (openspec creature-visibility): a floor on their light and
+         * a rim in their glow's colour on the faces seen edge-on; the rooms stay as dark as they are */
+        light = v3(fmaxf(light.x, CREATURE_LIGHT_FLOOR), fmaxf(light.y, CREATURE_LIGHT_FLOOR * 0.95f), fmaxf(light.z, CREATURE_LIGHT_FLOOR * 0.9f));
+        batch3d_set_rim(eye, v3_lerp(v3(0.6f, 0.58f, 0.55f), m->glow, 0.35f), CREATURE_RIM);
         vec3 base = m->flash > 0 ? v3(1.6f, 1.6f, 1.6f) : m->color;
         vec3 col = lit(base, light);
         vec3 dark = v3_scale(col, 0.6f);
@@ -465,4 +470,5 @@ void monsters_draw(Game *g, vec3 eye) {
             batch3d_octa(v3_add(p, v3(0, d->h * s + (m->grade == GRADE_BOSS ? 0.4f : 0.12f), 0)), 0.05f, 0.06f, m->anim * 3.0f, sc, true);
         }
     }
+    batch3d_set_rim(eye, v3(0, 0, 0), 0.0f); /* (the rest of the world is drawn without it) */
 }
