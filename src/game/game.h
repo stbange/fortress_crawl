@@ -121,6 +121,8 @@ typedef struct Monster {
     char name[STORY_NAME];
     u8 ruler;        /* the ruler of a realm behind the Gate: 1 + RM_* */
     u8 townq;        /* a pest a town asked you to kill: 1 + its record (town.c) */
+    float wave_t;    /* a pack member that waits before it comes (openspec encounters) */
+    u8 heavy;        /* winding up a heavy blow that hits a ring round it (openspec encounters) */
     u8 king;         /* the Old King himself (1), his lieutenant (2), a servant he summoned (3), a raider on a town (4) (king.c) */
     u8 kingstep;     /* a lieutenant: 1 + its step */
     /* a dragon (dragon.c): its kind and size, what it is doing, its fight's phase */
@@ -481,6 +483,8 @@ typedef struct PlayerSlot {
     /* input buffers (P1 of the fun audit, openspec player-input): a press while the cooldown runs
      * is kept 120 ms and fires as soon as it may */
     float atk_buf, spell_buf, throw_buf;
+    float hitmark_t; bool hitmark_kill; /* the crosshair's flash on a hit, gold on a kill (openspec combat-feedback) */
+    float danger_note_t, potion_hint_t; /* when the danger warning and the potion hint may show again (openspec guidance) */
     bool atk_prev, spell_prev;
     u8 throw_buf_kind;
     float breath, drown_t;
@@ -567,6 +571,7 @@ typedef struct Game {
     ChunkMap map;
     PlayerSlot players[MAX_PLAYERS];
     int nplayers;
+    float hitstop;   /* seconds monsters and their shots stand still (openspec combat-feedback) */
     vec3 start_pos;
     float start_yaw;
     SDL_Gamepad *idle_pads[8]; /* connected pads not yet driving a player */
@@ -660,6 +665,8 @@ void game_banner_all(Game *g, const char *text);
 void game_add_xp(Game *g, PlayerSlot *ps, float xp);
 float xp_for_level(int level); /* XP from this level to the next */
 void game_hurt_player(Game *g, PlayerSlot *ps, float dmg, vec3 from);
+void game_hitstop(Game *g, float seconds);
+float monster_heavy_radius(const Monster *m); /* the ring of a heavy blow */ /* monsters and their shots pause (at most 80 ms) */
 /* Damage without a blow (burning, poison): no push. */
 void game_dot_player(Game *g, PlayerSlot *ps, float dmg);
 /* A monster's element on a player it hit: burn, chill, a jolt, poison, a smite or a drain. */

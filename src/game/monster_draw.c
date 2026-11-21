@@ -87,6 +87,14 @@ void monsters_draw(Game *g, vec3 eye) {
         if (m->charm_t > 0) batch3d_octa(v3_add(m->pos, v3(0, top_y, 0)), 0.1f, 0.14f, g->time * 3.0f, v3(1.4f, 0.5f, 0.9f), true);
         else if (m->fear_t > 0) batch3d_octa(v3_add(m->pos, v3(0, top_y, 0)), 0.08f, 0.16f, g->time * 9.0f, v3(0.9f, 0.9f, 1.3f), true);
         if (m->hidden && m->type == MON_WRAITH) continue; /* vanished */
+        if (m->state == MS_WINDUP && m->heavy) { /* the heavy blow's ring, brighter as it comes */
+            float r = monster_heavy_radius(m), k = clampf(1.0f - m->timer / 0.9f, 0.0f, 1.0f);
+            vec3 col = v3(0.6f + 0.8f * k, 0.25f + 0.2f * k, 0.1f);
+            for (int j = 0; j < 28; j++) {
+                float a = j * 2.0f * PI_F / 28.0f + g->time * 0.6f;
+                batch3d_box(v3_add(m->pos, v3(cosf(a) * r, 0.04f, sinf(a) * r)), v3(0.18f, 0.03f, 0.06f), a + PI_F * 0.5f, col, true);
+            }
+        }
         const MonsterDef *d = &MONSTERS[m->type];
         float s = m->scale;
         vec3 light = game_light_at(g, monster_centre(m));

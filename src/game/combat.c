@@ -406,7 +406,9 @@ static void update_projectiles(Game *g, float dt0) {
         if (!p->alive) continue;
         /* Time Slip slows what the monsters threw */
         bool enemy = p->kind == PJ_ENEMY_FIRE || p->kind == PJ_ENEMY_ARROW || p->kind == PJ_BOULDER;
-        float dt = enemy ? dt0 * utility_time_scale(g) : dt0;
+        float dt = enemy ? (g->hitstop > 0 ? 0.0f : dt0 * utility_time_scale(g)) : dt0; /* (a hitstop holds the monsters' shots) */
+        if (enemy && p->kind != PJ_BOULDER && dt > 0 && fmodf(p->life, 0.05f) < dt) /* a trail: the shot can be seen coming */
+            particles_burst(g, p->pos, proj_color(p), 1, 0.15f, 0.035f, p->kind == PJ_ENEMY_FIRE);
         p->life -= dt;
         if (p->life <= 0) {
             /* a spell that fades out (breath, nova) still acts where it ends: on what it reaches there */

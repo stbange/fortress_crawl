@@ -198,7 +198,8 @@ Monster *monster_spawn(Game *g, int type, vec3 pos, int level, bool elite, vec3 
                                     floordiv((int)floorf(pos.z), CHUNK), &tier);
     m->rank = (u8)tier;
     m->element = (u8)(tier >= 1 ? region_element(region) : EL_NONE);
-    m->maxhp = m->hp = m->maxhp * (1.0f + 0.06f * tier);
+    /* fights that last (openspec encounters): 40% more health in the first tiers */
+    m->maxhp = m->hp = m->maxhp * (1.0f + 0.06f * tier) * (tier <= 2 ? 1.4f : 1.0f);
     m->dmg *= 1.0f + 0.08f * tier;
     m->xp *= 1.0f + 0.05f * tier;
     m->scale *= 1.0f + 0.02f * tier;
@@ -291,7 +292,7 @@ static void spawn_chunk(Game *g, Chunk *c) {
     /* half the melee packs bring someone to shoot or heal from behind */
     int support = -1;
     bool melee_pack = main_type != MON_SKELETON && main_type != MON_WISP && main_type != MON_SHAMAN && main_type != MON_MIMIC;
-    if (level >= 2 && n >= 2 && melee_pack && rng_chance(&r, 0.5f)) {
+    if (level >= 1 && n >= 2 && melee_pack && rng_chance(&r, 0.7f)) { /* (seven in ten: shots worth dodging, openspec encounters) */
         static const int SUP[3] = { MON_SKELETON, MON_WISP, MON_SHAMAN };
         int k = rng_range(&r, 0, 2);
         if (level < MONSTERS[SUP[k]].min_level) k = rng_range(&r, 0, 1);
@@ -330,7 +331,8 @@ static void spawn_chunk(Game *g, Chunk *c) {
         }
     }
     /* now and then a boss holds a great hall or cavern, more often farther out */
-    if (level > 3 && ci->has_struct && n > 0 && main_type != MON_MIMIC && rng_chance(&r, 0.1f + 0.015f * tier)) {
+    bool early = tier == 0 && g->play_time < 1200.0f; /* no boss near the gate in the first 20 minutes (openspec encounters) */
+    if (!early && level > 3 && ci->has_struct && n > 0 && main_type != MON_MIMIC && rng_chance(&r, 0.1f + 0.015f * tier)) {
         vec3 p;
         int head = (int)ceilf(MONSTERS[main_type].h * 1.9f * 1.2f) + (MONSTERS[main_type].flies ? 1 : 0);
         if (monster_spot(g, c, &r, head, MONSTERS[main_type].flies, &p)) {
@@ -501,9 +503,15 @@ static vec3 monster_centre(const Monster *m) {
 }
 
 static void wake_neighbours(Game *g, Monster *m) {
+    /* a pack comes in waves (openspec encounters): the first two at once, the rest after 3-6 s */
+    int woke = 1;
     for (int i = 0; i < MAX_MONSTERS; i++) {
         Monster *o = &g->mons[i];
-        if (o->alive && !o->awake && o->type != MON_MIMIC && v3_len(v3_sub(o->pos, m->pos)) < 10.0f) {
+        if (o->alive && !o->awake && o->wave_t <= 0 && o->type != MON_MIMIC && v3_len(v3_sub(o->pos, m->pos)) < 10.0f) {
+            if (woke++ >= 2 && !o->king && o->grade != GRADE_BOSS && !o->named_kind) {
+                o->wave_t = 3.0f + (float)(mix64((u64)i * 0x9E37 ^ (u64)(g->time * 10.0f)) % 3000) / 1000.0f;
+                continue;
+            }
             sfx_monster(g, o, MSFX_ALERT);
             o->awake = true;
             o->state = MS_CHASE;
@@ -545,9 +553,21 @@ void monster_damage(Game *g, Monster *m, float dmg, vec3 from, float knock, int 
             sfx_at(g, SFX_KNIGHT_BLOCK, sh, 1.0f);
         }
     }
+    float hp_before = m->hp;
     m->hp -= dmg;
     m->flash = 0.15f;
-    if (attacker >= 0 && attacker < MAX_PLAYERS) m->last_hitter = attacker;
+    m->wave_t = 0; /* struck: no more waiting */
+    if (attacker >= 0 && attacker < MAX_PLAYERS) {
+        m->last_hitter = attacker;
+        /* felt (openspec combat-feedback): the crosshair flashes, a kill glows gold, jolts a little
+         * and holds the world a moment; so does a blow that takes a quarter of its life */
+        PlayerSlot *hp = &g->players[attacker];
+        bool kill = m->hp <= 0 && hp_before > 0;
+        hp->hitmark_t = kill ? 0.25f : fmaxf(hp->hitmark_t, 0.12f);
+        hp->hitmark_kill = kill || (hp->hitmark_kill && hp->hitmark_t > 0.12f);
+        if (kill) { game_hitstop(g, 0.05f); hp->shake = fmaxf(hp->shake, 0.08f); }
+        else if (dmg >= m->maxhp * 0.25f) game_hitstop(g, 0.04f);
+    }
     if (m->hp < m->maxhp * 0.15f && !m->parley && m->story_key && m->named_kind && m->named_kind - 1 != NK_LORD && story_parley_begin(g, m)) {
         m->hp = fmaxf(m->hp, m->maxhp * 0.05f); /* it yields instead of dying: a choice */
         return;
@@ -703,7 +723,7 @@ static void enemy_fire(Game *g, Monster *m, vec3 target) {
             float a = ((float)(h & 0xFFFF) / 65536.0f - 0.5f) * 0.07f, b = ((float)((h >> 16) & 0xFFFF) / 65536.0f - 0.5f) * 0.05f;
             dir = v3_norm(v3(dir.x * cosf(a) - dir.z * sinf(a), dir.y + b, dir.x * sinf(a) + dir.z * cosf(a)));
         }
-        p->vel = v3_scale(dir, arrow ? 20.0f : 11.0f);
+        p->vel = v3_scale(dir, arrow ? 20.0f : 13.0f);
         p->dmg = m->dmg;
         p->life = 4.0f;
         p->last_hit = p->owner >= 0 ? (int)(m - g->mons) : -1;
@@ -886,7 +906,7 @@ static void monster_volley(Game *g, Monster *m, vec3 target) {
     /* aim ahead of a player on the move (playtest 2: strafing dodged everything) */
     PlayerSlot *ps = m->charm_t > 0 ? NULL : game_nearest_player(g, target, 2.5f);
     if (ps) {
-        float speed = m->type == MON_SKELETON ? 20.0f : 11.0f;
+        float speed = m->type == MON_SKELETON ? 20.0f : 13.0f;
         float t = v3_len(v3_sub(target, monster_centre(m))) / speed;
         target = v3_add(target, v3_scale(v3(ps->pl.vel.x, 0, ps->pl.vel.z), t * 0.7f));
     }
@@ -904,6 +924,9 @@ static vec3 keep_range(const MCtx *x, float speed, float lo, float hi, float ani
 }
 
 /* Hits every living player within r of the monster's feet: a stomp, a worm bursting up. */
+/* The ring a heavy blow hits (openspec encounters): 2.5 m, 3.5 m for a boss. */
+float monster_heavy_radius(const Monster *m) { return m->grade == GRADE_BOSS ? 3.5f : 2.5f; }
+
 static void ground_blast(Game *g, Monster *m, float r, vec3 col) {
     vec3 c = monster_centre(m);
     if (m->alt_kind) utility_monster_strike(g, m, m->dmg);
@@ -1059,6 +1082,14 @@ static void windup_release(Game *g, Monster *m, const MCtx *x) {
     }
     m->state = MS_CHASE;
     m->cooldown = d->attack_time;
+    if (m->heavy) { /* the heavy blow: everyone in the ring, half again as hard */
+        m->heavy = 0;
+        float dmg = m->dmg;
+        m->dmg *= 1.5f;
+        ground_blast(g, m, monster_heavy_radius(m), v3(0.9f, 0.45f, 0.2f));
+        m->dmg = dmg;
+        return;
+    }
     switch (m->type) {
     case MON_GOLEM: ground_blast(g, m, (m->grade == GRADE_BOSS ? 1.5f : 1.0f) * 3.2f, v3(0.55f, 0.5f, 0.42f)); break;
     case MON_WORM: ground_blast(g, m, 2.0f, v3(0.5f, 0.38f, 0.25f)); break;
@@ -1325,6 +1356,12 @@ void monsters_update(Game *g, float dt) {
     for (int i = 0; i < MAX_MONSTERS; i++) {
         Monster *m = &g->mons[i];
         if (!m->alive) continue;
+        if (m->wave_t > 0 && !m->awake && dt > 0 && (m->wave_t -= dt) <= 0) { /* its turn in the wave */
+            m->wave_t = 0;
+            sfx_monster(g, m, MSFX_ALERT);
+            m->awake = true;
+            m->state = MS_CHASE;
+        }
         if (m->type == MON_DRAGON) { dragon_update(g, m, dt); continue; } /* (dragon.c) */
         if (m->parley == 1 || m->resident) {
             /* waiting: still, facing the nearest player */
@@ -1549,6 +1586,14 @@ void monsters_update(Game *g, float dt) {
                         sfx_monster(g, m, MSFX_ATTACK);
                         m->state = MS_WINDUP;
                         m->timer = d->windup;
+                        /* now and then an elite or a boss winds up a heavy blow on a ring round it,
+                         * shown on the ground: step out (openspec encounters) */
+                        bool can_heavy = (m->elite || m->grade == GRADE_BOSS) && !m->king && m->type != MON_BRUTE && m->type != MON_GOLEM &&
+                                         m->type != MON_WORM && m->type != MON_TROLL && m->type != MON_BLOATER && m->type != MON_DRAGON;
+                        if (can_heavy && (mix64((u64)i * 0x51ED ^ (u64)(g->time * 4.0f)) % 4) == 0) {
+                            m->heavy = 1;
+                            m->timer = 0.9f;
+                        }
                         break;
                     }
                     if (hdist < d->reach + d->hw * m->scale) { moved = true; } /* close enough: hold */

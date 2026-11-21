@@ -748,7 +748,7 @@ static void fight(Game *g, PlayerSlot *ps, Monster *m, PlayerInput *in, float dt
 
 static void survive(Game *g, PlayerSlot *ps, bool in_fight) {
     Stats *s = &ps->st;
-    float heal_at = B.style == BS_CAUTIOUS ? 0.55f : 0.4f;
+    float heal_at = B.style == BS_CAUTIOUS ? 0.55f : 0.5f; /* (sooner than before: two arrow deaths with five potions in the bag, openspec playtest-bots) */
     if (s->hp < s->maxhp * heal_at && !cast_util(g, ps, SU_HEAL) && s->hp < s->maxhp * (heal_at - 0.1f) && s->potions_hp > 0 &&
         ps->potion_cd <= 0)
         drink_potion(g, ps, false);

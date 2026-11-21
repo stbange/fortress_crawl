@@ -189,6 +189,31 @@ void game_thread_key(Game *g, PlayerSlot *ps) {
     spell_cast_id(g, ps, SPELL_ATTACK_COUNT + SU_THREAD);
 }
 
+/* A moment of stillness on a big blow (openspec combat-feedback): monsters and their shots wait. */
+void game_hitstop(Game *g, float seconds) { g->hitstop = fminf(0.08f, fmaxf(g->hitstop, seconds)); }
+
+/* One line on what killed a character (openspec death-and-respawn). */
+static void death_cause(Game *g, PlayerSlot *ps) {
+    char what[64];
+    int src = g_tele.src, mon = g_tele.src_mon;
+    const char *name = mon >= 0 && mon < MON_TYPE_COUNT ? MONSTERS[mon].name : NULL;
+    char low[32] = "";
+    if (name) { snprintf(low, sizeof low, "%s", name); for (char *c = low; *c; c++) if (*c >= 'A' && *c <= 'Z') *c += 32; }
+    switch (src) {
+    case HS_MELEE: snprintf(what, sizeof what, name ? "a %s's blow" : "a blow", low); break;
+    case HS_PROJ: snprintf(what, sizeof what, mon == MON_SKELETON ? "a skeleton's arrow" : name ? "a %s's shot" : "a bolt of fire", low); break;
+    case HS_BLAST: snprintf(what, sizeof what, name ? "a %s's blast" : "a blast", low); break;
+    case HS_TRAP: snprintf(what, sizeof what, "a trap"); break;
+    case HS_LAVA: snprintf(what, sizeof what, "the lava"); break;
+    case HS_FALL: snprintf(what, sizeof what, "the fall"); break;
+    case HS_DOT: snprintf(what, sizeof what, "burning or poison"); break;
+    default: snprintf(what, sizeof what, "the fortress"); break;
+    }
+    snprintf(ps->msg, sizeof ps->msg, "You were killed by %s.", what);
+    ps->msg_next[0] = 0;
+    ps->msg_t = 6.0f;
+}
+
 void game_hurt_player(Game *g, PlayerSlot *ps, float dmg, vec3 from) {
     Stats *s = &ps->st;
     if (s->dead || ps->pl.fly || s->invuln > 0) { g_tele.src = HS_OTHER; return; }
@@ -210,6 +235,11 @@ void game_hurt_player(Game *g, PlayerSlot *ps, float dmg, vec3 from) {
     tele_hurt(dmg);
     s->hp -= dmg;
     s->hurt = fminf(1.0f, s->hurt + 0.35f + dmg / s->maxhp);
+    { /* a heavy hit is felt: the view jolts, and the world holds its breath (openspec combat-feedback) */
+        float frac = dmg / fmaxf(1.0f, s->maxhp);
+        if (frac > 0.10f) ps->shake = fmaxf(ps->shake, clampf(frac * 1.5f, 0.12f, 0.3f));
+        if (frac > 0.15f) game_hitstop(g, 0.06f);
+    }
     s->since_hurt = 0;
     vec3 push = v3_sub(ps->pl.pos, from);
     push.y = 0;
@@ -224,6 +254,7 @@ void game_hurt_player(Game *g, PlayerSlot *ps, float dmg, vec3 from) {
         s->dead = true;
         s->dead_t = 0;
         game_banner(ps, "YOU HAVE FALLEN");
+        death_cause(g, ps);
     }
 }
 
@@ -240,6 +271,7 @@ void game_dot_player(Game *g, PlayerSlot *ps, float dmg) {
         s->dead = true;
         s->dead_t = 0;
         game_banner(ps, "YOU HAVE FALLEN");
+        death_cause(g, ps);
     }
 }
 
@@ -787,9 +819,14 @@ static void update_shrines(Game *g, PlayerSlot *ps) {
 
 static void update_player(Game *g, PlayerSlot *ps, const PlayerInput *in, float dt) {
     Stats *s = &ps->st;
+    if (ps->hitmark_t > 0) ps->hitmark_t -= dt;
+    if (ps->potion_hint_t > 0) ps->potion_hint_t -= dt;
+    if (ps->danger_note_t > 0) ps->danger_note_t -= dt;
     if (s->dead) {
         s->dead_t += dt;
-        if (s->dead_t > 3.0f) {
+        /* back after 3 s, or after 1 s on a press of attack or jump (openspec death-and-respawn) */
+        bool press = in->jump || ps->attack_held || ps->pad_attack || (ps->keyboard && g->touch.active && g->touch.held[TB_ATTACK]);
+        if (s->dead_t > 3.0f || (s->dead_t > 1.0f && press)) {
             s->dead = false;
             ps->pl.pos = s->respawn;
             ps->pl.yaw = s->respawn_yaw;
@@ -833,6 +870,23 @@ static void update_player(Game *g, PlayerSlot *ps, const PlayerInput *in, float 
         return;
     }
     s->invuln = fmaxf(0.0f, s->invuln - dt);
+    /* low health in a fight with a potion in the bag: a reminder, now and then (openspec guidance) */
+    if (s->hp < s->maxhp * 0.3f && healing_held(s) > 0 && ps->potion_hint_t <= 0 && s->since_hurt < 3.0f) {
+        game_banner(ps, ps->pad && !ps->keyboard ? "LOW HEALTH - DRINK A POTION" : "LOW HEALTH - H DRINKS A POTION");
+        ps->potion_hint_t = 45.0f;
+    }
+    /* a place well above you: a warning, at most once a minute */
+    if (ps->danger_note_t <= 0 && fmodf(g->time, 0.5f) < dt && !realm_has(ps->pl.pos)) {
+        ChunkInfo ci;
+        world_chunk_info(&g->world, floordiv((int)floorf(ps->pl.pos.x), CHUNK), floordiv((int)floorf(ps->pl.pos.y + 0.5f), CHUNK),
+                         floordiv((int)floorf(ps->pl.pos.z), CHUNK), &ci);
+        if (ci.level >= s->level + 3) {
+            char b[96];
+            snprintf(b, sizeof b, "DANGER: THIS PLACE IS ABOVE YOU (LEVEL %d)", ci.level);
+            game_banner(ps, b);
+            ps->danger_note_t = 60.0f;
+        }
+    }
     if (s->fell_t > 0) s->fell_t -= dt;
     if (s->recall_t > 0) s->recall_t -= dt;
     /* the last ground that was safe to stand on (where "back where you fell" leads) */
@@ -962,13 +1016,14 @@ void game_update(Game *g, const PlayerInput *kb, float dt) {
         monsters_spawn_for_chunks(g);
         for (int i = 0; i < MAX_PLAYERS; i++)
             if (g->players[i].active) flow_update(g, &g->players[i], dt);
-        monsters_update(g, dt * utility_time_scale(g));
+        monsters_update(g, g->hitstop > 0 ? 0.0f : dt * utility_time_scale(g)); /* (a hitstop holds them) */
         wildlife_update(g, dt);
         food_update(g, dt);
         alchemy_update(g, dt);
         combat_update(g, dt);
         mech_update(g, dt * utility_time_scale(g));
         utility_update(g, dt);
+        if (g->hitstop > 0) g->hitstop = fmaxf(0.0f, g->hitstop - dt);
         for (int i = 0; i < MAX_PLAYERS; i++)
             if (g->players[i].active) update_shrines(g, &g->players[i]);
     }
@@ -1178,7 +1233,16 @@ static void draw_hud(Game *g, PlayerSlot *ps, int W, int H) {
     batch2d_flush();
 
     font_begin(W, H);
-    font_text(W / 2 - 3, H / 2 - 4, "+", 0.8f, 0.75f, 0.6f);
+    if (ps->st.dead && ps->st.dead_t > 1.0f) {
+        const char *t = ps->pad && !ps->keyboard ? "PRESS A TO RISE" : "STRIKE OR JUMP TO RISE";
+        font_text((W - font_text_width(t)) / 2, H / 2 + 24, t, 0.9f, 0.75f, 0.6f);
+    }
+    if (ps->hitmark_t > 0) { /* a hit flashes white, a kill glows gold (openspec combat-feedback) */
+        if (ps->hitmark_kill) font_text(W / 2 - 3, H / 2 - 4, "+", 1.4f, 1.1f, 0.3f);
+        else font_text(W / 2 - 3, H / 2 - 4, "+", 1.3f, 1.3f, 1.3f);
+        font_text(W / 2 - 9, H / 2 - 4, "-", ps->hitmark_kill ? 1.2f : 1.0f, ps->hitmark_kill ? 0.9f : 1.0f, ps->hitmark_kill ? 0.3f : 1.0f);
+        font_text(W / 2 + 3, H / 2 - 4, "-", ps->hitmark_kill ? 1.2f : 1.0f, ps->hitmark_kill ? 0.9f : 1.0f, ps->hitmark_kill ? 0.3f : 1.0f);
+    } else font_text(W / 2 - 3, H / 2 - 4, "+", 0.8f, 0.75f, 0.6f);
     char buf[256];
     if (g->nplayers > 1) snprintf(buf, sizeof buf, "P%d LV %d", ps->index + 1, s->level);
     else snprintf(buf, sizeof buf, "LV %d", s->level);

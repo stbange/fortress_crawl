@@ -423,8 +423,14 @@ static void watch_player(Game *g, PlayerSlot *ps, float dt) {
             if (ready(id)) audio_play(pick(id), vol * base_vol(id), 0.0f, 0.92f + frand() * 0.16f, false);
             if (log_plays) SDL_Log("sfx %6.2f %s", now, SFX_DEFS[id].name);
         }
-        if (w->on_ground && !pl->on_ground && pl->vel.y > 6.0f) sfx_player(g, ps, SFX_JUMP, 0.6f);
-        if (!w->on_ground && pl->on_ground && w->vy < -7.0f) sfx_player(g, ps, SFX_LAND, clampf(-w->vy / 14.0f, 0.4f, 1.0f));
+        if (w->on_ground && !pl->on_ground && pl->vel.y > 6.0f) {
+            sfx_player(g, ps, SFX_JUMP, 0.6f);
+            particles_burst(g, v3_add(pl->pos, v3(0, 0.1f, 0)), v3(0.45f, 0.42f, 0.38f), 6, 1.2f, 0.05f, false); /* dust (openspec combat-feedback) */
+        }
+        if (!w->on_ground && pl->on_ground && w->vy < -7.0f) {
+            sfx_player(g, ps, SFX_LAND, clampf(-w->vy / 14.0f, 0.4f, 1.0f));
+            particles_burst(g, v3_add(pl->pos, v3(0, 0.1f, 0)), v3(0.45f, 0.42f, 0.38f), 10, 2.0f, 0.06f, false);
+        }
     }
     if (w->dead && !ps->st.dead) sfx_player(g, ps, SFX_RESPAWN, 0.8f);
     /* menus */
