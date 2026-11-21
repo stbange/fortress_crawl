@@ -1,5 +1,9 @@
 # Fortress Crawl: the design
 
+> The requirements themselves, and the record of each change, are kept in OpenSpec's layout in
+> [`openspec/`](../openspec/): `specs/` for what the game does now, `changes/` for what is being
+> changed and `changes/archive/` for what was.
+
 This is the source of truth for how the game fits together. The other documents go into one
 system each, and the older plans (`PLAN.md`, `BALANCE_PLAN.md`, `SANCTUM_PLAN.md`,
 `SIMULATION_PLAN.md`, `OLD_KING_PLAN.md`) record how things were planned. Where they disagree

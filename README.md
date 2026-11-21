@@ -18,7 +18,8 @@ generated stories: a motive per character, an endless metaplot of named enemies,
 notes of the dead and bounty boards**, and **sound**: every monster, weapon, spell, trap and
 place has its own sound effects, made with ElevenLabs (see [Sound](#sound)). See [`docs/PLAN.md`](docs/PLAN.md)
 for the full plan and [`docs/STORY.md`](docs/STORY.md) for how the stories work. How it all fits
-together today, and what the main story is (the Old King's), is in [`docs/DESIGN.md`](docs/DESIGN.md).
+together today, and what the main story is (the Old King's), is in [`docs/DESIGN.md`](docs/DESIGN.md);
+the requirements and the record of changes are in [`openspec/`](openspec/) (OpenSpec's layout).
 
 ## Screenshots
 
