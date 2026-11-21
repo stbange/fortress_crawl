@@ -487,9 +487,11 @@ bool spell_cast_id(Game *g, PlayerSlot *ps, int id) {
         if (!cast_utility(g, ps, id - SPELL_ATTACK_COUNT, rank)) return false;
         s->mana -= cost;
         s->spell_cd = si.cooldown * haste;
+        g_tele.uses[5]++;
         return true;
     }
     utility_player_attacked(ps); /* an attack spell gives you away */
+    g_tele.uses[4]++;
     int e = spell_element(id), f = spell_form(id);
     float dmg = si.damage * spell_power(ps, id);
     vec3 eye = player_eye(&ps->pl);

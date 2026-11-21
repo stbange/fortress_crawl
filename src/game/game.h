@@ -145,6 +145,7 @@ typedef struct Projectile {
     float radius, tick, age;
     u8 wclass;  /* WPN_* of the weapon that shot it (its powers count), 255 for none */
     u8 wbase;   /* WB_* it came from (how it looks and flies) */
+    u8 near;    /* an enemy shot: 1 passing close to a player, 2 counted (the fun audit's near-misses) */
     float grav; /* how fast it drops */
     bool back;  /* a chakram on its way back */
 } Projectile;
@@ -362,6 +363,7 @@ typedef struct Options {
     const char *bot;  /* --bot STYLE: a playtest bot plays player 1 (bot.c) */
     const char *bot_log;
     float bot_minutes;
+    float bot_react;  /* --bot-react MS: the bot sees and acts this much late, +-35 ms (a human's reaction; fun audit) */
     /* --capture dir: with --bot, plays at full speed until --capture-start seconds of game time,
      * then writes dir/NNNNN.bmp, one frame per 1/--capture-fps seconds of game time (steady,
      * whatever the machine's speed), for --capture-seconds seconds: footage for ffmpeg */

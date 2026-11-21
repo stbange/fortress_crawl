@@ -471,8 +471,15 @@ static void update_projectiles(Game *g, float dt0) {
                     PlayerSlot *ps = &g->players[k];
                     vec3 f = ps->pl.pos;
                     if (!ps->active || ps->st.dead) continue;
+                    { /* (near-misses: within 1-1.5 times the box it hits, then away without hitting) */
+                        float cx = fmaxf(fabsf(p->pos.x - f.x), fabsf(p->pos.z - f.z));
+                        bool in_h = p->pos.y > f.y - 0.3f && p->pos.y < f.y + player_height(ps->pl.stance) + 0.4f;
+                        if (in_h && cx >= 0.45f && cx < 0.675f && !p->near) p->near = 1;
+                        else if (p->near == 1 && cx >= 0.675f) { p->near = 2; g_tele.near_miss++; }
+                    }
                     if (fabsf(p->pos.x - f.x) < 0.45f && fabsf(p->pos.z - f.z) < 0.45f && p->pos.y > f.y &&
                         p->pos.y < f.y + player_height(ps->pl.stance) + 0.1f) {
+                        p->near = 2;
                         if (p->kind == PJ_BOULDER) {
                             boulder_burst(g, p, p->pos);
                             p->alive = false;
@@ -735,6 +742,7 @@ static void try_attack(Game *g, PlayerSlot *ps, bool alt) {
     }
     s->swing = s->swing_len;
     s->swing_kind = alt ? 1 : 0;
+    g_tele.uses[alt ? 3 : s->weapon == WPN_SWORD ? 0 : s->weapon == WPN_BOW ? 1 : 2]++; /* (the fun audit) */
     /* the sound of the weapon in hand */
     static const int SWING[WB_COUNT] = {
         [WB_DAGGER] = SFX_SWING_DAGGER, [WB_SWORD] = SFX_SWING_SWORD, [WB_AXE] = SFX_SWING_AXE, [WB_MACE] = SFX_SWING_MACE,

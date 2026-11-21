@@ -16,8 +16,8 @@
  * summary at the end. It finds its way with a breadth-first search over the cells a
  * player can stand in, around itself. */
 
-enum { BS_EXPLORER, BS_DELVER, BS_ARCHER, BS_CASTER, BS_QUESTER, BS_CAUTIOUS, BS_KING, BS_COUNT };
-static const char *STYLE_NAMES[BS_COUNT] = { "explorer", "delver", "archer", "caster", "quester", "cautious", "king" };
+enum { BS_EXPLORER, BS_DELVER, BS_ARCHER, BS_CASTER, BS_QUESTER, BS_CAUTIOUS, BS_KING, BS_NOVICE, BS_SPAM, BS_COUNT };
+static const char *STYLE_NAMES[BS_COUNT] = { "explorer", "delver", "archer", "caster", "quester", "cautious", "king", "novice", "spam" };
 
 /* ---------- the search grid ---------- */
 
@@ -77,6 +77,16 @@ typedef struct Bot {
     u64 hunt_key;
     int hunts, dragons;
     float next_hunt_note, next_realm_note, next_vision, arch_since;
+    /* the fun audit: reaction delay, the tension index, dropped attack inputs, the novice's dice */
+    float react, next_think, think_dt, tension_t;
+    double t_sum, t_sq;
+    int t_n, t_high_run, t_high_max;
+    int intents, intent_dropped;
+    bool intent_open, intent_fired;
+    float nov_next;
+    PlayerInput nov_in;
+    bool nov_attack, nov_spell;
+    u64 nov_rng;
     int arch_shortcuts;
     float avoid_until;
     float vertical_until; /* the thread's end is reached: now go up or down the stairs */
@@ -494,6 +504,8 @@ static const int SKILL_ORDER[BS_COUNT][16] = {
     [BS_ARCHER] = { SK_STEADY_AIM, SK_MULTISHOT, SK_STEADY_AIM, SK_PIERCING, SK_FLEET_FOOT, SK_TOUGHNESS, SK_ARROW_STORM, SK_SECOND_WIND, -1 },
     [BS_CASTER] = { SK_FOCUS, SK_FIREBALL, SK_FOCUS, SK_CHAIN, SK_TOUGHNESS, SK_NOVA, SK_FOCUS, SK_SECOND_WIND, -1 },
     [BS_QUESTER] = { SK_KEEN_EDGE, SK_TOUGHNESS, SK_STEADY_AIM, SK_CLEAVE, SK_SECOND_WIND, SK_FOCUS, SK_LAST_STAND, -1 },
+    [BS_NOVICE] = { SK_TOUGHNESS, SK_KEEN_EDGE, -1 },
+    [BS_SPAM] = { SK_KEEN_EDGE, SK_TOUGHNESS, SK_CLEAVE, SK_SECOND_WIND, -1 },
     [BS_KING] = { SK_KEEN_EDGE, SK_TOUGHNESS, SK_STEADY_AIM, SK_CLEAVE, SK_SECOND_WIND, SK_FOCUS, SK_LAST_STAND, -1 },
     [BS_CAUTIOUS] = { SK_TOUGHNESS, SK_SECOND_WIND, SK_TOUGHNESS, SK_LAST_STAND, SK_KEEN_EDGE, SK_FLEET_FOOT, SK_CLEAVE, -1 },
 };
@@ -697,6 +709,7 @@ static void fight(Game *g, PlayerSlot *ps, Monster *m, PlayerInput *in, float dt
     /* spells: attack spells for casters always, for others when mana is plentiful */
     int sp = best_attack_spell(s);
     bool caster = B.style == BS_CASTER;
+    if (B.style == BS_SPAM) return; /* (the fun audit's spam bot: the primary attack and nothing else) */
     if (sp >= 0 && s->spell_cd <= 0 && facing(ps, c, 0.15f) && d < 18.0f && s->mana > s->maxmana * (caster ? 0.15f : 0.6f)) {
         s->spell = sp;
         if (spell_cast_id(g, ps, sp)) g_tele.casts_attack++;
@@ -1071,6 +1084,8 @@ void bot_init(Game *g, const char *style, const char *log_path, float minutes) {
     for (int i = 0; i < BS_COUNT; i++)
         if (style && !strcmp(style, STYLE_NAMES[i])) B.style = i;
     B.minutes = minutes > 0 ? minutes : 20.0f;
+    B.react = g->opt.bot_react;
+    B.nov_rng = g->opt.seed ^ 0x40B1CEULL;
     B.log = log_path ? fopen(log_path, "w") : stdout;
     B.last_chapter = -1;
     logf_("BOT style=%s minutes=%.0f seed=%llu\n", STYLE_NAMES[B.style], B.minutes, (unsigned long long)g->opt.seed);
@@ -1114,6 +1129,13 @@ static void summary(PlayerSlot *ps) {
           g_tele.food, g_tele.hunted, g_tele.harvested, g_tele.cooked, g_tele.eaten, __builtin_popcount(s->recipes),
           g_tele.reagents, g_tele.brewed, g_tele.elixirs, __builtin_popcount(s->formulae), g_tele.forge_mats, g_tele.forged, g_tele.masterworks,
           smith_level(s->smith_xp), B.digs, B.blasts, G->map.edits_total, B.warmed, B.harvests, B.throws, s->cloak);
+    {
+        double mu = B.t_n ? B.t_sum / B.t_n : 0, var = B.t_n ? B.t_sq / B.t_n - mu * mu : 0;
+        logf_("FUN react=%.0f tension_mean=%.3f tension_sd=%.3f tension_cv=%.3f tension_high_max=%d samples=%d near_miss=%d intents=%d dropped=%d "
+              "uses=%d,%d,%d,%d,%d,%d,%d,%d\n", B.react, mu, sqrt(var > 0 ? var : 0), mu > 0 ? sqrt(var > 0 ? var : 0) / mu : 0, B.t_high_max, B.t_n,
+              g_tele.near_miss, B.intents, B.intent_dropped, g_tele.uses[0], g_tele.uses[1], g_tele.uses[2], g_tele.uses[3], g_tele.uses[4],
+              g_tele.uses[5], g_tele.uses[6], g_tele.uses[7]);
+    }
     logf_("KING steps=%d done=%03x gen=%d won=%d ending=%d town_works=%d raids=%d armour=%d hunts=%d dragons=%d arch_shortcuts=%d\n", g_tele.king_steps, G->world.king_done,
           G->world.king_gen, G->world.king_wins, G->world.king_ending, g_tele.town_works, g_tele.town_raids, s->armour, B.hunts, g_tele.dragons, B.arch_shortcuts);
     float total = 0;
@@ -1151,7 +1173,70 @@ static void summary(PlayerSlot *ps) {
     logf_("\n");
 }
 
+static bool bot_step_inner(Game *g, PlayerInput *in, float dt);
+
+/* The fun audit's tension index, once a second: threats near, how busy the hands are, and the
+ * health missing (each 0-1, a third each). */
+static void tension_sample(Game *g, PlayerSlot *ps, float dt) {
+    static float acting;
+    acting += (ps->pad_attack || ps->pad_spell || ps->pad_alt) ? dt : 0.0f;
+    if ((B.tension_t += dt) < 1.0f) return;
+    B.tension_t -= 1.0f;
+    int near = 0;
+    for (int i = 0; i < MAX_MONSTERS; i++)
+        if (g->mons[i].alive && g->mons[i].awake && !g->mons[i].resident && v3_len(v3_sub(g->mons[i].pos, ps->pl.pos)) < 15.0f) near++;
+    const Stats *s = &ps->st;
+    float threat = fminf(1.0f, near / 6.0f), hands = fminf(1.0f, acting), hurt = s->dead ? 1.0f : 1.0f - s->hp / fmaxf(1.0f, s->maxhp);
+    acting = 0;
+    float T = (threat + hands + hurt) / 3.0f;
+    B.t_sum += T;
+    B.t_sq += (double)T * T;
+    B.t_n++;
+    if (T > 0.9f) { if (++B.t_high_run > B.t_high_max) B.t_high_max = B.t_high_run; }
+    else B.t_high_run = 0;
+}
+
+/* With --bot-react, the bot sees and acts only every reaction time (+-35 ms) and holds its last
+ * inputs in between, as a person does; attack inputs held while the weapon is still cooling and
+ * let go before it fires are counted as dropped (no input buffer). */
 bool bot_step(Game *g, PlayerInput *in, float dt) {
+    G = g;
+    PlayerSlot *ps = &g->players[0];
+    static PlayerInput held;
+    static bool h_attack, h_spell, h_alt, h_attack_held;
+    tension_sample(g, ps, dt);
+    if (B.react <= 0 || B.style == BS_NOVICE) return bot_step_inner(g, in, dt);
+    B.think_dt += dt;
+    float cd = ps->st.cooldown;
+    if (B.t + B.think_dt >= B.next_think) {
+        if (B.intent_open && !B.intent_fired) B.intent_dropped++;
+        float acc = B.think_dt;
+        B.think_dt = 0;
+        bool r = bot_step_inner(g, in, acc);
+        u64 j = mix64((u64)(B.t * 1000.0));
+        B.next_think = B.t + B.react / 1000.0f + ((float)(j % 71) - 35.0f) / 1000.0f;
+        held = *in;
+        h_attack = ps->pad_attack; h_spell = ps->pad_spell; h_alt = ps->pad_alt; h_attack_held = ps->attack_held;
+        B.intent_open = h_attack;
+        B.intent_fired = false;
+        if (h_attack) B.intents++;
+        return r;
+    }
+    *in = held;
+    ps->pad_attack = h_attack; ps->pad_spell = h_spell; ps->pad_alt = h_alt; ps->attack_held = h_attack_held;
+    (void)cd;
+    return true;
+}
+
+/* (after the attack system ran: did the held attack fire?) */
+void bot_after_frame(Game *g) {
+    static float last_cd;
+    float cd = g->players[0].st.cooldown;
+    if (B.intent_open && cd > last_cd + 0.01f) B.intent_fired = true;
+    last_cd = cd;
+}
+
+static bool bot_step_inner(Game *g, PlayerInput *in, float dt) {
     G = g;
     PlayerSlot *ps = &g->players[0];
     Stats *s = &ps->st;
@@ -1176,6 +1261,31 @@ bool bot_step(Game *g, PlayerInput *in, float dt) {
         return true;
     }
     ps->show_map = ps->show_skills = false;
+    if (B.style == BS_NOVICE) { /* the fun audit's novice: random valid inputs, 2-4 a second, no sense of the room */
+        if (B.t >= B.nov_next) {
+            u64 r = B.nov_rng = mix64(B.nov_rng + 0x9E3779B97F4A7C15ULL);
+            B.nov_next = B.t + 0.25f + (float)(r % 1000) / 4000.0f;
+            memset(&B.nov_in, 0, sizeof B.nov_in);
+            B.nov_in.move_x = (float)((int)((r >> 10) % 3) - 1);
+            B.nov_in.move_z = (float)((int)((r >> 12) % 3) - 1);
+            B.nov_in.jump = ((r >> 14) % 5) == 0;
+            ps->pl.yaw += ((float)((r >> 20) % 1000) / 1000.0f - 0.5f) * 2.4f;
+            ps->pl.pitch = ((float)((r >> 30) % 1000) / 1000.0f - 0.5f) * 0.6f;
+            B.nov_attack = ((r >> 40) % 2) == 0;
+            B.nov_spell = ((r >> 42) % 10) == 0;
+        }
+        *in = B.nov_in;
+        ps->pad_attack = B.nov_attack;
+        ps->pad_spell = B.nov_spell;
+        if (!realm_has(ps->pl.pos)) { /* (its progress and deaths, as the others count them) */
+            B.max_dist = fmaxf(B.max_dist, gate_dist(ps->pl.pos));
+            int t = tier_at(ps->pl.pos);
+            if (t > B.max_tier) B.max_tier = t;
+        }
+        if (s->dead && !B.was_dead) B.deaths++;
+        B.was_dead = s->dead;
+        return true;
+    }
     vec3 p = ps->pl.pos;
     if (!realm_has(p)) {
         B.max_dist = fmaxf(B.max_dist, gate_dist(p));
@@ -1344,7 +1454,7 @@ bool bot_step(Game *g, PlayerInput *in, float dt) {
         m = NULL;
     }
     survive(g, ps, m != NULL);
-    bot_alchemy(g, ps, m != NULL, m);
+    if (B.style != BS_SPAM) bot_alchemy(g, ps, m != NULL, m);
     if (m) {
         B.time_in_fight += dt;
         vec3 c = mon_centre(m);

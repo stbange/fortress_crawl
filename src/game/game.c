@@ -1422,6 +1422,28 @@ static void render_view(Game *g, PlayerSlot *ps, int vx, int vy, int vw, int vh)
 }
 
 void game_render(Game *g) {
+    { /* FC_TIMING (the fun audit): when the first frame is drawn, and when the world round the player is ready */
+        static int stage;
+        if (stage < 2 && getenv("FC_TIMING")) {
+            if (stage == 0) { SDL_Log("TIMING first_frame_ms=%llu", (unsigned long long)SDL_GetTicks()); stage = 1; }
+            else if (g->players[0].active && chunkmap_settled(&g->map, player_eye(&g->players[0].pl))) {
+                SDL_Log("TIMING playable_ms=%llu", (unsigned long long)SDL_GetTicks());
+                stage = 2;
+            }
+        }
+        static u64 t0, worst;
+        static int frames;
+        if (stage == 2 && getenv("FC_TIMING")) { /* then ten seconds of frames: the mean and the worst */
+            u64 now = SDL_GetTicksNS();
+            static u64 last;
+            if (!t0) t0 = last = now;
+            else { worst = now - last > worst ? now - last : worst; last = now; frames++; }
+            if (now - t0 > 10000000000ull) {
+                SDL_Log("TIMING frames=%d mean_frame_ms=%.2f worst_frame_ms=%.2f", frames, (now - t0) / 1e6 / frames, worst / 1e6);
+                stage = 3;
+            }
+        }
+    }
     renderer_frame_begin(&g->r);
     int order = 0;
     for (int i = 0; i < MAX_PLAYERS; i++) {

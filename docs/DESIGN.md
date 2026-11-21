@@ -103,3 +103,7 @@ where you fell, but only once in five minutes: no walking back into the same pac
 The bots (`--bot STYLE`, [PLAYTEST.md](PLAYTEST.md), [PLAYTEST_2.md](PLAYTEST_2.md)) play hour-long
 runs and log what they do; `--bot king` follows the Old King's way. `--demo kingtest` walks a
 seed's way to each ending; `test_worldgen` checks the way and two heirs on hundreds of seeds.
+
+[FUN_AUDIT.md](FUN_AUDIT.md) scores the game on feel, flow, choice, pacing, fairness and loop friction
+with four bot personas (`--bot novice`, `--bot-react 200` for a human's reaction, the plain bot as
+the expert, `--bot spam`) and lists what to improve, most important first.

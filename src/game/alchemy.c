@@ -384,6 +384,7 @@ bool alchemy_drink(Game *g, PlayerSlot *ps, int r) {
     }
     ps->elixir_quick = r;
     g_tele.elixirs++;
+    g_tele.uses[7]++;
     char buf[128], name[64];
     snprintf(name, sizeof name, "%s", ELIXIRS[r].name);
     upper(name);

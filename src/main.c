@@ -83,6 +83,7 @@ static bool parse_args(Options *o, int argc, char **argv) {
         else if (!strcmp(a, "--bot") && i + 1 < argc) o->bot = argv[++i];
         else if (!strcmp(a, "--bot-log") && i + 1 < argc) o->bot_log = argv[++i];
         else if (!strcmp(a, "--bot-minutes") && i + 1 < argc) o->bot_minutes = strtof(argv[++i], NULL);
+        else if (!strcmp(a, "--bot-react") && i + 1 < argc) o->bot_react = strtof(argv[++i], NULL);
         else if (!strcmp(a, "--capture") && i + 1 < argc) o->capture = argv[++i];
         else if (!strcmp(a, "--capture-start") && i + 1 < argc) o->capture_start = strtof(argv[++i], NULL);
         else if (!strcmp(a, "--capture-seconds") && i + 1 < argc) o->capture_seconds = strtof(argv[++i], NULL);
@@ -2304,6 +2305,7 @@ static void frame(void *user) {
         while (SDL_GetTicksNS() - t0 < 30000000ull && chunkmap_settled(&g->map, player_eye(&g->players[0].pl))) {
             if (!bot_step(g, &in, DT)) { a->running = false; break; }
             game_update(g, &in, DT);
+            bot_after_frame(g);
         }
         if (++frames % 20 == 0) {
             for (int i = 0; i < MAX_PLAYERS; i++)

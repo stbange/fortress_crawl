@@ -26,6 +26,9 @@ typedef struct Tele {
     int town_tasks, town_rests, town_heals, town_trades, town_works, town_raids;
     int dragons, drakes;
     int king_steps, king_won;
+    /* the fun audit (docs/FUN_AUDIT.md) */
+    int near_miss;             /* an enemy shot passed within 1-1.5 times the body it would hit, and missed */
+    int uses[8];               /* voluntary actions: blade, bow, staff, alternate attack, attack spell, utility spell, throw, elixir */
 } Tele;
 
 extern Tele g_tele;

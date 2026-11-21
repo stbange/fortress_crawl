@@ -7,5 +7,6 @@
 void bot_init(Game *g, const char *style, const char *log_path, float minutes);
 /* Fills the input for the next tick; false when the run is over (the log is written). */
 bool bot_step(Game *g, PlayerInput *in, float dt);
+void bot_after_frame(Game *g); /* (the fun audit: did a held attack fire?) */
 
 #endif

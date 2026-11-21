@@ -444,6 +444,7 @@ static void throw_kind(Game *g, PlayerSlot *ps, int kind) {
             *b = (Bomb){ true, v3_add(player_eye(&ps->pl), v3_scale(look, 0.5f)), v3_add(v3_scale(look, 12.0f), v3(0, 2.5f, 0)), 5.0f, ps->index, s->level, (u8)kind };
             s->flasks[kind - 1]--;
             ps->bomb_cd = 0.5f;
+            g_tele.uses[6]++;
             sfx_player(g, ps, SFX_SWING_DAGGER, 0.7f);
             return;
         }
@@ -467,6 +468,7 @@ static void throw_kind(Game *g, PlayerSlot *ps, int kind) {
         b->kind = THROW_BOMB;
         s->bombs--;
         ps->bomb_cd = 0.6f;
+        g_tele.uses[6]++;
         sfx_player(g, ps, SFX_SWING_DAGGER, 0.8f);
         return;
     }
