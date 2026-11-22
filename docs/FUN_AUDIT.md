@@ -200,7 +200,7 @@ change and the number it should move. Effort: S (hours), M (a day), L (days).
     (the fade can go on behind it); keep 3 s as the default without a press. Retry 3.0 s to 1.0 s
     (M_loop +0.2).
 
-### P3: choice and polish
+### P3: choice and polish - done 2026-11-22, see section 7
 
 16. **Weapons that want switching** (M). Make the bow and staff the better answer to something:
     flying and ranged enemies take more from arrows; armoured ones (knights, golems) from blunt
@@ -334,7 +334,67 @@ What did not, honestly:
 Next: make brute bosses' slam read like the heavy blow (a ring), measure fight length per
 encounter rather than per combat stretch, and P3 16 (weapons with roles) for pacing and choice.
 
-## 7. Running it again
+## 7. After P3 (openspec change add-weapon-roles-and-polish)
+
+All five P3 items are in (2026-11-22), item 20 only as far as this container allows. The same
+personas and seeds, 30 minutes each:
+
+| | After P2 | After P3 |
+|---|---|---|
+| Human proxy: W (sd) | 0.63 (0.36) | 0.67 (0.23) |
+| Oracle: W (sd) | 0.72 (0.20) | 0.72 (0.16) |
+| Spam: W | 0.25 | 0.40 |
+| Deaths/h: human proxy, oracle, spam | 1.6, 0.4, 4.4 | 0.4, 0.4, 3.6 |
+| Action entropy H_norm (human proxy, oracle) | 0.35, 0.35 | 0.64, 0.64 |
+| Largest share of one action | 0.58 | 0.37 |
+| Bow / staff / alternate attack uses (human proxy, all runs) | 16 / 9 / 0 | 653 / 307 / 55 |
+| Weapon swaps a run (human proxy, oracle) | 0 | 47, 76 |
+| Tension CV (human proxy) | 1.68 | 1.89 |
+| Near-misses a minute (human proxy, oracle) | 0.38, 0.51 | 0.19, 0.46 |
+| Attack presses lost within 100 ms of readiness | 0 of 647 | 0 of 877 |
+| Browser: bytes before play | 57 MB | 8.3 MB (6.0 MB sounds, 2.3 MB code) |
+| Browser: playable at 25 Mbit/s | about 19 s (estimated from size) | 3.3 s (measured, throttled Chromium) |
+
+Every weapon is used now: before P3 the bow and staff were nearly untouched and no alternate
+attack was ever pressed. What killed the bots (11 deaths, 7 of them the spam bot's): boss-grade
+brutes 8, a projectile, a slime, a dragon.
+
+```text
+=== GAME FUN AUDIT REPORT (after P3) ===
+- Kinesthetics & Feel (M_feel):   [1.00] | Latency: 1 frame, DropRate: 0% near readiness, Channels: 3.0 / 4.6
+- Flow & Skill Gap (M_flow):      [0.95] | Win/Surv: Rand=0%, Human=67%, Opt=72%   (sigma Human 0.23)
+- Strategic Entropy (M_choice):   [0.95] | H_norm=0.64, max p=0.37, SpamBot Ratio=0.59
+- Pacing & Tension (M_pace):      [0.44] | Tension CV=1.89 (human), Near-Misses=0.2/min
+- Fairness & Clarity (M_fair):    [0.90] | Hurtbox Ratio=0.69, Telegraph>=350ms, Contrast 3.7:1
+- Loop Friction (M_loop):         [0.95] | TTFA=1.5-2.4s desktop, 3.3s browser at 25 Mbit/s, Retry=1.0s
+
+COMPOSITE FUN SCORE: 83.9 / 100   (from 81.5; 63.4 at the start)
+```
+
+What worked:
+- **Choice.** Entropy nearly doubled (0.35 to 0.64, target 0.6) and no action holds more than 37%.
+  The spam bot reaches 0.59 of the human proxy, inside the healthy band.
+- **Steadier outcomes.** The human proxy's sd fell to 0.23 (target under 0.3) and it died a
+  quarter as often: picking the bow for wisps and skeletons ends those fights from range.
+- **The browser** starts in a seventh of the bytes.
+
+What did not, honestly:
+- **Pacing fell back** (CV 1.89, near-misses 0.2 a minute). It follows from the success above:
+  shooters are now killed at range before they shoot much. Pacing is the one pillar that has not
+  reached its target in any round; it needs encounters built for it (shooters behind melee, rooms
+  that force closing in), not more numbers.
+- **The skill gap between the human proxy and the oracle shrank** (0.05, from 0.09).
+- **Boss-grade brutes** still cause most deaths (8 of 11), deeper than the early-boss rule reaches.
+- **The browser misses its 3 s target by 0.3 s** on a plain server; a host that compresses the
+  2.3 MB of code (wasm shrinks to about a third) should bring it under.
+- **Sound quality is unheard.** The ADPCM sounds keep 27-46 dB signal to noise for the music
+  but 14-19 dB on sharp hits and zaps; someone must listen. `FC_WEB_RAW_SFX=1 web/build.sh`
+  packs them as they are (24 MB).
+- **Item 20 is not done here.** The container renders in software (36 ms a frame); the browser
+  build now prints its TIMING lines in the console, so one session on a machine with a GPU
+  answers it.
+
+## 8. Running it again
 
 ```bash
 # one persona run (30 minutes of play, about 3 minutes of wall time)

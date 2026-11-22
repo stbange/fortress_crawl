@@ -27,7 +27,7 @@ The king bot SHALL go to the nearest step it can do now (following the Golden Th
 - **THEN** the bot decides about five times a second
 
 ### Requirement: Fun telemetry
-At the end of a run the bot SHALL log a FUN line: the tension index (threats within 15 m, the hands' business and health missing, once a second) as mean, sd, CV and longest run above 0.9; enemy shots that passed within 1-1.5 times the box they hit; attack presses held one reaction window that never fired, waiting out the input buffer before counting one as lost, and of them the presses made within 100 ms of the weapon being ready; the use of blade, bow, staff, alternate attack, attack spell, utility spell, throw and elixir.
+At the end of a run the bot SHALL log a FUN line: the tension index (threats within 15 m, the hands' business and health missing, once a second) as mean, sd, CV and longest run above 0.9; enemy shots that passed within 1-1.5 times the box they hit; attack presses held one reaction window that never fired, waiting out the input buffer before counting one as lost, and of them the presses made within 100 ms of the weapon being ready; the use of blade, bow, staff, alternate attack, attack spell, utility spell, throw and elixir; and the number of weapon swaps.
 
 #### Scenario: The FUN line
 - **WHEN** a bot run ends
@@ -50,3 +50,10 @@ Bots SHALL heal (the spell, then a potion) below half their health, and the caut
 #### Scenario: Hurt
 - **WHEN** an explorer bot falls to 45% of its health with a potion
 - **THEN** it heals or drinks
+
+### Requirement: Bot weapons
+Bots other than spam SHALL take up the bow against fliers and shooters more than 4 m away, the staff (or a blunt blade, or the blade when low on mana) against armour, and otherwise their style's weapon, keeping a choice for 3 s; they SHALL use the alternate attack into two or more foes within 3.5 m (blade, staff) and at elites and bosses more than 6 m away (bow).
+
+#### Scenario: Wisps
+- **WHEN** an explorer bot fights a wisp 10 m away
+- **THEN** it switches to the bow

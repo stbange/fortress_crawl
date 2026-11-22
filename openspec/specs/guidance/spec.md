@@ -6,11 +6,15 @@ What tells the player where to go: the line at the top of the screen, the Golden
 ## Requirements
 
 ### Requirement: One line at the top
-The top of the screen SHALL show one line: the Old King's next step by default; Y SHALL move it to the chronicle or a town's task and back; when more than one could show, a hint says Y gives another.
+The top of the screen SHALL show one line: the Old King's next step by default; Y SHALL move it to the chronicle or a town's task and back. The line SHALL dim to a third once its text has been unchanged for 20 s and brighten again when it changes or on Y or G. When more than one could show, a hint SHALL say Y gives another, in the first five minutes of play and for 10 s after another line opens.
 
 #### Scenario: Switching
 - **WHEN** a player presses Y with a chronicle and the king's way open
 - **THEN** the line follows the chronicle and a banner says so
+
+#### Scenario: Read
+- **WHEN** the line has shown the same step for half a minute
+- **THEN** it is dim, and a press of G brightens it
 
 ### Requirement: Hints of the way
 The first time the line follows a step of the king's way, a message SHALL say how that step is done (the Sanctum Door, the STORY tab, crouching past a sleeping dragon, the forge, the Gate, a town's works).
