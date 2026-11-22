@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Packed sounds
-The browser build SHALL pack its sounds as IMA ADPCM WAV when ffmpeg is present at build time, and SHALL not pack the music.
+The browser build SHALL pack its sounds as IMA ADPCM WAV when ffmpeg is present at build time (unless FC_WEB_RAW_SFX=1 asks for them as they are), and SHALL not pack the music, which it serves as ADPCM WAV in music/.
 
 #### Scenario: The package
 - **WHEN** web/build.sh runs with ffmpeg

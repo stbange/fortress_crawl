@@ -3,7 +3,8 @@
 # (the sounds) and music/ (fetched after the first frame).
 # Needs an activated Emscripten SDK: source /path/to/emsdk/emsdk_env.sh
 # With ffmpeg on the PATH the sounds and music are re-encoded as IMA ADPCM WAV (a quarter of the
-# size, which SDL reads as it is); without it they go in as they are.
+# size, which SDL reads as it is); without it they go in as they are. FC_WEB_RAW_SFX=1 keeps the
+# sounds uncompressed (sharp hits lose most to ADPCM: 14-19 dB SNR against 27-46 dB for the music).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p build-web
@@ -17,9 +18,11 @@ adpcm() { # src_dir dst_dir
 }
 SFX="$PWD/assets/sfx"
 if command -v ffmpeg >/dev/null; then
-    adpcm assets/sfx build-web/sfx-adpcm
     adpcm assets/music build-web/music-adpcm
-    SFX="$PWD/build-web/sfx-adpcm"
+    if [ "${FC_WEB_RAW_SFX:-0}" != 1 ]; then
+        adpcm assets/sfx build-web/sfx-adpcm
+        SFX="$PWD/build-web/sfx-adpcm"
+    fi
     MUSIC=build-web/music-adpcm
 else
     echo "ffmpeg not found: packing the sounds and music uncompressed"

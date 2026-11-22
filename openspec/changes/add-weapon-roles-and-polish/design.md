@@ -24,6 +24,7 @@ text over the view (18), the browser's time to play (19) and a measurement on a 
   is one run on any machine with a GPU.
 
 ## Risks
-- ADPCM is lossy (about 4 bits a sample); the sounds are short and noisy enough that it does not
-  show, but the music is quieter detail and should be listened to.
+- ADPCM is lossy (4 bits a sample). Measured against the originals: the music keeps 27-46 dB
+  signal to noise, the sounds 14-35 dB, worst on sharp hits and zaps. Nobody has listened yet;
+  FC_WEB_RAW_SFX=1 builds with the sounds as they are (index.data 24 MB) if it shows.
 - Weapon roles make the blade worse against knights; the banner says what to use instead.
