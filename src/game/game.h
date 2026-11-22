@@ -485,6 +485,11 @@ typedef struct PlayerSlot {
     float atk_buf, spell_buf, throw_buf;
     float hitmark_t; bool hitmark_kill; /* the crosshair's flash on a hit, gold on a kill (openspec combat-feedback) */
     float danger_note_t, potion_hint_t; /* when the danger warning and the potion hint may show again (openspec guidance) */
+    float role_hint_t;      /* when a weapon-role hint may show again (openspec weapon-roles) */
+    u32 tracker_hash; float tracker_age; /* the line at the top: unchanged this long, it dims (openspec guidance) */
+    float yhint_t;          /* "(Y: ANOTHER LINE)" shows while this runs */
+    u8 tracker_has;         /* how many lines there were to follow last frame */
+    u8 last_weapon;         /* the weapon held before this one: Z swaps back (openspec weapon-roles) */
     bool atk_prev, spell_prev;
     u8 throw_buf_kind;
     float breath, drown_t;
@@ -1049,6 +1054,12 @@ void dig_update(Game *g, PlayerSlot *ps, bool attack, bool alt);
 const char *dig_pick_name(const Stats *s);
 /* The next or previous of the four slots: blade, bow, staff, pickaxe. */
 void game_cycle_weapon(PlayerSlot *ps, int dir);
+void game_select_weapon(PlayerSlot *ps, int w);
+void game_tracker_text(PlayerSlot *ps, int W, int y, const char *buf, float r, float gr, float b);
+void game_swap_weapon(PlayerSlot *ps);
+float weapon_role_mult(const Monster *m, int wclass, int base);
+bool monster_armoured(const Monster *m);
+bool monster_aloft_or_ranged(const Monster *m);
 
 /* sim.c: water that flows (docs/SIMULATION.md) */
 void sim_init(Game *g);

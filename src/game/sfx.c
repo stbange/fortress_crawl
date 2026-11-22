@@ -3,6 +3,9 @@
 #include "engine/audio.h"
 #include "game/game.h"
 #include "world/theme.h"
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
 
 #define MAX_VARIANTS 4
 
@@ -505,11 +508,40 @@ static bool music_try_dir(const char *dir) {
     return n > 0;
 }
 
+#ifdef __EMSCRIPTEN__
+/* The browser fetches the music after the first frame, one piece after another (the gate's
+ * first), so that play does not wait for 30 MB (openspec web-loading). */
+static int fetch_next = -1;
+static const int FETCH_ORDER[MUS_COUNT] = { MUS_GATE, MUS_DEEP, MUS_BATTLE, MUS_HEIGHTS, MUS_CHAMPION };
+static void music_fetch(void);
+static void music_fetched(const char *file) {
+    int i = FETCH_ORDER[fetch_next];
+    tracks[i].sample = audio_load(file);
+    if (tracks[i].sample >= 0) music_ready = true;
+    if (log_plays || fetch_next == MUS_COUNT - 1) SDL_Log("Audio: music piece %s %s", MUSIC_NAMES[i], tracks[i].sample >= 0 ? "loaded" : "unreadable");
+    fetch_next++;
+    music_fetch();
+}
+static void music_fetch_failed(const char *file) {
+    SDL_Log("Audio: could not fetch %s", file);
+    fetch_next++;
+    music_fetch();
+}
+static void music_fetch(void) {
+    if (fetch_next < 0 || fetch_next >= MUS_COUNT) return;
+    char url[128], file[128];
+    snprintf(url, sizeof url, "music/%s.wav", MUSIC_NAMES[FETCH_ORDER[fetch_next]]);
+    snprintf(file, sizeof file, "/music_%s.snd", MUSIC_NAMES[FETCH_ORDER[fetch_next]]); /* (not .wav: no browser decoding) */
+    emscripten_async_wget(url, file, music_fetched, music_fetch_failed);
+}
+#endif
+
 static void music_load(void) {
     for (int i = 0; i < MUS_COUNT; i++) tracks[i] = (Track){ -1, 0, 0, 0 };
     if (!audio_ready()) return;
 #ifdef __EMSCRIPTEN__
-    music_ready = music_try_dir("/music/");
+    music_ready = music_try_dir("/music/"); /* (a build that still packs the music) */
+    if (!music_ready) { fetch_next = 0; return; } /* else: fetched after the first frame */
 #else
     char dir[1024];
     const char *base = SDL_GetBasePath();
@@ -542,6 +574,10 @@ static void music_threat(Game *g, bool *champion, bool *battle) {
 }
 
 void music_update(Game *g, float dt, bool menu) {
+#ifdef __EMSCRIPTEN__
+    static bool started;
+    if (!started && fetch_next == 0) { started = true; music_fetch(); }
+#endif
     if (!music_ready) return;
     int want = -1;
     bool looping = true;

@@ -947,7 +947,7 @@ int town_draw_tracker(Game *g, PlayerSlot *ps, int W, int H, int y) {
     int maxc = (W - 8) / 6;
     if ((int)strlen(buf) > maxc) buf[maxc] = 0;
     font_begin(W, H);
-    font_text((W - font_text_width(buf)) / 2, y, buf, 0.75f, 0.9f, 0.55f);
+    game_tracker_text(ps, W, y, buf, 0.75f, 0.9f, 0.55f);
     font_end();
     return 1;
 }

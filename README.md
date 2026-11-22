@@ -412,8 +412,9 @@ last and shows what is saved; *New characters* (press twice) deletes the save of
 | Key | Action |
 |-----|--------|
 | WASD / mouse | move / look |
-| Left / right mouse button | attack / alternate attack (unlocked by skills) |
+| Left / right mouse button | attack / alternate attack (a whirl, a power shot, a small nova from the start; the last skill of each branch makes it stronger) |
 | 1, 2, 3, 4 or mouse wheel | blade, bow, staff, pickaxe (left digs, right throws a bomb) |
+| Z | back to the weapon held before (the swing timer carries over). Arrows bring down fliers and shooters; armour turns edges and arrows but not maces, flails, slings or the staff |
 | X | throw a bomb (2.2 s fuse; breaks masonry; the shop sells 3 for 90 gold) or the flask chosen with C |
 | C | choose what X throws: bomb, oil flask, frost salt, growth tonic (with the pickaxe out also the d-pad or the touch > button; its alternate attack throws) |
 | P | light a campfire from firewood (gamepad: d-pad down with the pickaxe out) |

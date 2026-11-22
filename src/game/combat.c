@@ -3,7 +3,8 @@
 #include "render/batch.h"
 
 /* Retro (Hexen-like) combat: instant swings and projectiles, no combos.
- * Three weapons, each with an alternate attack unlocked by the last tier of its branch. */
+ * Three weapons, each with an alternate attack from the start that the last tier of its branch
+ * makes stronger (openspec weapon-roles). */
 
 static const char *WEAPON_NAMES[WPN_COUNT] = { "SWORD", "BOW", "STAFF" };
 
@@ -40,6 +41,35 @@ static bool undead(const Monster *m) {
     return m->type == MON_SKELETON || m->type == MON_WRAITH || m->type == MON_NECRO || m->element == EL_SHADOW;
 }
 
+/* Weapon roles (openspec weapon-roles): arrows bring down fliers and shooters; armour turns
+ * edges and points but not blunt weight or the staff's bolts. */
+bool monster_armoured(const Monster *m) { return m->type == MON_KNIGHT || m->type == MON_GOLEM || m->type == MON_MIMIC; }
+bool monster_aloft_or_ranged(const Monster *m) {
+    return MONSTERS[m->type].flies || m->type == MON_SKELETON || m->type == MON_WISP || m->type == MON_SHAMAN ||
+           m->type == MON_EYE || m->type == MON_NECRO;
+}
+static bool blunt_base(int base) { return base == WB_MACE || base == WB_FLAIL || base == WB_SLING || base == WB_CANNON; }
+float weapon_role_mult(const Monster *m, int wclass, int base) {
+    if (m->type == MON_DRAGON) return 1.0f; /* dragons have their own rules */
+    if (monster_armoured(m)) {
+        if (blunt_base(base)) return 1.4f;
+        if (wclass == WPN_STAFF) return 1.3f;
+        return wclass == WPN_BOW ? 0.7f : 0.8f;
+    }
+    if (wclass == WPN_BOW && monster_aloft_or_ranged(m)) return 1.5f;
+    return 1.0f;
+}
+
+/* Once in a while, say which weapon would do better (a role hit, or armour turning a blade). */
+static void role_hint(Game *g, PlayerSlot *ps, const Monster *m, int wclass, float mult) {
+    if (ps->role_hint_t > g->time) return;
+    if (mult < 1.0f) game_banner(ps, wclass == WPN_BOW ? "ARMOUR TURNS ARROWS: A MACE, A FLAIL OR THE STAFF (3) BITES"
+                                                       : "ARMOUR TURNS THE EDGE: A MACE, A FLAIL OR THE STAFF (3) BITES");
+    else if (mult > 1.0f && wclass == WPN_BOW && monster_aloft_or_ranged(m)) game_banner(ps, "ARROWS BRING FLIERS AND SHOOTERS DOWN");
+    else return;
+    ps->role_hint_t = g->time + 300.0f;
+}
+
 /* A hit with a weapon (a blow, or an arrow or bolt it shot): critical hits, the weapon's
  * material and memory, its elemental affix, and then its powers. */
 static void weapon_hit_ex(Game *g, PlayerSlot *ps, Monster *m, int wclass, float dmg, vec3 from, float knock, bool shot) {
@@ -60,6 +90,13 @@ static void weapon_hit_ex(Game *g, PlayerSlot *ps, Monster *m, int wclass, float
     }
     if (it->bane && it->bane - 1 == m->type && it->bane_kills >= BANE_KILLS) dmg *= 1.25f; /* it knows this kind */
     if (it->material == MAT_SILVER && undead(m)) dmg *= 1.4f;
+    float role = weapon_role_mult(m, wclass, it->base);
+    if (role != 1.0f) {
+        dmg *= role;
+        role_hint(g, ps, m, wclass, role);
+        if (role > 1.0f) particles_burst(g, c, v3(1.0f, 0.75f, 0.35f), 6, 3.0f, 0.04f, true); /* it bites */
+        else particles_burst(g, c, v3(0.8f, 0.8f, 0.85f), 4, 2.0f, 0.03f, false);             /* glances off */
+    }
     if (it->material == MAT_BRONZE) knock *= 1.3f;
     int el = item_affix_element(it);
     if (!shot) {
@@ -534,13 +571,14 @@ static void update_projectiles(Game *g, float dt0) {
 
 /* ---------- attacks ---------- */
 
-static void sword_strike(Game *g, PlayerSlot *ps, bool whirl) {
+/* whirl: 0 a blow, 1 the small whirl everyone has, 2 the Whirlwind skill */
+static void sword_strike(Game *g, PlayerSlot *ps, int whirl) {
     Stats *s = &ps->st;
     vec3 eye = player_eye(&ps->pl);
     vec3 fwd = v3(cosf(ps->pl.yaw), 0, sinf(ps->pl.yaw));
     const WeaponBase *wb = equipped_base(s, WPN_SWORD);
-    float dmg = 20.0f * (1.0f + 0.3f * s->ranks[SK_KEEN_EDGE]) * level_mult(s) * (whirl ? 1.5f : 1.0f) * weapon_mult(s, WPN_SWORD);
-    float range = whirl ? wb->range + 0.7f : wb->range;
+    float dmg = 20.0f * (1.0f + 0.3f * s->ranks[SK_KEEN_EDGE]) * level_mult(s) * (whirl == 2 ? 1.5f : whirl ? 0.9f : 1.0f) * weapon_mult(s, WPN_SWORD);
+    float range = whirl == 2 ? wb->range + 0.7f : whirl ? wb->range + 0.3f : wb->range;
     float arc = whirl ? 2.0f * PI_F : fmaxf(wb->arc_deg, s->ranks[SK_CLEAVE] ? 150.0f : 0.0f) * PI_F / 180.0f;
     float knock = wb->knock * (item_has_affix(&s->equipped[WPN_SWORD], AF_HEAVY) ? 1.5f : 1.0f);
     bool hit_all = whirl || s->ranks[SK_CLEAVE] || wb->arc_deg >= 300.0f;
@@ -683,17 +721,36 @@ static void cast_bolt(Game *g, PlayerSlot *ps) {
     }
 }
 
-static void cast_nova(Game *g, PlayerSlot *ps) {
+static void cast_nova(Game *g, PlayerSlot *ps, bool full) {
     Stats *s = &ps->st;
     vec3 c = v3_add(ps->pl.pos, v3(0, 0.8f, 0));
-    float dmg = 30.0f * (1.0f + 0.3f * s->ranks[SK_FOCUS]) * level_mult(s) * weapon_mult(s, WPN_STAFF);
-    for (int i = 0; i < 20; i++) {
-        float a = i * 2.0f * PI_F / 20.0f;
+    float dmg = (full ? 30.0f : 18.0f) * (1.0f + 0.3f * s->ranks[SK_FOCUS]) * level_mult(s) * weapon_mult(s, WPN_STAFF);
+    int n = full ? 20 : 12;
+    for (int i = 0; i < n; i++) {
+        float a = i * 2.0f * PI_F / n;
         vec3 d = v3(cosf(a), 0, sinf(a));
-        Projectile *p = proj_new(g, ps->index, PJ_NOVA, v3_add(c, v3_scale(d, 0.5f)), v3_scale(d, 14.0f), dmg);
-        if (p) p->pierce = 2;
+        Projectile *p = proj_new(g, ps->index, PJ_NOVA, v3_add(c, v3_scale(d, 0.5f)), v3_scale(d, full ? 14.0f : 10.0f), dmg);
+        if (p) { p->pierce = full ? 2 : 1; p->wclass = WPN_STAFF; if (!full) p->life = 0.5f; }
     }
-    flash_add(g, c, v3(1.5f, 0.7f, 0.25f), 12.0f, 0.5f);
+    flash_add(g, c, v3(1.5f, 0.7f, 0.25f), full ? 12.0f : 7.0f, 0.5f);
+}
+
+/* The bow's power shot: one arrow, twice the damage, through three foes. */
+static void power_shot(Game *g, PlayerSlot *ps) {
+    Stats *s = &ps->st;
+    vec3 eye = player_eye(&ps->pl);
+    const WeaponBase *wb = equipped_base(s, WPN_BOW);
+    float dmg = 15.0f * 2.2f * (1.0f + 0.3f * s->ranks[SK_STEADY_AIM]) * level_mult(s) * weapon_mult(s, WPN_BOW);
+    vec3 d = aim_dir(g, ps, 0.0f, 0.0f);
+    Projectile *p = proj_new(g, ps->index, PJ_ARROW, v3_add(eye, v3_scale(d, 0.3f)), v3_scale(d, wb->speed * 1.3f), dmg);
+    if (!p) return;
+    p->pierce = wb->pierce + 3;
+    p->element = (u8)item_affix_element(&s->equipped[WPN_BOW]);
+    p->rarity = s->equipped[WPN_BOW].rarity > RAR_COMMON ? s->equipped[WPN_BOW].rarity : RAR_COMMON + 1; /* it glows */
+    p->wclass = WPN_BOW;
+    p->wbase = s->equipped[WPN_BOW].base;
+    p->grav = wb->gravity > 0 ? wb->gravity * 0.5f : 2.0f;
+    flash_add(g, v3_add(eye, v3_scale(d, 0.6f)), v3(1.0f, 0.9f, 0.6f), 4.0f, 0.12f);
 }
 
 static float mana_cost(const Stats *s, float base) { return base * (1.0f - 0.15f * s->ranks[SK_FOCUS]); }
@@ -708,20 +765,28 @@ static void try_attack(Game *g, PlayerSlot *ps, bool alt) {
     switch (s->weapon) {
     case WPN_SWORD:
         if (alt) {
-            if (!s->ranks[SK_WHIRLWIND] || s->mana < 12) return;
-            s->mana -= 12;
-            sword_strike(g, ps, true);
-            s->cooldown = s->swing_len = 0.8f * speed;
+            /* everyone can whirl; the Whirlwind skill makes it wider and harder (openspec weapon-roles) */
+            bool full = s->ranks[SK_WHIRLWIND] > 0;
+            if (s->mana < (full ? 12 : 10)) return;
+            s->mana -= full ? 12 : 10;
+            sword_strike(g, ps, full ? 2 : 1);
+            s->cooldown = s->swing_len = (full ? 0.8f : 0.9f) * speed;
         } else {
-            sword_strike(g, ps, false);
+            sword_strike(g, ps, 0);
             s->cooldown = s->swing_len = wb->cooldown * speed;
         }
         break;
     case WPN_BOW:
         if (alt) {
-            if (!s->ranks[SK_ARROW_STORM] || s->mana < 15) return;
-            s->mana -= 15;
-            fire_arrows(g, ps, 9, 20.0f);
+            if (s->ranks[SK_ARROW_STORM]) {
+                if (s->mana < 15) return;
+                s->mana -= 15;
+                fire_arrows(g, ps, 9, 20.0f);
+            } else { /* the power shot everyone has: one heavy arrow through three */
+                if (s->mana < 10) return;
+                s->mana -= 10;
+                power_shot(g, ps);
+            }
             s->cooldown = s->swing_len = 1.0f * speed;
         } else {
             fire_arrows(g, ps, s->ranks[SK_MULTISHOT] ? 3 : 1, 6.0f);
@@ -730,10 +795,11 @@ static void try_attack(Game *g, PlayerSlot *ps, bool alt) {
         break;
     case WPN_STAFF:
         if (alt) {
-            float c = mana_cost(s, 25);
-            if (!s->ranks[SK_NOVA] || s->mana < c) return;
+            bool full = s->ranks[SK_NOVA] > 0; /* without the skill: a small nova */
+            float c = mana_cost(s, full ? 25 : 16);
+            if (s->mana < c) return;
             s->mana -= c;
-            cast_nova(g, ps);
+            cast_nova(g, ps, full);
             s->cooldown = s->swing_len = 1.1f * speed;
         } else {
             float c = mana_cost(s, wb->mana);
@@ -969,9 +1035,25 @@ void combat_draw_viewmodel(Game *g, PlayerSlot *ps) {
 
 const char *combat_weapon_name(int w) { return w >= 0 && w < WPN_COUNT ? WEAPON_NAMES[w] : "PICKAXE"; }
 
+/* Taking up a weapon remembers the one before it (Z swaps back). The swing timer is the
+ * player's, not the weapon's: a swap neither resets nor adds to it. */
+void game_select_weapon(PlayerSlot *ps, int w) {
+    if (w < 0 || w >= WPN_COUNT) return;
+    if (ps->st.weapon != w) ps->last_weapon = (u8)ps->st.weapon;
+    ps->st.weapon = w;
+    ps->pick_out = false;
+}
+
+void game_swap_weapon(PlayerSlot *ps) {
+    int w = ps->last_weapon < WPN_COUNT ? ps->last_weapon : WPN_SWORD;
+    if (w == ps->st.weapon && !ps->pick_out) w = ps->st.weapon == WPN_SWORD ? WPN_BOW : WPN_SWORD;
+    if (ps->pick_out) { ps->pick_out = false; return; } /* the pickaxe away: back to the weapon in hand */
+    game_select_weapon(ps, w);
+}
+
 void game_cycle_weapon(PlayerSlot *ps, int dir) {
     int cur = ps->pick_out ? WPN_COUNT : ps->st.weapon;
     cur = (cur + dir + WPN_COUNT + 1) % (WPN_COUNT + 1);
-    ps->pick_out = cur == WPN_COUNT;
-    if (!ps->pick_out) ps->st.weapon = cur;
+    if (cur == WPN_COUNT) ps->pick_out = true;
+    else game_select_weapon(ps, cur);
 }

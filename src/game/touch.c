@@ -255,11 +255,7 @@ void touch_draw(Game *g) {
         button_pos(W, H, b, &x, &y, &rr);
         float a = t->held[b] ? 0.5f : 0.22f;
         vec3 c = b == TB_ATTACK ? v3(1.0f, 0.45f, 0.3f) : (b == TB_ALT ? v3(0.5f, 0.6f, 1.0f) : v3(0.9f, 0.8f, 0.6f));
-        if (b == TB_ALT) {
-            /* the alternate attack needs the weapon's last skill */
-            static const int NEED[WPN_COUNT] = { SK_WHIRLWIND, SK_ARROW_STORM, SK_NOVA };
-            if (!ps->st.ranks[NEED[ps->st.weapon]]) a *= 0.45f;
-        }
+        if (b == TB_ALT && ps->st.mana < 10) a *= 0.45f; /* every weapon has its alternate attack; dim without the mana */
         if (b == TB_SPELL) {
             c = ps->st.spell >= 0 && spell_is_attack(ps->st.spell) ? element_color(spell_element(ps->st.spell)) : v3(0.95f, 0.9f, 0.7f);
         }

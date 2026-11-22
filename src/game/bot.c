@@ -104,6 +104,7 @@ typedef struct Bot {
     vec3 warm_at, harvest_at;
     bool warming, harvesting;
     int warmed, harvests, throws;
+    float wpn_until; int swaps; /* a weapon taken up for a foe is kept a while (openspec weapon-roles) */
     u64 prey_key, skip_prey[8];  /* animals it gave up on */
     float skip_until[8];
     int nskip;
@@ -577,7 +578,7 @@ static void manage_gear(Game *g, PlayerSlot *ps) {
         used--;
     }
     int want = B.style == BS_ARCHER ? WPN_BOW : B.style == BS_CASTER ? WPN_STAFF : WPN_SWORD;
-    s->weapon = want;
+    if (B.t >= B.wpn_until) game_select_weapon(ps, want); /* (not mid-fight: the foe chose the weapon) */
 }
 
 /* the best attack spell known (rank, then form strength) */
@@ -692,6 +693,23 @@ static void fight(Game *g, PlayerSlot *ps, Monster *m, PlayerInput *in, float dt
     float d = v3_len(v3_sub(c, eye));
     float hd = sqrtf((c.x - eye.x) * (c.x - eye.x) + (c.z - eye.z) * (c.z - eye.z));
     face(ps, c, 10.0f, dt);
+    /* the weapon the foe wants (openspec weapon-roles): arrows for fliers and shooters at a
+     * distance, the staff (or a blunt blade) against armour; the spam bot keeps its blade */
+    if (B.style != BS_SPAM && B.t >= B.wpn_until) {
+        int want = s->weapon;
+        int sb = s->equipped[WPN_SWORD].base;
+        bool blunt = sb == WB_MACE || sb == WB_FLAIL;
+        if (monster_armoured(m) && m->type != MON_DRAGON) want = blunt || s->mana < s->maxmana * 0.3f ? WPN_SWORD : WPN_STAFF;
+        else if (monster_aloft_or_ranged(m) && m->type != MON_DRAGON && d > 4.0f) want = WPN_BOW;
+        else if (d < 3.0f && B.style != BS_ARCHER && B.style != BS_CASTER) want = WPN_SWORD;
+        else if (B.style == BS_ARCHER) want = WPN_BOW;
+        else if (B.style == BS_CASTER && s->mana > s->maxmana * 0.2f) want = WPN_STAFF;
+        if (want != s->weapon) {
+            game_select_weapon(ps, want);
+            B.swaps++;
+            B.wpn_until = B.t + 3.0f;
+        }
+    }
     bool ranged = s->weapon != WPN_SWORD;
     float reach = MONSTERS[m->type].hw * m->scale + 1.9f;
     if (!ranged) {
@@ -713,6 +731,18 @@ static void fight(Game *g, PlayerSlot *ps, Monster *m, PlayerInput *in, float dt
     int sp = best_attack_spell(s);
     bool caster = B.style == BS_CASTER;
     if (B.style == BS_SPAM) return; /* (the fun audit's spam bot: the primary attack and nothing else) */
+    /* the alternate attack: a whirl or a nova into a crowd close by, a power shot at a strong
+     * foe far off (openspec weapon-roles) */
+    {
+        int close = 0;
+        for (int i = 0; i < MAX_MONSTERS; i++)
+            if (g->mons[i].alive && g->mons[i].awake && g->mons[i].charm_t <= 0 && v3_len(v3_sub(g->mons[i].pos, ps->pl.pos)) < 3.5f) close++;
+        bool use = false;
+        if (s->weapon == WPN_SWORD) use = close >= 2 && s->mana >= 12;
+        else if (s->weapon == WPN_STAFF) use = close >= 2 && s->mana >= 25;
+        else use = m->grade != GRADE_NORMAL && d > 6.0f && s->mana > s->maxmana * 0.4f && facing(ps, c, 0.1f);
+        if (use && s->cooldown <= 0) { ps->pad_attack = false; ps->pad_alt = true; }
+    }
     if (sp >= 0 && s->spell_cd <= 0 && facing(ps, c, 0.15f) && d < 18.0f && s->mana > s->maxmana * (caster ? 0.15f : 0.6f)) {
         s->spell = sp;
         if (spell_cast_id(g, ps, sp)) g_tele.casts_attack++;
@@ -1135,9 +1165,9 @@ static void summary(PlayerSlot *ps) {
     {
         double mu = B.t_n ? B.t_sum / B.t_n : 0, var = B.t_n ? B.t_sq / B.t_n - mu * mu : 0;
         logf_("FUN react=%.0f tension_mean=%.3f tension_sd=%.3f tension_cv=%.3f tension_high_max=%d samples=%d near_miss=%d intents=%d dropped=%d "
-              "uses=%d,%d,%d,%d,%d,%d,%d,%d near_intents=%d near_dropped=%d\n", B.react, mu, sqrt(var > 0 ? var : 0), mu > 0 ? sqrt(var > 0 ? var : 0) / mu : 0, B.t_high_max, B.t_n,
+              "uses=%d,%d,%d,%d,%d,%d,%d,%d near_intents=%d near_dropped=%d swaps=%d\n", B.react, mu, sqrt(var > 0 ? var : 0), mu > 0 ? sqrt(var > 0 ? var : 0) / mu : 0, B.t_high_max, B.t_n,
               g_tele.near_miss, B.intents, B.intent_dropped, g_tele.uses[0], g_tele.uses[1], g_tele.uses[2], g_tele.uses[3], g_tele.uses[4],
-              g_tele.uses[5], g_tele.uses[6], g_tele.uses[7], B.near_intents, B.near_dropped);
+              g_tele.uses[5], g_tele.uses[6], g_tele.uses[7], B.near_intents, B.near_dropped, B.swaps);
     }
     logf_("KING steps=%d done=%03x gen=%d won=%d ending=%d town_works=%d raids=%d armour=%d hunts=%d dragons=%d arch_shortcuts=%d\n", g_tele.king_steps, G->world.king_done,
           G->world.king_gen, G->world.king_wins, G->world.king_ending, g_tele.town_works, g_tele.town_raids, s->armour, B.hunts, g_tele.dragons, B.arch_shortcuts);

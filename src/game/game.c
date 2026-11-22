@@ -168,6 +168,7 @@ static void tele_hurt(float dmg) {
 /* The Golden Thread key, or for 15 s after coming back from death: back where you fell,
  * for another fifth of your gold. */
 void game_thread_key(Game *g, PlayerSlot *ps) {
+    ps->tracker_age = 0; /* (the line at the top brightens again) */
     Stats *s = &ps->st;
     if (s->fell_t > 0 && !s->dead) {
         int cost = s->gold / 5;
@@ -623,9 +624,10 @@ void game_event(Game *g, const SDL_Event *e) {
         case SDLK_O: open_menu(ps, TAB_ALCHEMY); break;
         case SDLK_U: open_menu(ps, TAB_FORGE); break;
         case SDLK_M: ps->show_map = !ps->show_map; ps->show_skills = false; break;
-        case SDLK_1: ps->st.weapon = WPN_SWORD; ps->pick_out = false; break;
-        case SDLK_2: ps->st.weapon = WPN_BOW; ps->pick_out = false; break;
-        case SDLK_3: ps->st.weapon = WPN_STAFF; ps->pick_out = false; break;
+        case SDLK_1: game_select_weapon(ps, WPN_SWORD); break;
+        case SDLK_2: game_select_weapon(ps, WPN_BOW); break;
+        case SDLK_3: game_select_weapon(ps, WPN_STAFF); break;
+        case SDLK_Z: game_swap_weapon(ps); break;
         case SDLK_4: ps->pick_out = true; break;
         case SDLK_X: throw_selected(g, ps); break;
         case SDLK_C: throw_cycle(ps); break;
@@ -666,13 +668,23 @@ void game_event(Game *g, const SDL_Event *e) {
     }
 }
 
+/* The line at the top: full brightness while it is new, then it dims to a third over a few
+ * seconds once it has been there 20 s; a new text, Y or G bring it back (openspec guidance). */
+void game_tracker_text(PlayerSlot *ps, int W, int y, const char *buf, float r, float gr, float b) {
+    u32 h = 2166136261u;
+    for (const char *c = buf; *c; c++) h = (h ^ (u8)*c) * 16777619u;
+    if (h != ps->tracker_hash) { ps->tracker_hash = h; ps->tracker_age = 0; }
+    float k = 1.0f - 0.65f * clampf((ps->tracker_age - 20.0f) / 3.0f, 0.0f, 1.0f);
+    font_text((W - font_text_width(buf)) / 2, y, buf, r * k, gr * k, b * k);
+}
+
 /* Y: the line at the top follows the next of the Old King's way, the chronicle and a town's task. */
 void game_next_track(Game *g, PlayerSlot *ps) {
     int (*const T[3])(Game *, PlayerSlot *, int, int, int) = { king_draw_tracker, story_draw_tracker, town_draw_tracker };
     static const char *N[3] = { "THE LINE FOLLOWS THE OLD KING", "THE LINE FOLLOWS THE CHRONICLE", "THE LINE FOLLOWS THE TOWN'S TASK" };
     for (int k = 1; k <= 3; k++) {
         int t = (ps->track + k) % 3;
-        if (T[t](g, ps, 0, 0, 0)) { ps->track = (u8)t; game_banner(ps, N[t]); return; }
+        if (T[t](g, ps, 0, 0, 0)) { ps->track = (u8)t; ps->tracker_age = 0; game_banner(ps, N[t]); return; }
     }
     game_banner(ps, "NOTHING ELSE TO FOLLOW");
 }
@@ -821,6 +833,8 @@ static void update_player(Game *g, PlayerSlot *ps, const PlayerInput *in, float 
     Stats *s = &ps->st;
     if (ps->hitmark_t > 0) ps->hitmark_t -= dt;
     if (ps->potion_hint_t > 0) ps->potion_hint_t -= dt;
+    ps->tracker_age += dt;
+    if (ps->yhint_t > 0) ps->yhint_t -= dt;
     if (ps->danger_note_t > 0) ps->danger_note_t -= dt;
     if (s->dead) {
         s->dead_t += dt;
@@ -1329,7 +1343,10 @@ static void draw_hud(Game *g, PlayerSlot *ps, int W, int H) {
         for (int k = 0; k < 3; k++) has += T[k](g, ps, W, 0, ty);
         for (int k = 0; k < 3; k++)
             if (T[(ps->track + k) % 3](g, ps, W, H, ty)) break;
-        if (has > 1 && !small && !touch) {
+        /* the hint shows in the first five minutes and for a while after a new line opens */
+        if (has > ps->tracker_has) ps->yhint_t = 10.0f;
+        ps->tracker_has = (u8)has;
+        if (has > 1 && !small && !touch && (g->play_time < 300.0f || ps->yhint_t > 0)) {
             font_begin(W, H);
             const char *t = "(Y: ANOTHER LINE)";
             font_text((W - font_text_width(t)) / 2, ty + 10, t, 0.45f, 0.42f, 0.35f);
@@ -1363,7 +1380,7 @@ static void draw_hud(Game *g, PlayerSlot *ps, int W, int H) {
         static const char *STANCES[3] = { "standing", "crouching", "crawling" };
         snprintf(buf, sizeof buf, "%s  %s  open %.0fm  %dx%d", ps->pl.fly ? "FLY" : "WALK", STANCES[ps->pl.stance], ps->openness, W, H);
         font_text(4, y, buf, 0.6f, 0.6f, 0.6f); y += FONT_LINE;
-        if (!small && !touch) font_text(4, y, "LMB/RMB ATTACK  Q SPELL  R NEXT  H/J POTION  K EAT  N FOOD  TAB MENU  M MAP  F FLY  T AHEAD", 0.5f, 0.45f, 0.4f);
+        if (!small && !touch) font_text(4, y, "LMB/RMB ATTACK  Z SWAP  Q SPELL  R NEXT  H/J POTION  K EAT  N FOOD  TAB MENU  M MAP  F FLY  T AHEAD", 0.5f, 0.45f, 0.4f);
     }
     font_end();
     king_draw_credits(g, ps, W, H); /* the Old King settled: the ending and the credits */
@@ -1488,7 +1505,12 @@ static void render_view(Game *g, PlayerSlot *ps, int vx, int vy, int vw, int vh)
 void game_render(Game *g) {
     { /* FC_TIMING (the fun audit): when the first frame is drawn, and when the world round the player is ready */
         static int stage;
-        if (stage < 2 && getenv("FC_TIMING")) {
+#ifdef __EMSCRIPTEN__
+        const bool timing = true; /* the browser always says it, in its console (openspec web-loading) */
+#else
+        const bool timing = getenv("FC_TIMING") != NULL;
+#endif
+        if (stage < 2 && timing) {
             if (stage == 0) { SDL_Log("TIMING first_frame_ms=%llu", (unsigned long long)SDL_GetTicks()); stage = 1; }
             else if (g->players[0].active && chunkmap_settled(&g->map, player_eye(&g->players[0].pl))) {
                 SDL_Log("TIMING playable_ms=%llu", (unsigned long long)SDL_GetTicks());
@@ -1497,7 +1519,7 @@ void game_render(Game *g) {
         }
         static u64 t0, worst;
         static int frames;
-        if (stage == 2 && getenv("FC_TIMING")) { /* then ten seconds of frames: the mean and the worst */
+        if (stage == 2 && timing) { /* then ten seconds of frames: the mean and the worst */
             u64 now = SDL_GetTicksNS();
             static u64 last;
             if (!t0) t0 = last = now;

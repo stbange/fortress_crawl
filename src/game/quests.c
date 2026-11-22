@@ -1119,7 +1119,7 @@ int story_draw_tracker(Game *g, PlayerSlot *ps, int W, int H, int y) {
     int maxc = (W - 8) / 6;
     if ((int)strlen(buf) > maxc) buf[maxc] = 0;
     font_begin(W, H);
-    font_text((W - font_text_width(buf)) / 2, y, buf, 0.95f, 0.55f, 0.4f);
+    game_tracker_text(ps, W, y, buf, 0.95f, 0.55f, 0.4f);
     font_end();
     return 1;
 }

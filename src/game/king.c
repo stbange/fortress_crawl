@@ -1062,7 +1062,7 @@ int king_draw_tracker(Game *g, PlayerSlot *ps, int W, int H, int y) {
     int maxc = (W - 8) / 6;
     if ((int)strlen(buf) > maxc) buf[maxc] = 0;
     font_begin(W, H);
-    font_text((W - font_text_width(buf)) / 2, y, buf, 1.0f, 0.85f, 0.35f);
+    game_tracker_text(ps, W, y, buf, 1.0f, 0.85f, 0.35f);
     font_end();
     return 1;
 }

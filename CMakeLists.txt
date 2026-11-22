@@ -126,6 +126,7 @@ target_compile_definitions(fortress_crawl PRIVATE FC_SFX_DIR="${CMAKE_SOURCE_DIR
                                                   FC_MUSIC_DIR="${CMAKE_SOURCE_DIR}/assets/music")
 
 if(EMSCRIPTEN)
+  set(FC_WEB_SFX_DIR "${CMAKE_SOURCE_DIR}/assets/sfx" CACHE PATH "the sounds packed into the browser build")
   # Web build: WebGL 2, single thread, page from web/shell.html. Output: index.html + .js + .wasm
   set_target_properties(fortress_crawl PROPERTIES OUTPUT_NAME index SUFFIX ".html")
   target_link_options(fortress_crawl PRIVATE
@@ -133,8 +134,9 @@ if(EMSCRIPTEN)
     -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=268435456 -sSTACK_SIZE=1048576
     -sENVIRONMENT=web --shell-file ${CMAKE_SOURCE_DIR}/web/shell.html
     # SHELL: keeps each flag with its path (CMake drops repeated options otherwise)
-    "SHELL:--preload-file ${CMAKE_SOURCE_DIR}/assets/sfx@/sfx"
-    "SHELL:--preload-file ${CMAKE_SOURCE_DIR}/assets/music@/music")
+    # only the sounds are packed (web/build.sh hands in a 4:1 IMA ADPCM copy); the music is
+    # fetched from music/ after the first frame (openspec web-loading)
+    "SHELL:--preload-file ${FC_WEB_SFX_DIR}@/sfx")
   set_property(TARGET fortress_crawl APPEND PROPERTY LINK_DEPENDS ${CMAKE_SOURCE_DIR}/web/shell.html)
 endif()
 

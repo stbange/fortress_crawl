@@ -5,7 +5,7 @@
 
 /* Classless skill tree: four branches of four tiers. One point per level.
  * A tier needs at least one rank in the tier above it in the same branch.
- * Tier 4 of the three weapon branches unlocks that weapon's alternate attack. */
+ * Tier 4 of the three weapon branches makes that weapon's alternate attack stronger. */
 
 enum { BR_BLADE, BR_BOW, BR_ARCANE, BR_SURVIVAL, BRANCH_COUNT };
 

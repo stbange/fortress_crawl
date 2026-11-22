@@ -257,7 +257,9 @@ static int area_hit(Game *g, vec3 c, float r, int element, float dmg, float knoc
 }
 
 void spell_projectile_hit(Game *g, Projectile *p, Monster *m) {
-    element_hit(g, m, p->element, p->dmg, v3_sub(p->pos, v3_scale(p->vel, 0.05f)), p->element == EL_EARTH ? 4.0f : 2.5f, p->owner);
+    /* spells find the gaps in armour (openspec weapon-roles) */
+    float dmg = p->dmg * (monster_armoured(m) && m->type != MON_DRAGON ? 1.3f : 1.0f);
+    element_hit(g, m, p->element, dmg, v3_sub(p->pos, v3_scale(p->vel, 0.05f)), p->element == EL_EARTH ? 4.0f : 2.5f, p->owner);
     flash_add(g, p->pos, element_color(p->element), 4.0f, 0.15f);
     sfx_at(g, sfx_element_impact(p->element), p->pos, p->form == SF_BREATH || p->form == SF_ORB ? 0.5f : 1.0f);
     if (p->pierce > 0) p->pierce--;
