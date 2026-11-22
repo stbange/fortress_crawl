@@ -8,7 +8,7 @@ Monsters in tiers 0-2 SHALL have 40% more health than before, so that a fight la
 - **THEN** its health is 1.4 times its old value
 
 ### Requirement: Heavy blows
-Elites and bosses of the melee kinds without an area attack of their own SHALL, about one attack in four, wind up a heavy blow for 0.9 s with a glowing ring on the ground of its reach; when it lands it SHALL hit everyone inside the ring for 1.5 times its damage.
+Elites and bosses of the melee kinds without an area attack of their own SHALL, about one attack in four, wind up a heavy blow for 0.9 s with a glowing ring on the ground (2.5 m, 3.5 m for a boss) that brightens as it comes; when it lands it SHALL hit everyone inside the ring for 1.5 times its damage.
 
 #### Scenario: Stepping out
 - **WHEN** a player leaves the ring before an elite's heavy blow lands

@@ -168,7 +168,7 @@ change and the number it should move. Effort: S (hours), M (a day), L (days).
    the stone round them, checked with the luminance script used here on `--demo dragonfight` and
    `--demo combat`. The gloom stays in the rooms, not on the enemies.
 
-### P2: impact, pacing and flow
+### P2: impact, pacing and flow - done 2026-11-22, see section 6
 
 8. **Hitstop on heavy blows** (S). A short pause of the simulation (40-60 ms) on a kill, a
    critical hit, a boss's phase and the player being hit hard; `game_update` skips monster and
@@ -271,7 +271,70 @@ The five-run batches are small: W moves by 0.05-0.1 between batches from chance 
 proxy's W fell from 0.59 to 0.54 while it died less), so the trends above, not the second
 decimal, are the finding.
 
-## 6. Running it again
+## 6. After P2 (openspec change add-impact-and-pacing)
+
+All eight P2 items are in (2026-11-22). The same personas and seeds, 30 minutes each, after P1
+and after P2:
+
+| | After P1 | After P2 |
+|---|---|---|
+| Human proxy: W (sd) | 0.54 (0.29) | 0.63 (0.36) |
+| Oracle: W (sd) | 0.62 (0.24) | 0.72 (0.20) |
+| Spam: W | 0.56 | 0.25 |
+| Novice: W, deaths/h | 0.00, 6.8 | 0.00, 6.0 |
+| Deaths/h: human proxy, oracle, spam | 1.6, 0.8, 0.8 | 1.6, 0.4, 4.4 |
+| Average fight (human proxy) | 1.0 s | 1.1 s |
+| Share of time in fights (human proxy, oracle) | 16%, 11% | 17%, 23% |
+| Tension CV (human proxy) | 2.03 | 1.68 |
+| Near-misses a minute (human proxy, oracle) | 0.53, 0.27 | 0.38, 0.51 |
+| Attack presses lost within 100 ms of readiness | 0.5% | 0% (0 of 647) |
+| Feedback channels: core, high-impact | 2.5, 3.1 | 3.0, 4.6 |
+| Retry after death | 3.0 s | 1.0 s on a press |
+
+Channels now: swing 3 (animation, sound, a marker on a hit), jump and landing 3 (sound, dust, the
+eye's dip), hit on a monster 5 (adds the marker, hitstop on big blows), kill 6 (adds hitstop, a
+camera kick, the gold marker), hurt 5 (adds the camera and hitstop on big hits).
+
+What killed the bots (16 deaths, 11 of them the spam bot's): boss-grade brutes 9 (grade 2, deeper
+than tier 0), projectiles 3, a slime, a knight, a brute, a blast.
+
+```text
+=== GAME FUN AUDIT REPORT (after P2) ===
+- Kinesthetics & Feel (M_feel):   [1.00] | Latency: 1 frame, DropRate: 0% near readiness, Channels: 3.0 / 4.6
+- Flow & Skill Gap (M_flow):      [0.92] | Win/Surv: Rand=0%, Human=63%, Opt=72%   (sigma Human 0.36)
+- Strategic Entropy (M_choice):   [0.85] | H_norm=0.35, max p=0.58, SpamBot Ratio=0.40
+- Pacing & Tension (M_pace):      [0.48] | Tension CV=1.68 (human), Near-Misses=0.4/min
+- Fairness & Clarity (M_fair):    [0.90] | Hurtbox Ratio=0.69, Telegraph>=350ms (heavy blow 900ms + ring), Contrast 3.7:1
+- Loop Friction (M_loop):         [0.94] | TTFA=1.5-2.4s, Retry=1.0s
+
+COMPOSITE FUN SCORE: 81.5 / 100   (from 69.4; 63.4 at the start)
+```
+
+What worked:
+- **Impact.** Every high-impact event has four channels or more, and the hitstop never stops the
+  player's own view or shots.
+- **Choice is back.** The spam bot, which only swings, now loses to the human proxy by more than
+  half (ratio 0.40): heavy blows and the shooters in packs punish standing in place.
+- **The expert pulls ahead.** The oracle beats the human proxy by 0.09 and dies a quarter as often.
+- **Loop.** Retry after a death is 1 s on a press.
+
+What did not, honestly:
+- **Fights are not longer.** The average fight is still about 1.1 s (target 3-5 s), although
+  monsters in tiers 0-2 have 40% more health. The fight counter measures stretches of continuous
+  combat, and these break up as packs come in waves, so part of this may be the metric; the time
+  spent fighting did rise (the oracle's from 11% to 23%). Either way pacing is still the weakest
+  pillar: tension CV 1.68 against the 0.25-0.85 target, and near-misses 0.4-0.5 a minute
+  against 2+.
+- **Outcomes still swing** (sd of the human proxy's W 0.36, target under 0.3). Boss-grade
+  brutes are now the main killer; the early-boss rule covers tier 0 only, and these died deeper.
+- **The spam bot now dies 4.4 times an hour.** That is the intended punishment for button
+  mashing, but a new player who mashes will feel it too; the heavy-blow ring and the danger
+  warning are what tells them why.
+
+Next: make brute bosses' slam read like the heavy blow (a ring), measure fight length per
+encounter rather than per combat stretch, and P3 16 (weapons with roles) for pacing and choice.
+
+## 7. Running it again
 
 ```bash
 # one persona run (30 minutes of play, about 3 minutes of wall time)

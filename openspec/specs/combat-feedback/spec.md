@@ -1,11 +1,16 @@
-## ADDED Requirements
+# combat-feedback Specification
+
+## Purpose
+How a blow, a kill, a hurt, a jump and a landing are felt: hitstop, the camera, the crosshair and dust.
+
+## Requirements
 
 ### Requirement: Hitstop
-Monsters and shots SHALL pause for 50 ms when a monster is killed, 40 ms when a blow takes a quarter of a monster's life, and 60 ms when the player loses more than 15% of their health in one hit; the pause SHALL not exceed 80 ms and SHALL not stop the player's own movement or view.
+Monsters and their shots SHALL pause for 50 ms when the player kills a monster, 40 ms when the player's blow takes a quarter of a monster's life, and 60 ms when the player loses more than 15% of their health in one hit; the pause SHALL not exceed 80 ms and SHALL not stop the player's own movement, view or shots.
 
 #### Scenario: A kill
 - **WHEN** a player's blow kills a monster
-- **THEN** the monsters and shots near stand still for 50 ms
+- **THEN** the monsters and their shots stand still for 50 ms
 
 ### Requirement: Camera impulse
 The view SHALL shake briefly when the player loses more than 10% of their health in one hit (more for bigger hits) and slightly on the player's own kills; the eye SHALL dip on landing from a fall faster than 7 m/s.

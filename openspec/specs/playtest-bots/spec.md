@@ -43,3 +43,10 @@ With FC_TIMING set, the game SHALL log the time to its first frame, to the first
 #### Scenario: Time to play
 - **WHEN** the game starts with FC_TIMING=1 and a seed
 - **THEN** it logs TIMING lines for the first frame, playable, and the frame times
+
+### Requirement: Bot survival
+Bots SHALL heal (the spell, then a potion) below half their health, and the cautious style below 55%.
+
+#### Scenario: Hurt
+- **WHEN** an explorer bot falls to 45% of its health with a potion
+- **THEN** it heals or drinks
