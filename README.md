@@ -1,7 +1,7 @@
 # Fortress Crawl
 
 **[▶ Play it in your browser](https://stbange.github.io/fortress_crawl/)** (desktop or phone;
-the first load fetches about 55 MB of sound and music).
+the first load fetches about 8 MB; the music follows once you play).
 
 An endless, procedurally generated 3D dungeon crawler in C (C11) using SDL3 and OpenGL 3.3.
 You start in front of a huge castle built into a mountain. Everything behind the gate is
