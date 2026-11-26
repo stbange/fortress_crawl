@@ -51,6 +51,8 @@ Gate, dragons, crafting and the generated chronicle feed it. How the systems fit
 - SDL3 (fetched by CMake), Emscripten for the browser build, ElevenLabs for generating sounds.
 
 ## How this folder was started
-OpenSpec was set up in November 2026 by hand in its standard layout. The specs cover the systems
-changed since the realms (2026-11-16); earlier systems are described in `docs/` and will get
-specs as they are next changed.
+OpenSpec was set up in November 2026 by hand in its standard layout. At first the specs covered
+only the systems changed since the realms (2026-11-16); the change `specify-whole-game`
+(2026-11-26) wrote down the rest as it stood, so `specs/` now covers the whole game. `docs/` keeps
+the background, the numbers and the history; where it and a spec differ, the spec is right, and
+a change to the game starts as a change here.

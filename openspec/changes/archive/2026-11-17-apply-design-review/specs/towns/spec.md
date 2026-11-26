@@ -41,3 +41,5 @@ The healer SHALL cure wounds, burns, poison, cold and the after-effects of elixi
 
 ### Requirement: Market discounts
 **Reason**: Discounts made gold pile up further; trust now opens special wares instead (Special wares by trust).
+
+**Migration**: Prices are the people's own for everyone; friends, the honoured and payers of a caravan get the special wares of Special wares by trust.

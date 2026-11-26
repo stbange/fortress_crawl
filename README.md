@@ -61,7 +61,7 @@ the place).
 
 ### Menus and play
 
-The character menu has eight tabs: ITEMS, SPELLS, SKILLS, STORY, SHOP, FOOD, ALCHEMY and FORGE.
+The character menu has nine tabs: ITEMS, SPELLS, SKILLS, STORY, SHOP, FOOD, ALCHEMY, FORGE and HELP.
 
 | | |
 |---|---|
@@ -173,7 +173,7 @@ fullscreen and landscape, which iPhones do not allow, so turn the phone yourself
 | Left part of the screen | move stick that appears under your thumb; push it past the ring to sprint |
 | Right part of the screen | drag to look |
 | Big button (weapon name) | attack while held; drag from it to aim at the same time |
-| ALT | alternate attack (dimmed until the weapon's last skill is learned) |
+| ALT | alternate attack (every weapon has one; dimmed without the mana for it) |
 | JUMP, DUCK, WPN | jump, crouch, next weapon |
 | CAST, > | cast the selected spell (hold for breath spells), next spell |
 | PATH, POT, MENU, MAP (top right) | Golden Thread to your target; drink a potion; character menu (tap tabs and items, tap again to equip, use or learn, X closes); map (tap to close) |
@@ -227,7 +227,7 @@ third of the chunks hold a chest (walk into it); some hide a **relic**, a collec
 permanently adds health, damage, mana or speed. There are 12 kinds; duplicates stack.
 Weapons come in 12 types in three classes: blades (dagger, sword, axe, mace, spear,
 greatsword), bows (shortbow, longbow, crossbow) and staves (wand, staff, scepter). Each has
-its own speed, reach, arc or projectile, a rarity (common, magic, rare, epic) and up to two
+its own speed, reach, arc or projectile, a rarity (common, magic, rare, epic, legendary) and up to two
 affixes such as *Burning*, *Frozen*, *Crackling*, *Venomous*, *Vampiric*, *Swift*, *Keen*
 or *Heavy*. Deeper finds are stronger. Spare weapons can be scrapped for gold.
 
