@@ -733,9 +733,19 @@ found once.
 |---|---|
 | ![The lost arts](docs/screenshots/lost_arts.png) | ![A legendary](docs/screenshots/inventory.png) |
 | Whip, flail, scythe; rapier, sling, chakram; hand cannon, tome, censer | A legendary of this world with its powers, material, kills and lore |
+| ![The armoury](docs/screenshots/armoury.png) | ![An arming sword](docs/screenshots/armoury_sword.png) |
+| The twelve weapons of every world close up, in plain iron (`--demo armoury`) | One alone: the arming sword (`--demo armoury --cast 11`) |
+
+**How they are made**: no weapon is a stack of boxes. Blades are lofted through cross-sections
+(an edge bevel on each side, a fuller down the flat, distal taper, a point); hafts, grips, limbs
+and barrels are round and taper; grips are wound with cord between ferrules; guards bend toward
+the blade and end in knobs; pommels are wheels; an axe's bit thins to a ground bevel; a mace has
+six sharpened flanges. Each facet is lit toward the eye with a stepped glint on metal, so steel
+reads as steel in torchlight (`src/game/weapons.c`).
 
 Screenshots of them: `--demo weapons` (a rack of the 12 classic ones), `--demo lostarts` (the
-nine lost arts) and `--demo impact` (a hit on a
+nine lost arts), `--demo armoury --cast PAGE` (close up: 0 the twelve, 1 the lost arts, 2 and 3
+the same in rarities and materials, 10 + a base number one weapon alone) and `--demo impact` (a hit on a
 monster), with `--weapon base[:rarity[:affix[:affix]]]` to choose what you hold, for example
 `--weapon greatsword:legendary:vampiric`. `--demo placefight` shows one monster of each kind
 in the region you start in.

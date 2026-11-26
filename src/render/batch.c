@@ -104,6 +104,8 @@ static void tri(vec3 a, vec3 b, vec3 c, vec3 col, bool e) {
     v3push(a, lc, e); v3push(b, lc, e); v3push(c, lc, e);
 }
 
+void batch3d_tri_raw(vec3 a, vec3 b, vec3 c, vec3 col, bool e) { v3push(a, col, e); v3push(b, col, e); v3push(c, col, e); }
+
 static void quad(vec3 a, vec3 b, vec3 c, vec3 d, vec3 col, bool e) {
     tri(a, b, c, col, e);
     tri(a, c, d, col, e);

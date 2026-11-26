@@ -668,6 +668,8 @@ void game_event(Game *g, const SDL_Event *e) {
     }
 }
 
+int g_armoury = -1; /* --demo armoury --cast PAGE: weapons laid out close up (main.c) */
+
 /* The line at the top: full brightness while it is new, then it dims to a third over a few
  * seconds once it has been there 20 s; a new text, Y or G bring it back (openspec guidance). */
 void game_tracker_text(PlayerSlot *ps, int W, int y, const char *buf, float r, float gr, float b) {
@@ -1467,6 +1469,7 @@ static void render_view(Game *g, PlayerSlot *ps, int vx, int vy, int vw, int vh)
     chunkmap_draw(&g->map, eye);
 
     BatchFog fog = { eye, ps->fog, ps->fog_density };
+    weapon_set_eye(eye); /* (weapons light their own facets toward the eye) */
     batch3d_begin();
     monsters_draw(g, eye);
     wildlife_draw(g, ps);
@@ -1485,7 +1488,9 @@ static void render_view(Game *g, PlayerSlot *ps, int vx, int vy, int vw, int vh)
     mat4 vm_proj = m4_perspective(60.0f * PI_F / 180.0f, aspect, 0.01f, 10.0f);
     BatchFog none = { v3(0, 0, 0), ps->fog, 0.0f };
     batch3d_begin();
-    if (ps->st.scry_t <= 0) combat_draw_viewmodel(g, ps);
+    weapon_set_eye(v3(0, 0, 0)); /* the weapon in view is drawn in view space */
+    if (g_armoury >= 0) weapon_draw_armoury(g_armoury, g->time);
+    else if (ps->st.scry_t <= 0) combat_draw_viewmodel(g, ps);
     batch3d_flush(&vm_proj, &none);
     renderer_end_world(&g->r);
 
@@ -1493,6 +1498,7 @@ static void render_view(Game *g, PlayerSlot *ps, int vx, int vy, int vw, int vh)
     if (story_parley_open(ps)) { story_draw_parley(g, ps, vw, vh); return; }
     if (ps->show_map) explore_draw_map(g, ps, vw, vh);
     else if (ps->show_skills) draw_menu(g, ps, vw, vh);
+    else if (g_armoury >= 0) return; /* (the armoury close-up: no HUD) */
     else {
         story_draw_plates(g, ps, vw, vh);
         draw_hud(g, ps, vw, vh);

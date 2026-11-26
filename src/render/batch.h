@@ -24,6 +24,8 @@ void batch3d_obox(vec3 c, vec3 ax, vec3 ay, vec3 az, vec3 col, bool emissive);
 void batch3d_octa(vec3 c, float r, float h, float yaw, vec3 col, bool emissive);
 /* Pyramid / cone stand-in: square base of half size r at c, apex `h` along `dir`. */
 void batch3d_spike(vec3 c, vec3 dir, float r, float h, vec3 col, bool emissive);
+/* One triangle whose colour the caller has already lit (weapons light their own facets). */
+void batch3d_tri_raw(vec3 a, vec3 b, vec3 c, vec3 col, bool emissive);
 void batch3d_flush(const mat4 *vp, const BatchFog *fog);
 
 /* 2D in target pixels, origin top-left, with alpha blending. */

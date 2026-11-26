@@ -68,6 +68,8 @@ shot inventory        --demo inventory
 shot spellbook        --demo spells
 shot loot             --demo loot
 shot lost_arts        --demo lostarts
+shot armoury          --demo armoury --cast 0
+shot armoury_sword    --demo armoury --cast 11
 shot bestiary         --demo bestiary
 shot bestiary_bosses  --demo bestiary --grade 2
 shot start            1280x720 --demo menu

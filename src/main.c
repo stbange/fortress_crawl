@@ -322,6 +322,11 @@ static void demo_setup(Game *g) {
         if (!strcmp(g_demo_kind, "spells")) { p1->show_skills = true; p1->menu_tab = TAB_SPELLS; return; }
     }
     if (!strcmp(g_demo_kind, "weapons") || !strcmp(g_demo_kind, "lostarts")) { demo_weapons(g, p1); return; }
+    if (!strcmp(g_demo_kind, "armoury")) { /* every weapon close up: --cast PAGE (0-3), see weapons.c */
+        g_armoury = g_demo_cast >= 0 ? g_demo_cast : 0;
+        for (int i = 0; i < MAX_MONSTERS; i++) g->mons[i].alive = false;
+        return;
+    }
     if (!strcmp(g_demo_kind, "cast") && g_demo_cast >= 0 && g_demo_cast < SU_COUNT) {
         /* a utility spell cast in an open place, then a step back to see it */
         demo_place(g, p1);
