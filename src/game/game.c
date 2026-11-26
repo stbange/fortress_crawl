@@ -836,6 +836,7 @@ static void update_player(Game *g, PlayerSlot *ps, const PlayerInput *in, float 
     if (ps->hitmark_t > 0) ps->hitmark_t -= dt;
     if (ps->potion_hint_t > 0) ps->potion_hint_t -= dt;
     ps->tracker_age += dt;
+    ps->shake = fmaxf(0.0f, ps->shake - dt * 1.5f); /* the camera settles (here, not only near dragons) */
     if (ps->yhint_t > 0) ps->yhint_t -= dt;
     if (ps->danger_note_t > 0) ps->danger_note_t -= dt;
     if (s->dead) {

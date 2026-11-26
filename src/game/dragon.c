@@ -92,7 +92,6 @@ static void dragons_tick(Game *g, float dt) {
     if (g->time == last) return;
     last = g->time;
     rocks_update(g, dt);
-    for (int i = 0; i < MAX_PLAYERS; i++) g->players[i].shake = fmaxf(0.0f, g->players[i].shake - dt * 1.5f);
 }
 
 /* ---------- spawning ---------- */
