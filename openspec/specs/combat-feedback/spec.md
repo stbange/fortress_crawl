@@ -13,11 +13,15 @@ Monsters and their shots SHALL pause for 50 ms when the player kills a monster, 
 - **THEN** the monsters and their shots stand still for 50 ms
 
 ### Requirement: Camera impulse
-The view SHALL shake briefly when the player loses more than 10% of their health in one hit (more for bigger hits) and slightly on the player's own kills; the eye SHALL dip on landing from a fall faster than 7 m/s.
+The view SHALL shake briefly when the player loses more than 10% of their health in one hit (more for bigger hits) and slightly on the player's own kills, and the shake SHALL settle within a second wherever the player is; the eye SHALL dip on landing from a fall faster than 7 m/s.
 
 #### Scenario: A heavy hit
 - **WHEN** a brute takes a fifth of the player's health
 - **THEN** the view jolts and settles within half a second
+
+#### Scenario: No dragon near
+- **WHEN** a player kills a crawler far from any dragon
+- **THEN** the view is still again a moment later
 
 ### Requirement: Dust
 Jumps and hard landings SHALL raise a puff of dust at the player's feet.

@@ -148,8 +148,11 @@ Item item_roll_region(u64 seed, float level, int min_rarity, int tier, int regio
     }
     it.material = (u8)arms_material(region, tier, rng_next(&r));
     arms_roll_powers(&it, rng_next(&r));
+    item_roll_look(&it, rng_next(&r));
     return it;
 }
+
+void item_roll_look(Item *it, u64 seed) { it->look = (u8)(1 + mix64(seed ^ 0x100CULL) % 255); }
 
 Item item_roll(u64 seed, float level, int min_rarity) { return item_roll_region(seed, level, min_rarity, 0, REG_NONE); }
 
@@ -994,6 +997,12 @@ void inventory_draw(Game *g, PlayerSlot *ps, int W, int H, int top) {
         for (char *q = mem; *q; q++) if (*q >= 'a' && *q <= 'z') *q -= 32;
         if ((int)strlen(mem) > maxc) mem[maxc] = 0;
         if (mem[0] && !l.compact) { font_text(l.ex, ly, mem, 0.7f, 0.66f, 0.55f); ly += 10; }
+        if (!l.compact) { /* how it is made (weapons.c, its look) */
+            char made[128];
+            weapon_style_text(it, made, sizeof made);
+            if ((int)strlen(made) > maxc) made[maxc] = 0;
+            if (made[0]) { font_text(l.ex, ly, made, 0.62f, 0.7f, 0.78f); ly += 10; }
+        }
         if (it->unique && !l.compact) {
             snprintf(buf, sizeof buf, "%s", arms_unique_lore(it->unique - 1));
             for (char *q = buf; *q; q++) if (*q >= 'a' && *q <= 'z') *q -= 32;

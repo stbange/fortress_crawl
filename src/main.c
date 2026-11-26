@@ -324,6 +324,7 @@ static void demo_setup(Game *g) {
     if (!strcmp(g_demo_kind, "weapons") || !strcmp(g_demo_kind, "lostarts")) { demo_weapons(g, p1); return; }
     if (!strcmp(g_demo_kind, "armoury")) { /* every weapon close up: --cast PAGE (0-3), see weapons.c */
         g_armoury = g_demo_cast >= 0 ? g_demo_cast : 0;
+        if (g_demo_weapon && parse_weapon(g_demo_weapon, &g_armoury_item)) g_armoury = 9; /* --weapon: that one, alone */
         for (int i = 0; i < MAX_MONSTERS; i++) g->mons[i].alive = false;
         return;
     }

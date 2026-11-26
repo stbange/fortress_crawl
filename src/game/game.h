@@ -830,8 +830,10 @@ int spell_learn(PlayerSlot *ps, int id);
 vec3 weapon_glow_color(const Item *it);
 void weapon_draw_view(Game *g, PlayerSlot *ps, vec3 light);
 void weapon_set_eye(vec3 eye);
+void weapon_style_text(const Item *it, char *out, int n); /* how it is made, for the inventory */
 void weapon_draw_armoury(int page, float time);
 extern int g_armoury;
+extern Item g_armoury_item; /* --demo armoury --cast 9: this weapon alone (--weapon) */
 void weapon_draw_held(const Item *it, vec3 hand, vec3 dir, vec3 side, vec3 light, float time, float seed);
 void weapon_draw_ground(const Item *it, vec3 c, float yaw, vec3 light, float time, float seed);
 /* Sparks, frost, arcs, venom or a blood mist where a magical weapon hits (rarity > common or an element). */

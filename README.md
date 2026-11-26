@@ -743,9 +743,30 @@ the blade and end in knobs; pommels are wheels; an axe's bit thins to a ground b
 six sharpened flanges. Each facet is lit toward the eye with a stepped glint on metal, so steel
 reads as steel in torchlight (`src/game/weapons.c`).
 
+**Tiers and elements**: every weapon is made in its tier's way, and each is made a little
+differently. The tier sets the vocabulary: plain iron fittings for common weapons; brighter steel,
+finer fittings and a rune line for magic; gilding, ornate swept or disc guards, gem pommels and two
+fullers for rare; blackened steel, thorned guards, spiked pommels, serrated, waved or clipped
+blades and glowing runes for epic; starmetal, winged guards, crowned pommels, double crescent
+axes and haloed staves for legendary. A look rolled when the weapon is made (dropped, forged,
+a world's legendary; saved with it) picks within that. An element then grows on it: **frost** turns
+the steel blue with white edges and grows ice crystals and icicles on it; **fire** darkens the steel
+and sets it burning with flames and glowing cracks; **lightning** winds it in copper and arcs;
+**venom** greens and serrates it and beads it with drops; the **vampiric** stain it crimson and grow
+thorns. Swift weapons are slimmer, heavy ones bulkier and studded, keen ones longer in the point.
+The inventory says how each is made ("WAVED BLADE, SWEPT GUARD, GEM POMMEL - ICE GROWS ON IT").
+
+| | |
+|---|---|
+| ![The tiers](docs/screenshots/armoury_tiers.png) | ![The elements](docs/screenshots/armoury_elements.png) |
+| Common to legendary: a sword, an axe, a bow, a staff (`--demo armoury --cast 4`) | None, frost, fire, lightning; venom, vampiric, swift, heavy (`--cast 5`) |
+| ![Frozen](docs/screenshots/armoury_frost.png) | |
+| The twelve, epic and frozen (`--cast 6`) | `--demo armoury --weapon axe:legendary:frost` shows any one weapon alone |
+
 Screenshots of them: `--demo weapons` (a rack of the 12 classic ones), `--demo lostarts` (the
 nine lost arts), `--demo armoury --cast PAGE` (close up: 0 the twelve, 1 the lost arts, 2 and 3
-the same in rarities and materials, 10 + a base number one weapon alone) and `--demo impact` (a hit on a
+the same in rarities and materials, 4 the tiers, 5 the elements, 6 the twelve frozen, 7 twelve looks
+of one rare sword, 10 + a base number one weapon alone; with `--weapon` that weapon alone) and `--demo impact` (a hit on a
 monster), with `--weapon base[:rarity[:affix[:affix]]]` to choose what you hold, for example
 `--weapon greatsword:legendary:vampiric`. `--demo placefight` shows one monster of each kind
 in the region you start in.

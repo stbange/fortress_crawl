@@ -343,6 +343,7 @@ static void finish(Game *g, PlayerSlot *ps) {
             it.affix[k] = (u8)a;
         }
     for (int k = 0; k < 2; k++) it.power[k] = ps->plan.rune[k];
+    item_roll_look(&it, h + (u64)lv * 31u); /* the smith's hand: each piece its own */
     if (master) { h = mix64(h + 7); it.hidden = (u8)(1 + h % (AF_COUNT - 1)); it.kills = AWAKEN_KILLS; } /* a masterwork wakes at once */
     int slot = -1;
     for (int i = 0; i < BAG_SIZE && slot < 0; i++) if (!s->bag[i].used) slot = i;

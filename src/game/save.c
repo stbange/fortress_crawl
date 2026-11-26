@@ -12,7 +12,7 @@
  * user's preference folder. The world itself never needs saving: the seed rebuilds it. */
 
 #define SAVE_MAGIC 0x56534346u /* "FCSV" */
-#define SAVE_VERSION 29 /* 29: the heirs of the Old King, kings settled, mercy, all king flags; the towns' works; dragon-scale armour; 28: the Old King (the steps done, what is known, the ending); 27: the great dragons slain; 26: the towns of the friendly peoples (reputation, tasks), company at an inn; 25: the realms behind the Gate (attuned, rulers fallen, plants and animals met; where you went through from); 24: seeds; 23: firewood; 22: insect swarms; 21: the numbers of animals and plants per chunk; 20: the marks on cells (wet, soot, scorch, plants' age); 19: flasks to throw; 18: the fur cloak, warmth and cold of each character; 17: when each chunk was last seen (the world goes on while you are away); 16: the clouds of gas in the air; 15: what was broken in the world, the pickaxe and bombs; 14: the ledger of deeds (choices); 13: the story generator of the world; 12: the forge (materials, smithing, blueprints, runes); 11: the Sanctum's decorations, keystones bought; 10: meal variety, toxicity, torn formulae; 9: alchemy (reagents, elixirs, formulae, the elixir working); 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms;
+#define SAVE_VERSION 30 /* 30: how each weapon is made (its look); 29: the heirs of the Old King, kings settled, mercy, all king flags; the towns' works; dragon-scale armour; 28: the Old King (the steps done, what is known, the ending); 27: the great dragons slain; 26: the towns of the friendly peoples (reputation, tasks), company at an inn; 25: the realms behind the Gate (attuned, rulers fallen, plants and animals met; where you went through from); 24: seeds; 23: firewood; 22: insect swarms; 21: the numbers of animals and plants per chunk; 20: the marks on cells (wet, soot, scorch, plants' age); 19: flasks to throw; 18: the fur cloak, warmth and cold of each character; 17: when each chunk was last seen (the world goes on while you are away); 16: the clouds of gas in the air; 15: what was broken in the world, the pickaxe and bombs; 14: the ledger of deeds (choices); 13: the story generator of the world; 12: the forge (materials, smithing, blueprints, runes); 11: the Sanctum's decorations, keystones bought; 10: meal variety, toxicity, torn formulae; 9: alchemy (reagents, elixirs, formulae, the elixir working); 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms;
                           6: weapons with materials, powers, legendaries and memory; 7: the Sanctum per world (written by one
                           build still marked 6); 8: food (the larder, dishes, recipes, the meal) */
 #define EXPLORED_BUDGET (1200 * 1024)
@@ -128,6 +128,7 @@ static void witem(Buf *b, const Item *it) {
     w8(b, it->used); w8(b, it->base); w8(b, it->rarity); w8(b, it->level); w8(b, it->affix[0]); w8(b, it->affix[1]);
     w8(b, it->material); w8(b, it->unique); w8(b, it->power[0]); w8(b, it->power[1]); w8(b, it->hidden); w8(b, it->bane);
     w16(b, it->kills); w16(b, it->bane_kills);
+    w8(b, it->look);
 }
 
 static void write_player(Buf *b, const Stats *s, const Player *pl) {
@@ -382,6 +383,7 @@ static Item ritem(Rd *r) {
         it.material = r8(r); it.unique = r8(r); it.power[0] = r8(r); it.power[1] = r8(r); it.hidden = r8(r); it.bane = r8(r);
         it.kills = r16(r); it.bane_kills = r16(r);
     }
+    if (r->ver >= 30) it.look = r8(r); /* (older weapons keep a look made from their other fields) */
     if (it.base >= WB_COUNT || it.rarity >= RAR_COUNT || it.affix[0] >= AF_COUNT || it.affix[1] >= AF_COUNT || it.material >= MAT_COUNT ||
         it.hidden >= AF_COUNT || it.unique > UNIQUE_COUNT || it.bane > MON_TYPE_COUNT)
         memset(&it, 0, sizeof it);

@@ -106,9 +106,12 @@ typedef struct Item {
     u8 power[2];        /* trigger << 4 | effect (arms.c), 0 none */
     u8 hidden;          /* AF_* revealed after 100 kills, 0 not yet */
     u8 bane;            /* MON_* + 1 it has killed most of lately, 0 none */
+    u8 look;            /* how it is made (weapons.c, weapon_style): rolled when made; 0 = from its other fields */
     u16 kills, bane_kills;
 } Item;
 
+/* Rolls how a new weapon is made (guard, pommel, blade, ...; weapons.c). */
+void item_roll_look(Item *it, u64 seed);
 float item_damage_mult(const Item *it);
 float item_speed_mult(const Item *it); /* cooldown factor, < 1 is faster */
 void item_name(const Item *it, char *out, int n);

@@ -70,6 +70,9 @@ shot loot             --demo loot
 shot lost_arts        --demo lostarts
 shot armoury          --demo armoury --cast 0
 shot armoury_sword    --demo armoury --cast 11
+shot armoury_tiers    --demo armoury --cast 4
+shot armoury_elements --demo armoury --cast 5
+shot armoury_frost    --demo armoury --cast 6
 shot bestiary         --demo bestiary
 shot bestiary_bosses  --demo bestiary --grade 2
 shot start            1280x720 --demo menu

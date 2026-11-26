@@ -120,6 +120,7 @@ void arms_init(u64 world_seed) {
         it.material = (u8)rng_range(&u, 1, MAT_COUNT - 1);
         make_powers(&it, &u, 2);
         it.unique = (u8)(id + 1);
+        item_roll_look(&it, rng_next(&u));
         A.uniq[id] = it;
         /* a name nobody else's world has: two halves, never the same twice in one world */
         for (int tries = 0; tries < 50; tries++) {
