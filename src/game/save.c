@@ -489,11 +489,11 @@ static void read_player(Rd *r, SavedPlayer *sp) {
     if (s->pick < 1 || s->pick > 3) s->pick = 1;
     if (r->ver >= 18) { s->cloak = r8(r) ? 1 : 0; s->warm_t = clampf(rf(r), 0.0f, 3600.0f); s->cold = clampf(rf(r), 0.0f, 1.0f); }
     if (r->ver >= 19) {
-        for (int k = 0; k < 3; k++) s->flasks[k] = (u8)MINI(r8(r), 30);
+        for (int k = 0; k < 3; k++) { u8 v = r8(r); s->flasks[k] = (u8)MINI(v, 30); } /* (read first: MINI evaluates twice) */
         s->throw_sel = (u8)(r8(r) % THROW_COUNT);
     }
-    if (r->ver >= 23) s->firewood = (u8)MINI(r8(r), 20);
-    if (r->ver >= 24) s->seeds = (u8)MINI(r8(r), 99);
+    if (r->ver >= 23) { u8 v = r8(r); s->firewood = (u8)MINI(v, 20); }
+    if (r->ver >= 24) { u8 v = r8(r); s->seeds = (u8)MINI(v, 99); }
     if (r->ver >= 25) {
         s->gate_from_set = r8(r) != 0;
         s->gate_from = rv(r);
@@ -502,7 +502,7 @@ static void read_player(Rd *r, SavedPlayer *sp) {
         s->gills_t = clampf(rf(r), 0, 3600);
     }
     if (r->ver >= 26) s->company_t = clampf(rf(r), 0, 3600);
-    if (r->ver >= 29) { s->armour = (u8)MINI(r8(r), 3); s->armour_el = (u8)(r8(r) % EL_COUNT); }
+    if (r->ver >= 29) { u8 v = r8(r); s->armour = (u8)MINI(v, 3); s->armour_el = (u8)(r8(r) % EL_COUNT); }
     if (!s->blueprints) s->blueprints = (1u << WB_DAGGER) | (1u << WB_SWORD) | (1u << WB_SHORTBOW) | (1u << WB_STAFF);
     /* sanity: a save from a broken build must not crash the game */
     if (s->level < 1 || s->level > 999) s->level = 1;
@@ -701,7 +701,7 @@ bool game_load(Game *g) {
         }
         g->world.king_gen = g->world.king_wins = g->world.king_mercy = 0;
         if (r.ver >= 29) {
-            g->world.king_gen = (u8)MINI(r8(&r), 9);
+            { u8 v = r8(&r); g->world.king_gen = (u8)MINI(v, 9); }
             g->world.king_wins = r8(&r);
             g->world.king_mercy = r8(&r) != 0;
             int np = r8(&r);
