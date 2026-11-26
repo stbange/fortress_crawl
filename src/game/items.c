@@ -749,6 +749,7 @@ void pickups_draw(Game *g, vec3 eye) {
 }
 
 void drink_potion(Game *g, PlayerSlot *ps, bool mana) {
+    tutorial_note(ps, TN_POTION);
     Stats *s = &ps->st;
     if (s->dead || ps->potion_cd > 0) return;
     int *n = mana ? &s->potions_mp : &s->potions_hp;

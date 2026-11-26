@@ -112,6 +112,7 @@ bool story_motive_pending(const Game *g, const PlayerSlot *ps) {
 
 void story_pick_motive(Game *g, PlayerSlot *ps, int motive) {
     ps->st.motive = (u8)(motive + 1);
+    tutorial_begin(g, ps); /* a new character: the tutorial, then the story (help.c) */
     ps->st.chapter = 0;
     ps->target_chapter = 0;
     Personal p = personal_of(g, ps);

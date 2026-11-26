@@ -169,6 +169,7 @@ static void tele_hurt(float dmg) {
  * for another fifth of your gold. */
 void game_thread_key(Game *g, PlayerSlot *ps) {
     ps->tracker_age = 0; /* (the line at the top brightens again) */
+    tutorial_note(ps, TN_THREAD);
     Stats *s = &ps->st;
     if (s->fell_t > 0 && !s->dead) {
         int cost = s->gold / 5;
@@ -445,6 +446,7 @@ static void menu_nav(Game *g, PlayerSlot *ps, int nav) {
     else if (ps->menu_tab == TAB_FOOD) food_nav(g, ps, nav);
     else if (ps->menu_tab == TAB_ALCHEMY) alchemy_nav(g, ps, nav);
     else if (ps->menu_tab == TAB_FORGE) forge_nav(g, ps, nav);
+    else if (ps->menu_tab == TAB_HELP) help_nav(g, ps, nav);
     else if (nav != NAV_DROP) game_skills_nav(ps, nav);
 }
 
@@ -593,7 +595,7 @@ void game_event(Game *g, const SDL_Event *e) {
             else if (k == SDLK_RETURN || k == SDLK_SPACE || k == SDLK_KP_ENTER) story_picker_nav(g, ps, NAV_BUY);
             return;
         }
-        if (ps->show_skills && k != SDLK_TAB && k != SDLK_ESCAPE && k != SDLK_I && k != SDLK_B && k != SDLK_L) {
+        if (ps->show_skills && k != SDLK_TAB && k != SDLK_ESCAPE && k != SDLK_I && k != SDLK_B && k != SDLK_L && k != SDLK_F1 && k != SDLK_SLASH) {
             switch (k) {
             case SDLK_LEFT: case SDLK_A: menu_nav(g, ps, NAV_LEFT); break;
             case SDLK_RIGHT: case SDLK_D: menu_nav(g, ps, NAV_RIGHT); break;
@@ -632,7 +634,9 @@ void game_event(Game *g, const SDL_Event *e) {
         case SDLK_X: throw_selected(g, ps); break;
         case SDLK_C: throw_cycle(ps); break;
         case SDLK_P: camp_light(g, ps); break;
-        case SDLK_F1: g->hud = !g->hud; break;
+        case SDLK_F1: case SDLK_SLASH: open_menu(ps, TAB_HELP); break; /* the online help (help.c) */
+        case SDLK_F11: g->hud = !g->hud; break; /* the debug overlay */
+        case SDLK_BACKSPACE: tutorial_skip(ps); break;
         case SDLK_F9: sfx_toggle_mute(); game_banner(ps, sfx_muted() ? "SOUND OFF (F9)" : "SOUND ON (F9)"); break;
         case SDLK_F10: music_toggle(); game_banner(ps, music_on() ? "MUSIC ON (F10)" : "MUSIC OFF (F10)"); break;
         case SDLK_F2:
@@ -781,6 +785,9 @@ static void read_pad(Game *g, PlayerSlot *ps, PlayerInput *in, float dt) {
     if (PRESSED(SDL_GAMEPAD_BUTTON_DPAD_DOWN)) { if (ps->pick_out) camp_light(g, ps); else drink_potion(g, ps, true); } /* (the pickaxe out: a campfire) */
     ps->pad_spell = HELD(SDL_GAMEPAD_BUTTON_WEST) != 0;
     if (PRESSED(SDL_GAMEPAD_BUTTON_BACK)) { ps->show_map = true; ps->show_skills = false; }
+    if (tutorial_active(ps) && HELD(SDL_GAMEPAD_BUTTON_BACK)) { /* held a second: skip the tutorial */
+        if ((ps->tut_skip_hold += dt) > 1.0f) { tutorial_skip(ps); ps->show_map = false; ps->tut_skip_hold = 0; }
+    } else ps->tut_skip_hold = 0;
     if (PRESSED(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER)) game_cycle_weapon(ps, 1);
     if (PRESSED(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER)) game_cycle_weapon(ps, -1);
     if (PRESSED(SDL_GAMEPAD_BUTTON_LEFT_STICK)) ps->sprint_toggle = !ps->sprint_toggle;
@@ -836,6 +843,7 @@ static void update_player(Game *g, PlayerSlot *ps, const PlayerInput *in, float 
     if (ps->hitmark_t > 0) ps->hitmark_t -= dt;
     if (ps->potion_hint_t > 0) ps->potion_hint_t -= dt;
     ps->tracker_age += dt;
+    tutorial_update(g, ps, dt);
     ps->shake = fmaxf(0.0f, ps->shake - dt * 1.5f); /* the camera settles (here, not only near dragons) */
     if (ps->yhint_t > 0) ps->yhint_t -= dt;
     if (ps->danger_note_t > 0) ps->danger_note_t -= dt;
@@ -1090,7 +1098,7 @@ static SkillLayout skills_layout(int W, int H) {
 
 /* ---------- character menu: tabs ---------- */
 
-static const char *TAB_NAMES[TAB_COUNT] = { "ITEMS", "SPELLS", "SKILLS", "STORY", "SHOP", "FOOD", "ALCHEMY", "FORGE" };
+static const char *TAB_NAMES[TAB_COUNT] = { "ITEMS", "SPELLS", "SKILLS", "STORY", "SHOP", "FOOD", "ALCHEMY", "FORGE", "HELP" };
 
 static void tab_rect(int W, int t, float *x, float *y, float *w, float *h) {
     *w = fminf(72.0f, (float)(W - 8) / TAB_COUNT - 3.0f);
@@ -1119,6 +1127,8 @@ void game_menu_tap(Game *g, PlayerSlot *ps, int W, int H, float x, float y) {
         food_tap(g, ps, W, H, MENU_TOP, x, y);
     } else if (ps->menu_tab == TAB_ALCHEMY) {
         alchemy_tap(g, ps, W, H, MENU_TOP, x, y);
+    } else if (ps->menu_tab == TAB_HELP) {
+        help_tap(g, ps, W, H, MENU_TOP, x, y);
     } else if (ps->menu_tab == TAB_FORGE) {
         forge_tap(g, ps, W, H, MENU_TOP, x, y);
     } else {
@@ -1421,6 +1431,7 @@ static void draw_menu(Game *g, PlayerSlot *ps, int W, int H) {
     else if (ps->menu_tab == TAB_FOOD) food_draw(g, ps, W, H, MENU_TOP);
     else if (ps->menu_tab == TAB_ALCHEMY) alchemy_draw(g, ps, W, H, MENU_TOP);
     else if (ps->menu_tab == TAB_FORGE) forge_draw(g, ps, W, H, MENU_TOP);
+    else if (ps->menu_tab == TAB_HELP) help_draw(g, ps, W, H, MENU_TOP);
     else draw_skills(g, ps, W, H);
 }
 
@@ -1503,6 +1514,7 @@ static void render_view(Game *g, PlayerSlot *ps, int vx, int vy, int vw, int vh)
     else {
         story_draw_plates(g, ps, vw, vh);
         draw_hud(g, ps, vw, vh);
+        tutorial_draw(g, ps, vw, vh);
         mech_draw_hud(g, ps, vw, vh);
         utility_draw_hud(g, ps, vw, vh);
     }

@@ -89,6 +89,7 @@ add_executable(fortress_crawl
   src/game/food.c
   src/game/alchemy.c
   src/game/forge.c
+  src/game/help.c
   src/game/dig.c
   src/game/sim.c
   src/game/bio.c

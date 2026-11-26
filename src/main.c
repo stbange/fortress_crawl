@@ -73,6 +73,7 @@ static bool parse_args(Options *o, int argc, char **argv) {
         else if (!strcmp(a, "--test-pad")) o->test_pad = true;
         else if (!strcmp(a, "--touch")) o->touch = true;
         else if (!strcmp(a, "--fresh")) o->fresh = true;
+        else if (!strcmp(a, "--no-tutorial")) o->no_tutorial = true;
         else if (!strcmp(a, "--fullbright")) o->fullbright = true;
         else if (!strcmp(a, "--persist")) o->persist = true;
         else if (!strcmp(a, "--mute")) o->mute = true;
@@ -322,6 +323,22 @@ static void demo_setup(Game *g) {
         if (!strcmp(g_demo_kind, "spells")) { p1->show_skills = true; p1->menu_tab = TAB_SPELLS; return; }
     }
     if (!strcmp(g_demo_kind, "weapons") || !strcmp(g_demo_kind, "lostarts")) { demo_weapons(g, p1); return; }
+    if (!strcmp(g_demo_kind, "tutorial") || !strcmp(g_demo_kind, "tuttest")) { /* the tutorial (help.c): a step, or all of them scripted */
+        bool test = !strcmp(g_demo_kind, "tuttest");
+        p1->tut_step = (u8)(test ? 1 : (g_demo_cast >= 1 && g_demo_cast <= 7 ? g_demo_cast : 1));
+        p1->tut_t = test ? 0.0f : 3.0f;
+        p1->tut_from = p1->pl.pos;
+        p1->tut_weapon = (u8)p1->st.weapon;
+        p1->pl.fly = false;
+        for (int i = 0; i < MAX_MONSTERS; i++) g->mons[i].alive = false;
+        return;
+    }
+    if (!strcmp(g_demo_kind, "help")) { /* the HELP tab, at topic --cast */
+        p1->show_skills = true;
+        p1->menu_tab = TAB_HELP;
+        p1->help_topic = (u8)(g_demo_cast > 0 ? g_demo_cast : 0);
+        return;
+    }
     if (!strcmp(g_demo_kind, "armoury")) { /* every weapon close up: --cast PAGE (0-3), see weapons.c */
         g_armoury = g_demo_cast >= 0 ? g_demo_cast : 0;
         if (g_demo_weapon && parse_weapon(g_demo_weapon, &g_armoury_item)) g_armoury = 9; /* --weapon: that one, alone */
@@ -1129,6 +1146,28 @@ static void handle_events(App *a) {
 /* --test-pad: a virtual gamepad joins with START, walks forward, turns and attacks. */
 /* --demo storytest: reads a real note or bounty board, kills the first chapter target,
  * and carries a quest item home, logging each step (used as an end-to-end test). */
+/* --demo tuttest: does what each step of the tutorial asks, and logs how it goes on. */
+static void tut_test_step(App *a) {
+    Game *g = a->g;
+    if (!g_demo_kind || strcmp(g_demo_kind, "tuttest") || !a->demo_done) return;
+    PlayerSlot *p1 = &g->players[0];
+    static int last = -1;
+    if (p1->tut_step != last) {
+        SDL_Log("tuttest: step %d at %.1f s", p1->tut_step == TUT_DONE ? 99 : p1->tut_step, a->shot_wait);
+        last = p1->tut_step;
+    }
+    if (!tutorial_active(p1) || p1->tut_ok_t > 0 || p1->tut_t < 1.7f) return;
+    switch (p1->tut_step) {
+    case 1: p1->pl.pos.x += 5.0f; break;
+    case 2: p1->pl.vel.y = 5.0f; break;
+    case 3: p1->st.swing = 0.3f; break;
+    case 4: game_select_weapon(p1, WPN_BOW); break;
+    case 5: p1->st.spell_cd = 0.5f; break;
+    case 6: tutorial_note(p1, TN_POTION); break;
+    case 7: game_thread_key(g, p1); break;
+    }
+}
+
 static void story_test_step(App *a) {
     Game *g = a->g;
     static int phase;
@@ -1215,6 +1254,7 @@ static void screenshot_step(App *a, float frame_dt) {
     if (chunkmap_settled(&g->map, player_eye(&p1->pl))) a->shot_wait += frame_dt;
     test_pad_step(a);
     story_test_step(a);
+    tut_test_step(a);
     if (g->opt.demo && !a->demo_done && a->shot_wait > 0.5f) {
         for (int i = 0; i < MAX_PLAYERS; i++) {
             PlayerSlot *ps = &g->players[i];

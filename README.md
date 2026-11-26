@@ -24,7 +24,7 @@ the requirements and the record of changes are in [`openspec/`](openspec/) (Open
 ## Screenshots
 
 Seed 1337, taken from the current build with [`tools/screenshots.sh`](tools/screenshots.sh) (it
-uses the game's own `--demo` modes; the region shots carry the debug overlay, F1, which names
+uses the game's own `--demo` modes; the region shots carry the debug overlay, F11, which names
 the place).
 
 ### The world
@@ -409,6 +409,18 @@ last and shows what is saved; *New characters* (press twice) deletes the save of
 
 ## Controls
 
+**Help and the tutorial.** A new character, once they have chosen why they came, is walked
+through seven short steps on a card at the left of the view: move, jump, strike, change weapon,
+cast, stay alive, and then the story (the line at the top and the Golden Thread). Each step is
+done when you do it; the keys shown follow what you play with (keyboard and mouse, a gamepad,
+touch). Backspace (or holding BACK) skips it; the HELP tab (F1) has everything again, and Enter on
+its first page runs the tutorial once more. `--no-tutorial` starts without it.
+
+| | |
+|---|---|
+| ![Help](docs/screenshots/help.png) | ![The tutorial](docs/screenshots/tutorial.png) |
+| The HELP tab (F1) | A step of the tutorial |
+
 | Key | Action |
 |-----|--------|
 | WASD / mouse | move / look |
@@ -434,7 +446,9 @@ last and shows what is saved; *New characters* (press twice) deletes the save of
 | F | fly / noclip (Space up, Ctrl down, Shift fast) |
 | T | jump 8 chunks ahead in the view direction (enables fly) |
 | Page Up / Page Down | one chunk (32 m) up / down |
-| F1 | debug overlay (position, danger level, chunk and monster counts) |
+| F1 or ? | help: controls, the basics, fighting, spells, staying alive, the story, the world, making things, loot (also the HELP tab of the menu; on a gamepad its last tab) |
+| Backspace | skip the tutorial (gamepad: hold BACK) |
+| F11 | debug overlay (position, danger level, chunk and monster counts) |
 | F2 | internal resolution 320x180 / 480x270 / 640x360 |
 | F3 / F4 | ordered dithering / PS1-style vertex snapping |
 | F5 / F6 | full-bright (inspect the generator) / player torch |

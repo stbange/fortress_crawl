@@ -363,6 +363,7 @@ typedef struct Options {
     bool mute;     /* --mute: no sound */
     bool sound;    /* --sound: sound even in screenshot runs (audio tests) */
     bool auto_motive; /* screenshot runs: pick a motive without asking */
+    bool no_tutorial; /* --no-tutorial: a new character starts without the tutorial */
     int demo_chapter; /* --chapter n: story demos start at chapter n */
     const char *bot;  /* --bot STYLE: a playtest bot plays player 1 (bot.c) */
     const char *bot_log;
@@ -490,6 +491,12 @@ typedef struct PlayerSlot {
     float yhint_t;          /* "(Y: ANOTHER LINE)" shows while this runs */
     u8 tracker_has;         /* how many lines there were to follow last frame */
     u8 last_weapon;         /* the weapon held before this one: Z swaps back (openspec weapon-roles) */
+    u8 help_topic, help_scroll; /* the HELP tab (help.c) */
+    u8 tut_step;            /* the tutorial (help.c): 0 never begun, 1.. its steps, TUT_DONE */
+    u8 tut_weapon;
+    bool tut_flag;
+    float tut_t, tut_ok_t, tut_skip_hold;
+    vec3 tut_from;
     bool atk_prev, spell_prev;
     u8 throw_buf_kind;
     float breath, drown_t;
@@ -756,7 +763,7 @@ void touch_draw(Game *g);
 int touch_low_width(Game *g, int win_w, int win_h);
 
 /* Character menu tabs. */
-enum { TAB_INVENTORY, TAB_SPELLS, TAB_SKILLS, TAB_STORY, TAB_SHOP, TAB_FOOD, TAB_ALCHEMY, TAB_FORGE, TAB_COUNT };
+enum { TAB_INVENTORY, TAB_SPELLS, TAB_SKILLS, TAB_STORY, TAB_SHOP, TAB_FOOD, TAB_ALCHEMY, TAB_FORGE, TAB_HELP, TAB_COUNT };
 enum { SANCTUM_BATH = 1, SANCTUM_FEAST = 2, SANCTUM_LIBRARY = 4 };
 
 /* quests.c: motives, chapters, missions, lore, named enemies */
@@ -830,6 +837,18 @@ int spell_learn(PlayerSlot *ps, int id);
 vec3 weapon_glow_color(const Item *it);
 void weapon_draw_view(Game *g, PlayerSlot *ps, vec3 light);
 void weapon_set_eye(vec3 eye);
+/* the online help and the tutorial (help.c) */
+#define TUT_DONE 255
+enum { TN_THREAD, TN_POTION, TN_CAST };
+void help_draw(Game *g, PlayerSlot *ps, int W, int H, int top);
+void help_nav(Game *g, PlayerSlot *ps, int nav);
+void help_tap(Game *g, PlayerSlot *ps, int W, int H, int top, float x, float y);
+void tutorial_begin(Game *g, PlayerSlot *ps);
+void tutorial_skip(PlayerSlot *ps);
+bool tutorial_active(const PlayerSlot *ps);
+void tutorial_update(Game *g, PlayerSlot *ps, float dt);
+void tutorial_note(PlayerSlot *ps, int what);
+void tutorial_draw(Game *g, PlayerSlot *ps, int W, int H);
 void weapon_style_text(const Item *it, char *out, int n); /* how it is made, for the inventory */
 void weapon_draw_armoury(int page, float time);
 extern int g_armoury;
