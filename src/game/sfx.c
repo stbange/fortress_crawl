@@ -14,6 +14,7 @@ static int nvar[SFX_COUNT];
 static float last_play[SFX_COUNT];
 static float now;
 static bool loaded, muted, log_plays;
+static float master_gain = 1.0f, sfx_gain = 1.0f, music_gain = 1.0f; /* the settings (sfx_set_levels) */
 static u64 rs = 0x51F0A3C9D2E7B4ULL;
 
 static float frand(void) {
@@ -52,7 +53,7 @@ void sfx_init(Game *g) {
     muted = g->opt.mute;
     if (g->opt.shot && !g->opt.sound) return; /* screenshot and test runs stay silent */
     if (!audio_init()) return;
-    audio_set_master(muted ? 0.0f : 0.8f);
+    audio_set_master(muted ? 0.0f : 0.8f * master_gain);
     log_plays = g->opt.sound; /* audio test runs say what they play */
     char dir[1024];
     const char *base = SDL_GetBasePath();
@@ -75,11 +76,19 @@ void sfx_shutdown(void) { audio_shutdown(); }
 
 void sfx_toggle_mute(void) {
     muted = !muted;
-    audio_set_master(muted ? 0.0f : 0.8f);
+    audio_set_master(muted ? 0.0f : 0.8f * master_gain);
 }
 bool sfx_muted(void) { return muted; }
+void sfx_set_mute(bool on) {
+    muted = on;
+    audio_set_master(muted ? 0.0f : 0.8f * master_gain);
+}
 
 /* ---------- playing ---------- */
+
+/* the effects' volume from the settings scales every effect and loop below (music has its own) */
+#define audio_play(s, v, p, pi, l) audio_play(s, (v) * sfx_gain, p, pi, l)
+#define audio_set(voice, v, p) audio_set(voice, (v) * sfx_gain, p)
 
 /* The mix: how loud each sound is next to the others, and how soon it may repeat. */
 static float base_vol(int id) {
@@ -483,6 +492,9 @@ void sfx_update(Game *g, float dt) {
 
 /* ---------- music ---------- */
 
+#undef audio_play
+#undef audio_set
+
 #define MUSIC_VOL 0.42f
 
 typedef struct Track {
@@ -609,7 +621,7 @@ void music_update(Game *g, float dt, bool menu) {
         if (t->sample < 0) continue;
         /* a piece that played to its end: done until the next gap is over */
         if (t->voice && !audio_playing(t->voice)) { t->voice = 0; t->vol = 0; }
-        t->want = i == want ? MUSIC_VOL * (i == MUS_BATTLE || i == MUS_CHAMPION ? 1.15f : 1.0f) : 0.0f;
+        t->want = i == want ? music_gain * MUSIC_VOL * (i == MUS_BATTLE || i == MUS_CHAMPION ? 1.15f : 1.0f) : 0.0f;
         if (t->want > 0 && !t->voice) {
             bool loop = looping || i == MUS_GATE;
             t->voice = audio_play(t->sample, 0.01f, 0.0f, 1.0f, loop);
@@ -630,4 +642,20 @@ void music_update(Game *g, float dt, bool menu) {
             } else audio_set(t->voice, t->vol, 0.0f);
         }
     }
+}
+
+/* The settings' levels: master (0 is silence), effects and music (0..1), and the music on or off. */
+void sfx_set_levels(float master, float effects, float music, bool music_enabled_) {
+    master_gain = master;
+    sfx_gain = effects;
+    music_gain = music;
+    music_enabled = music_enabled_;
+    audio_set_master(muted ? 0.0f : 0.8f * master_gain);
+}
+
+/* Every loop and piece stops (a world is unloaded). */
+void sfx_silence(void) {
+    for (int i = 0; i < AMB_COUNT; i++) if (amb[i].voice) { audio_stop(amb[i].voice); amb[i].voice = 0; amb[i].vol = amb[i].want = 0; }
+    for (int i = 0; i < LP_POINT_COUNT; i++) if (point[i].voice) { audio_stop(point[i].voice); point[i].voice = 0; point[i].vol = point[i].want = 0; }
+    for (int i = 0; i < MUS_COUNT; i++) if (tracks[i].voice) { audio_stop(tracks[i].voice); tracks[i].voice = 0; tracks[i].vol = 0; }
 }

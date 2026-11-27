@@ -15,9 +15,9 @@ enum { TOUCH_NONE = -1, TOUCH_MOVE = 100, TOUCH_LOOK = 101 };
 
 #define STICK_R 30.0f
 
-static const char *BUTTON_LABELS[TB_COUNT] = { "HIT", "ALT", "JUMP", "DUCK", "WPN", "CAST", ">", "MENU", "MAP", "POT", "PATH" };
+static const char *BUTTON_LABELS[TB_COUNT] = { "HIT", "ALT", "JUMP", "DUCK", "WPN", "CAST", ">", "MENU", "MAP", "POT", "PATH", "II" };
 
-static bool top_button(int b) { return b == TB_SKILLS || b == TB_MAP || b == TB_POTION || b == TB_THREAD; }
+static bool top_button(int b) { return b == TB_SKILLS || b == TB_MAP || b == TB_POTION || b == TB_THREAD || b == TB_PAUSE; }
 
 /* Button centre and radius in low-res pixels; the top buttons are rounded boxes of r x r/2. */
 static void button_pos(int W, int H, int b, float *x, float *y, float *r) {
@@ -32,6 +32,7 @@ static void button_pos(int W, int H, int b, float *x, float *y, float *r) {
     case TB_SKILLS: *x = W - 74.0f; *y = 14.0f; *r = 18.0f; break;
     case TB_POTION: *x = W - 120.0f; *y = 14.0f; *r = 18.0f; break;
     case TB_THREAD: *x = W - 166.0f; *y = 14.0f; *r = 18.0f; break;
+    case TB_PAUSE: *x = W - 212.0f; *y = 14.0f; *r = 18.0f; break;
     default: *x = W - 28.0f; *y = 14.0f; *r = 18.0f; break; /* TB_MAP */
     }
 }
@@ -107,7 +108,9 @@ void touch_event(Game *g, const SDL_Event *e) {
         if (i >= 0) release(g, i);
         if (t->nfingers >= TOUCH_MAX_FINGERS) return;
         int role = TOUCH_NONE;
-        if (story_parley_open(ps)) {
+        if (ps->pause_open) {
+            pause_tap(g, ps, W, H, x, y);
+        } else if (story_parley_open(ps)) {
             int vx, vy, vw, vh;
             game_view_rect(g, ps, &vx, &vy, &vw, &vh);
             story_parley_tap(g, ps, vw, vh, x - vx, y - vy);
@@ -126,6 +129,7 @@ void touch_event(Game *g, const SDL_Event *e) {
             else if (role == TB_NEXT_SPELL) { if (ps->pick_out) throw_cycle(ps); else spell_next(ps, 1); } /* (the pickaxe out: what to throw) */
             else if (role == TB_POTION) { drink_potion(g, ps, ps->st.hp >= ps->st.maxhp * 0.9f); role = TOUCH_NONE; }
             else if (role == TB_THREAD) { game_thread_key(g, ps); role = TOUCH_NONE; }
+            else if (role == TB_PAUSE) { pause_open(g, ps); role = TOUCH_NONE; }
             if (role == TOUCH_NONE && !ps->show_skills && !ps->show_map) {
                 if (x < W * 0.45f && !role_taken(t, TOUCH_MOVE)) {
                     role = TOUCH_MOVE;

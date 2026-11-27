@@ -6,11 +6,15 @@ Keyboard and mouse, gamepad and touch.
 ## Requirements
 
 ### Requirement: Keyboard and mouse
-Keyboard and mouse SHALL play the whole game: WASD and the mouse to move and look, Space, Shift and Ctrl to jump, sprint and crouch, the mouse buttons to attack and the alternate attack, number keys and the wheel for weapons, and letter keys for spells, potions, food, elixirs, throwing, the Golden Thread, the line at the top, the map and the menu's tabs (see the HELP tab); Esc SHALL release the mouse and a second Esc quit.
+Keyboard and mouse SHALL play the whole game: WASD and the mouse to move and look, Space, Shift and Ctrl to jump, sprint and crouch, the mouse buttons to attack and the alternate attack, number keys and the wheel for weapons, and letter keys for spells, potions, food, elixirs, throwing, the Golden Thread, the line at the top, the map and the menu's tabs (see the HELP tab); Esc SHALL close what is open, else open the pause menu and let the mouse go, and SHALL never quit the game by itself.
 
 #### Scenario: Sprint
 - **WHEN** a player holds Shift while walking
 - **THEN** they run
+
+#### Scenario: Esc
+- **WHEN** a player presses Esc with nothing open
+- **THEN** the pause menu opens and the cursor is free
 
 ### Requirement: Gamepad
 A gamepad SHALL play the whole game: sticks to move and look, RT and LT to attack and the alternate attack, LB and RB for weapons, X to cast, the D-pad for spells and potions, A and B to jump and crouch, the left stick click to sprint until stopping, the right stick click for the Golden Thread, Y for the menu and BACK for the map; bows and staves SHALL get a little aim assist.
@@ -27,8 +31,8 @@ On touch screens the game SHALL show controls: a stick that appears under the th
 - **THEN** the touch controls show
 
 ### Requirement: Options keys
-F2 SHALL cycle the internal resolution, F3 dithering, F4 vertex snapping, F5 full-bright, F6 the player's torch, F7 and F8 invert the mouse, - and = the mouse sensitivity, F11 the debug overlay, F12 save a screenshot (desktop).
+F2 SHALL cycle the internal resolution, F3 dithering, F4 vertex snapping, F5 full-bright, F6 the player's torch, F7 and F8 invert the mouse, F9 mute, F10 the music, - and = the mouse sensitivity, F11 the debug overlay, F12 save a screenshot (desktop); all but F5, F11 and F12 SHALL change the saved settings.
 
 #### Scenario: Invert
 - **WHEN** a player presses F7
-- **THEN** the mouse's vertical look inverts and a banner says so
+- **THEN** the mouse's vertical look inverts, a banner says so, and it is still inverted next session

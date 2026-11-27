@@ -70,7 +70,9 @@ The character menu has nine tabs: ITEMS, SPELLS, SKILLS, STORY, SHOP, FOOD, ALCH
 | ![map](docs/screenshots/map.png) | ![loot](docs/screenshots/loot.png) |
 | Map of explored cells (M) | A chest, a weapon, a scroll, a relic, gold and potions |
 | ![start](docs/screenshots/start.png) | ![coop2](docs/screenshots/coop2.png) |
-| Choose your world's seed | Split screen with two players |
+| The start screen: continue, a new world, the worlds saved here | Split screen with two players |
+| ![pause](docs/screenshots/pause.png) | ![settings](docs/screenshots/settings.png) |
+| The pause menu (Esc, START) | Settings, kept between sessions |
 | ![coop3](docs/screenshots/coop3.png) |  |
 | Three players and the roster |  |
 
@@ -161,7 +163,7 @@ source /path/to/emsdk/emsdk_env.sh     # Emscripten 4.0.10 was used
 python3 -m http.server -d build-web/dist 8000
 ```
 
-Open http://localhost:8000 and click into the page to lock the mouse; Esc releases it.
+Open http://localhost:8000 and click into the page to lock the mouse; Esc releases it and pauses the game.
 
 ### Phones and tablets
 
@@ -206,9 +208,22 @@ preview URLs.
 
 ## Playing
 
-The game starts with the **start screen**: type a seed (a number or any word; the same seed
-always makes the same world) or roll a random one, and enter the fortress. `--seed` on the
-command line skips it.
+The game starts with the **start screen**: *Continue* the world you played last, start a
+*New world* (type a seed, a number or any word, since the same seed always makes the same
+world, or roll a random one), pick one of the *Worlds* saved here (Del or X deletes one, after
+asking), or open *Settings*, *Help* and *Credits*. `--seed` on the command line skips it. The
+build is shown in its corner and in the pause menu.
+
+**Pausing:** Esc (START on a gamepad, the II button on touch) opens the pause menu: *Resume*,
+*Settings*, *Help*, *Save and quit to title* and, on the desktop, *Save and quit game*. Alone,
+the world stands still while it is open, and it opens by itself when the window loses the
+focus or the browser tab is hidden; in co-op the pause menu is yours and the world goes on.
+
+**Settings** (from the start screen and the pause menu): resolution, window or full screen,
+v-sync, a frame cap, brightness, dithering, vertex snap, the torch; master, effects and music
+volume and mute; mouse and stick sensitivity, inverted look and vibration; the line at the
+top. They apply at once and are kept between sessions (the F-keys below change and keep the
+same values); what you pass on the command line wins for that run.
 
 **Layers:** the fortress is built like the floors of a building. Each layer has one floor:
 you walk through its rooms and corridors without falling into another layer, and the only
@@ -400,11 +415,13 @@ vault stays open.
 **Saving:** each world (seed) has its own save with every character that played in it
 (level, XP, skills, inventory, gold, potions, relics, spells, position and shrine), the chests,
 relics and vault hoards already taken, the vaults opened, and the explored map near you. The game saves every 30 seconds,
-when you attune a shrine, when you quit, and in the browser when the tab is hidden or closed.
+when you attune a shrine, when you save and quit (to the start screen or out of the game), when
+you close the window, and in the browser when the tab is hidden or closed.
 The browser keeps it in `localStorage` (a few KB per world); the desktop version writes files
 to the user data folder (`~/.local/share/fortress-crawl/` on Linux,
-`%APPDATA%\fortress-crawl\` on Windows). The start screen suggests the world you played
-last and shows what is saved; *New characters* (press twice) deletes the save of that world.
+`%APPDATA%\fortress-crawl\` on Windows). The start screen offers the world you played
+last and lists the others; *Start again: new characters* (on *New world*, after asking) deletes
+the save of that world.
 `--fresh` starts without loading.
 
 ## Controls
@@ -457,7 +474,7 @@ its first page runs the tutorial once more. `--no-tutorial` starts without it.
 | F10 | music on / off |
 | - / = | mouse sensitivity down / up |
 | F12 | save `screenshot.bmp` (desktop only) |
-| Esc | release the mouse (press again to quit) |
+| Esc | close the menu, else pause (and release the mouse) |
 
 ### Split screen and gamepads
 
@@ -480,6 +497,7 @@ If a pad disconnects, its character waits until a pad presses START again.
 | Left stick click | sprint (until you stop) |
 | Y | character menu (LB/RB tabs, D-pad or stick to select, A to equip/use/learn, X to scrap, B to close) |
 | BACK | map (B to close) |
+| START | pause menu (on a pad that has not joined: join) |
 
 Menus only pause the game when you play alone. Kills give the killer full XP and everyone
 else within 30 m half. Monsters get tougher with each extra player.
@@ -504,9 +522,14 @@ comparing seeds and changes to the generator. `--demo` sets up a scene for that 
 level-8 character facing a monster pack (`combat`, `sword`, `death` with 1 HP, `coop` with
 the other players beside you, `magic` casting three spells), a character with some loot in
 the `inventory` or `spells` screen, `loot` on the floor, one monster of each kind
-(`bestiary`), the start screen (`menu`), the motive question (`motive`), a story in progress
+(`bestiary`), the start screen (`menu`, and its screens `menu-new`, `menu-worlds`,
+`menu-settings`, `menu-help`, `menu-credits`), the pause menu (`pause`, `--cast 1` its settings,
+`2` its help), the motive question (`motive`), a story in progress
 (`story` tab, `read` at an inscription, `named` facing a chapter target), or the `skills` or
-`map` screen. `--demo storytest --pos 20 6 0.5 --shot-time 10` plays a scripted story run
+`map` screen. `--demo pausetest` checks that a monster stands still while the game is paused;
+`--demo titletest --persist` saves and quits to the start screen, finds the world listed,
+continues it and logs where the character is (and checks the settings file's round trip).
+`--demo storytest --pos 20 6 0.5 --shot-time 10` plays a scripted story run
 (read a note, kill a chapter target, bring a lost item home) and logs each step.
 `vault`, `levers`, `plates`, `statues` and `beam` look at the nearest vault (of that puzzle)
 and `darts`, `spikes` and `flames` at the nearest trap at work; `--demo mechtest` solves the

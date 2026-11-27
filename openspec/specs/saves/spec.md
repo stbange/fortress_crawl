@@ -27,11 +27,15 @@ Each world SHALL have its own save with every character that played in it (level
 - **THEN** their character, home and the world's changes are as they left them
 
 ### Requirement: When it saves
-The game SHALL save every 30 seconds, when a shrine is attuned, at an inn or bed, when quitting, and in the browser when the tab is hidden or closed.
+The game SHALL save every 30 seconds, when a shrine is attuned, at an inn or bed, when saving and quitting (to the start screen or out of the game), when quitting, and in the browser when the tab is hidden or closed.
 
 #### Scenario: Tab closed
 - **WHEN** a browser player closes the tab
 - **THEN** the world is saved
+
+#### Scenario: Save and quit
+- **WHEN** a player chooses SAVE AND QUIT TO TITLE
+- **THEN** the world is saved before the start screen shows
 
 ### Requirement: Where and which
 The browser SHALL keep saves in its local storage and the desktop in the user data folder; saves SHALL be versioned, older ones SHALL always load and newer ones SHALL not; --fresh SHALL start without loading.

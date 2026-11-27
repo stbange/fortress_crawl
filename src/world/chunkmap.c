@@ -107,6 +107,9 @@ void chunkmap_shutdown(ChunkMap *m) {
         renderer_free_mesh(&m->pool[i].vao, &m->pool[i].vbo);
         free(m->pool[i].blocks);
         free(m->pool[i].light);
+        free(m->pool[i].fluid);
+        free(m->pool[i].stain);
+        carve_free(m->pool[i].carve);
     }
     free(m->pool);
     free(m->free_list);
@@ -120,6 +123,7 @@ void chunkmap_shutdown(ChunkMap *m) {
         mesh_scratch_free(g_scratch[i]);
         g_scratch[i] = NULL;
     }
+    memset(m, 0, sizeof *m); /* (quit to the start screen: another world can start) */
 }
 
 Chunk *chunkmap_get(ChunkMap *m, int cx, int cy, int cz) {

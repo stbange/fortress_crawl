@@ -18,6 +18,7 @@ typedef struct RenderSettings {
     bool fullbright;
     bool torch;
     float fov_deg;
+    float bright; /* gamma on the final image: 1 as made */
 } RenderSettings;
 
 /* Per-frame scene parameters (blended from the camera's surroundings). */
@@ -54,7 +55,7 @@ typedef struct Renderer {
     GLint u_vp, u_origin, u_snap, u_res, u_cam, u_fog, u_fog_density, u_ambient, u_torch, u_torch_radius, u_time,
         u_fullbright, u_atlas, u_ndl, u_dl_pos, u_dl_col;
     GLint s_inv_vp, s_fog, s_stars, s_moons, s_time;
-    GLint p_tex, p_dither, p_low, p_time;
+    GLint p_tex, p_dither, p_low, p_time, p_bright;
     mat4 vp;
     int view_x, view_y, view_w, view_h; /* current view inside the low-res target (GL coordinates) */
 } Renderer;

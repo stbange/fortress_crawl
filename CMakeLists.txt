@@ -90,6 +90,10 @@ add_executable(fortress_crawl
   src/game/alchemy.c
   src/game/forge.c
   src/game/help.c
+  src/game/store.c
+  src/game/ui.c
+  src/game/settings.c
+  src/game/pause.c
   src/game/dig.c
   src/game/sim.c
   src/game/bio.c
@@ -125,6 +129,15 @@ target_compile_options(fortress_crawl PRIVATE ${FC_WARN})
 # Sound effects (made by tools/gen_sfx.mjs): found next to the executable in sfx/, else in the source tree.
 target_compile_definitions(fortress_crawl PRIVATE FC_SFX_DIR="${CMAKE_SOURCE_DIR}/assets/sfx"
                                                   FC_MUSIC_DIR="${CMAKE_SOURCE_DIR}/assets/music")
+# The build shown on the start screen and in the pause menu (openspec front-end): the commit, from
+# git when the build is configured; "dev" without git.
+execute_process(COMMAND git describe --tags --always WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+                OUTPUT_VARIABLE FC_GIT_VERSION OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET RESULT_VARIABLE FC_GIT_RESULT)
+if(NOT FC_GIT_RESULT EQUAL 0 OR FC_GIT_VERSION STREQUAL "")
+  set(FC_GIT_VERSION "dev")
+endif()
+string(TOUPPER "${FC_GIT_VERSION}" FC_GIT_VERSION)
+target_compile_definitions(fortress_crawl PRIVATE FC_VERSION="BUILD ${FC_GIT_VERSION}")
 
 if(EMSCRIPTEN)
   set(FC_WEB_SFX_DIR "${CMAKE_SOURCE_DIR}/assets/sfx" CACHE PATH "the sounds packed into the browser build")

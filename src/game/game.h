@@ -375,10 +375,11 @@ typedef struct Options {
     const char *capture;
     float capture_start, capture_seconds, capture_fps;
     float capture_orbit, capture_drift; /* demos: turn the view this many degrees a second; walk or fly forward (0..1) */
+    bool cli_lowres, cli_sens, cli_invert; /* given on the command line: the saved settings do not override them */
 } Options;
 
 /* On-screen touch controls for player 1 (phones and tablets). */
-enum { TB_ATTACK, TB_ALT, TB_JUMP, TB_CROUCH, TB_WEAPON, TB_SPELL, TB_NEXT_SPELL, TB_SKILLS, TB_MAP, TB_POTION, TB_THREAD, TB_COUNT };
+enum { TB_ATTACK, TB_ALT, TB_JUMP, TB_CROUCH, TB_WEAPON, TB_SPELL, TB_NEXT_SPELL, TB_SKILLS, TB_MAP, TB_POTION, TB_THREAD, TB_PAUSE, TB_COUNT };
 #define TOUCH_MAX_FINGERS 10
 
 typedef struct TouchCtl {
@@ -407,18 +408,87 @@ typedef struct SaveInfo {
     float play_time;
 } SaveInfo;
 
-/* Start screen with the seed choice (menu.c). */
+/* Where things are kept between sessions (store.c): localStorage in the browser, files on the desktop. */
+bool store_write(const char *key, const u8 *data, int n);
+u8 *store_read(const char *key, int *n); /* malloc'd, zero-terminated; NULL if missing */
+void store_remove(const char *key);
+int store_list(const char *prefix, char (*keys)[64], int max);
+
+/* A small kit for the screens round the game (ui.c): rows, a dialog that asks, a page of text. */
+typedef struct UiItem {
+    char label[48], value[40]; /* a value: changed with left and right */
+    bool header, disabled;
+    int id;
+} UiItem;
+typedef struct UiList { int sel, scroll; } UiList;
+typedef struct UiDialog {
+    bool open;
+    int action, sel; /* sel 0 yes, 1 no (the safe one is chosen first) */
+    char title[48], text[160], yes[24], no[24];
+} UiDialog;
+void ui_dim(int W, int H, float a);
+void ui_list_fix(UiList *l, const UiItem *items, int n, int rows);
+void ui_list_nav(UiList *l, const UiItem *items, int n, int nav);
+void ui_list_draw(int W, int H, int top, const char *title, const UiItem *items, int n, UiList *l, const char *footer);
+int ui_list_tap(int W, int H, int top, const UiItem *items, int n, UiList *l, float px, float py, int *dir);
+void ui_dialog_open(UiDialog *d, int action, const char *title, const char *text, const char *yes, const char *no);
+void ui_dialog_draw(int W, int H, const UiDialog *d);
+int ui_dialog_nav(UiDialog *d, int nav); /* 1 yes, 0 no or back, -1 still open */
+int ui_dialog_tap(UiDialog *d, int W, int H, float px, float py);
+int ui_page_draw(int W, int H, int top, const char *title, const char *text, int *scroll);
+
+/* The settings (settings.c; openspec settings): kept between sessions. */
+typedef struct Settings {
+    int res_mode;
+    bool fullscreen, vsync;
+    int fps_cap; /* 0 none, 30, 60, 120 */
+    float bright;
+    bool dither, vsnap, torch;
+    int vol_master, vol_sfx, vol_music; /* percent */
+    bool mute, music_on;
+    float sens_mouse, sens_pad;
+    bool invert_x, invert_y, vibration;
+    bool line_top;
+} Settings;
+extern Settings g_set;
+typedef struct SettingsScreen { UiList list; UiDialog dlg; } SettingsScreen;
+void settings_defaults(Settings *s);
+void settings_parse(Settings *s, const char *text);
+int settings_format(const Settings *s, char *out, int cap);
+void settings_load(bool enabled);
+void settings_save(void);
+
+#ifndef FC_VERSION
+#define FC_VERSION "dev"
+#endif
+enum { QUIT_NONE, QUIT_TO_TITLE, QUIT_GAME };
+
+/* The start screen (menu.c; openspec front-end): continue, a new world, the list of worlds, the
+ * settings, the help and the credits. */
+enum { MS_MAIN, MS_NEW, MS_WORLDS, MS_SETTINGS, MS_HELP, MS_CREDITS };
+#define MENU_MAX_WORLDS 48
 typedef struct StartMenu {
+    int screen;
     char text[24];
     int row, rolls;
     char peeked[24];  /* the text the save info below belongs to */
-    bool has_save, confirm_forget;
+    bool has_save;
     SaveInfo save;
+    bool has_last;    /* the world played last (CONTINUE) */
+    SaveInfo last;
+    SaveInfo worlds[MENU_MAX_WORLDS];
+    int nworlds;
+    UiList list, wlist;
+    UiDialog dlg;
+    SettingsScreen set;
+    int credits_scroll;
     bool fresh; /* the suggested seed is replaced by typing */
-    bool done;
+    bool done, quit;
     float t;
     SDL_JoystickID pad; /* the gamepad that used the menu becomes player 1's */
 } StartMenu;
+
+
 
 /* The golden thread spell: a fading line along a route to a target (quests.c). */
 #define THREAD_MAX 600
@@ -532,6 +602,11 @@ typedef struct PlayerSlot {
     int flow_ox, flow_oy, flow_oz;
     float flow_timer;
     int flow_px, flow_py, flow_pz;
+    /* the pause menu (pause.c) */
+    bool pause_open;
+    int pause_screen;
+    UiList pause_list;
+    SettingsScreen pause_set;
 } PlayerSlot;
 
 /* The Sanctum's contents, one per world (its build stages are World.sanctum). */
@@ -658,10 +733,31 @@ typedef struct Game {
     float fps;
     int res_mode;
     float time;
+    bool window_dirty; /* the settings changed the window mode, v-sync or frame cap (main.c) */
+    int quit_request;  /* QUIT_*: the pause menu asked to leave (main.c saves and goes) */
 } Game;
+
+/* settings.c: the settings in effect; the option keys write them back */
+void settings_apply(Game *g);
+void settings_from_game(Game *g);
+void settings_screen_draw(Game *g, SettingsScreen *ss, int W, int H, int top);
+bool settings_screen_nav(Game *g, SettingsScreen *ss, int nav); /* true: the screen is left */
+bool settings_screen_tap(Game *g, SettingsScreen *ss, int W, int H, int top, float x, float y);
+
+/* pause.c */
+bool pause_is_open(const PlayerSlot *ps);
+void pause_open(Game *g, PlayerSlot *ps);
+void pause_close(Game *g, PlayerSlot *ps);
+void pause_draw(Game *g, PlayerSlot *ps, int W, int H);
+void pause_nav(Game *g, PlayerSlot *ps, int nav);
+void pause_tap(Game *g, PlayerSlot *ps, int W, int H, float x, float y);
 
 /* game.c */
 void game_init(Game *g, vec3 start, float yaw);
+void game_escape(Game *g);
+void game_auto_pause(Game *g);
+/* Frees what a world holds, keeping the window, renderer, options and pads (quit to title). */
+void game_unload(Game *g);
 PlayerSlot *game_add_player(Game *g);
 void game_event(Game *g, const SDL_Event *e);
 /* Mouse look for player 1 from a motion in window pixels. */
@@ -725,7 +821,7 @@ float stats_max_mana(const Stats *s);
 void stats_refresh(PlayerSlot *ps);
 
 /* Skill tree helpers for other input methods (game.c). */
-enum { NAV_LEFT, NAV_RIGHT, NAV_UP, NAV_DOWN, NAV_BUY, NAV_DROP };
+enum { NAV_LEFT, NAV_RIGHT, NAV_UP, NAV_DOWN, NAV_BUY, NAV_DROP, NAV_BACK };
 void game_skills_nav(PlayerSlot *ps, int nav);
 /* Skill under a point of the skill screen (view coordinates): a skill id, -2 / -3 for the
  * previous / next branch arrows of the compact layout, or -1. */
@@ -739,6 +835,7 @@ const char *game_skills_key(const Game *g, const PlayerSlot *ps);
 void menu_init(StartMenu *m);
 void menu_event(StartMenu *m, Game *g, const SDL_Event *e);
 void menu_draw(StartMenu *m, Game *g, float dt);
+void menu_show(StartMenu *m, int screen); /* MS_* */
 /* Seed from the text: numbers as they are, words hashed (case-insensitive). */
 u64 menu_seed(const char *text);
 /* Gives an idle gamepad to player 1. */

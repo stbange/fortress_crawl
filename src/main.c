@@ -59,14 +59,14 @@ static bool parse_args(Options *o, int argc, char **argv) {
         else if (!strcmp(a, "--vradius") && i + 1 < argc) o->vradius = atoi(argv[++i]);
         else if (!strcmp(a, "--shot") && i + 1 < argc) o->shot = argv[++i];
         else if (!strcmp(a, "--window") && i + 2 < argc) { o->win_w = atoi(argv[i + 1]); o->win_h = atoi(argv[i + 2]); i += 2; }
-        else if (!strcmp(a, "--lowres") && i + 2 < argc) { o->low_w = atoi(argv[i + 1]); o->low_h = atoi(argv[i + 2]); i += 2; }
+        else if (!strcmp(a, "--lowres") && i + 2 < argc) { o->low_w = atoi(argv[i + 1]); o->low_h = atoi(argv[i + 2]); o->cli_lowres = true; i += 2; }
         else if (!strcmp(a, "--debug")) o->hud = true;
         else if (!strcmp(a, "--grab")) o->grab = true;
         else if (!strcmp(a, "--recenter")) o->recenter = 1;
         else if (!strcmp(a, "--no-recenter")) o->recenter = -1;
-        else if (!strcmp(a, "--invert-x")) o->invert_x = true;
-        else if (!strcmp(a, "--invert-y")) o->invert_y = true;
-        else if (!strcmp(a, "--sens") && i + 1 < argc) o->sens = strtof(argv[++i], NULL);
+        else if (!strcmp(a, "--invert-x")) o->invert_x = o->cli_invert = true;
+        else if (!strcmp(a, "--invert-y")) o->invert_y = o->cli_invert = true;
+        else if (!strcmp(a, "--sens") && i + 1 < argc) { o->sens = strtof(argv[++i], NULL); o->cli_sens = true; }
         else if (!strcmp(a, "--shot-time") && i + 1 < argc) o->shot_time = strtof(argv[++i], NULL);
         else if (!strcmp(a, "--demo") && i + 1 < argc) { o->demo = true; g_demo_kind = argv[++i]; }
         else if (!strcmp(a, "--players") && i + 1 < argc) o->players = atoi(argv[++i]);
@@ -331,6 +331,12 @@ static void demo_setup(Game *g) {
         p1->tut_weapon = (u8)p1->st.weapon;
         p1->pl.fly = false;
         for (int i = 0; i < MAX_MONSTERS; i++) g->mons[i].alive = false;
+        return;
+    }
+    if (!strcmp(g_demo_kind, "pause")) { /* the pause menu: --cast 0 the menu, 1 the settings, 2 the help */
+        p1->pause_open = true;
+        p1->pause_screen = g_demo_cast > 0 ? g_demo_cast : 0;
+        p1->pause_set.list.sel = 1;
         return;
     }
     if (!strcmp(g_demo_kind, "help")) { /* the HELP tab, at topic --cast */
@@ -987,7 +993,7 @@ typedef struct App {
     int suspicious; /* motion events that show relative mode is not really active */
     SDL_Joystick *vpad; /* --test-pad */
     int touch_low_w;    /* low-res width before the touch controls widened it */
-    bool in_menu;
+    bool in_menu, menu_shot;
     StartMenu menu;
 } App;
 
@@ -1110,22 +1116,24 @@ static void handle_events(App *a) {
             SDL_GetWindowSizeInPixels(a->win, &w, &h);
             renderer_resize(&g->r, w, h);
         }
-        else if (e.type == SDL_EVENT_WINDOW_FOCUS_LOST) mouse_capture(a, false);
+        else if (e.type == SDL_EVENT_WINDOW_FOCUS_LOST) {
+            mouse_capture(a, false);
+            if (!g->opt.shot) game_auto_pause(g); /* (openspec front-end: auto-pause) */
+        }
         else if (e.type == SDL_EVENT_MOUSE_MOTION) {
             float dx, dy;
             if (g->mouse && mouse_delta(a, &e.motion, &dx, &dy)) game_look(g, dx, dy);
         } else if ((e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) && e.button.which == SDL_TOUCH_MOUSEID) {
             /* mouse events made up from touches: the touch controls handle those */
+        } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && !g->mouse && g->players[0].pause_open) {
+            game_event(g, &e); /* a click on the pause menu, not one that captures the mouse */
         } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && !g->mouse) {
             if (!g->touch.forced) g->touch.active = false; /* a real mouse: back to mouse controls */
             mouse_capture(a, true); /* the click that captures the mouse does not attack */
         } else if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE && !e.key.repeat) {
-            PlayerSlot *p1 = &g->players[0];
-            if (p1->show_skills || p1->show_map) p1->show_skills = p1->show_map = false;
-            else if (g->mouse) mouse_capture(a, false);
-#ifndef __EMSCRIPTEN__
-            else a->running = false;
-#endif
+            /* Esc closes what is open, else pauses (openspec menus: pause); the menu lets the mouse go */
+            game_escape(g);
+            if (g->players[0].pause_open && g->mouse) mouse_capture(a, false);
         } else if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_F12 && !e.key.repeat) {
 #ifndef __EMSCRIPTEN__
             save_screenshot(g, "screenshot.bmp");
@@ -1139,6 +1147,7 @@ static void handle_events(App *a) {
     if (g->mouse && !a->manual && !SDL_GetWindowRelativeMouseMode(a->win)) {
         g->mouse = false;
         g->players[0].attack_held = g->players[0].alt_held = false;
+        if (!g->opt.shot) game_auto_pause(g); /* (Esc in the browser ends the pointer lock: the game pauses) */
     }
 #endif
 }
@@ -1237,6 +1246,90 @@ static void story_test_step(App *a) {
     }
 }
 
+static void quit_request(App *a);
+static vec3 g_title_at;
+
+/* --demo pausetest: the pause menu stops the world when alone; --demo titletest: save and quit
+ * to the start screen, the world is in the list, and it loads again where it was left; the
+ * settings survive a write and a read (openspec front-end, settings). */
+static void front_test_step(App *a) {
+    Game *g = a->g;
+    if (!g_demo_kind || !a->demo_done) return;
+    PlayerSlot *p1 = &g->players[0];
+    float t = a->shot_wait;
+    if (!strcmp(g_demo_kind, "pausetest")) {
+        static int stage;
+        static Monster *m;
+        static vec3 at;
+        static float gt;
+        if (stage == 0 && t > 0.7f) {
+            vec3 f = dir_from_angles(p1->pl.yaw, 0);
+            m = monster_spawn(g, MON_SKELETON, v3_add(p1->pl.pos, v3_scale(f, 6.0f)), 1, false, v3(1, 1, 1), 0x9A05E);
+            if (m) m->awake = true;
+            stage = 1;
+        } else if (stage == 1 && t > 1.5f && m) {
+            at = m->pos;
+            gt = g->time;
+            p1->pause_open = true; /* (pause_open() refuses screenshot runs) */
+            stage = 2;
+        } else if (stage == 2 && t > 3.0f) {
+            SDL_Log("pausetest: paused 1.5 s: monster moved %.2f m, game time +%.2f s, hp %.0f/%.0f", v3_len(v3_sub(m->pos, at)), g->time - gt,
+                    p1->st.hp, p1->st.maxhp);
+            at = m->pos;
+            gt = g->time;
+            pause_nav(g, p1, NAV_BACK);
+            stage = 3;
+        } else if (stage == 3 && t > 4.5f) {
+            SDL_Log("pausetest: resumed 1.5 s: monster moved %.2f m, game time +%.2f s, pause %s", v3_len(v3_sub(m->pos, at)), g->time - gt,
+                    p1->pause_open ? "open" : "closed");
+            a->running = false;
+        }
+    } else if (!strcmp(g_demo_kind, "titletest")) {
+        static int stage;
+        static char seed[24];
+        if (stage == 0 && t > 0.7f) {
+            /* the settings, written and read back */
+            Settings s, back;
+            settings_defaults(&s);
+            s.vol_music = 30; s.bright = 1.3f; s.fps_cap = 60; s.invert_y = true; s.line_top = false;
+            char buf[2048];
+            settings_format(&s, buf, sizeof buf);
+            settings_defaults(&back);
+            settings_parse(&back, buf);
+            Settings odd;
+            settings_parse(&odd, "unknown_key=7\nvolume_effects=250\n"); /* skipped, and clamped */
+            SDL_Log("titletest: settings round trip %s; an unknown key skipped and 250%% clamped to %d%%", back.vol_music == 30 && fabsf(back.bright - 1.3f) < 0.01f &&
+                    back.fps_cap == 60 && back.invert_y && !back.line_top ? "ok" : "FAILED", odd.vol_sfx);
+            p1->st.level = 4; /* something to find again */
+            p1->pl.pos.x += 1.5f;
+            g_title_at = p1->pl.pos;
+            snprintf(seed, sizeof seed, "%s", g->opt.seed_text);
+            g->quit_request = QUIT_TO_TITLE;
+            quit_request(a); /* saves, unloads, the start screen */
+            int found = 0;
+            for (int i = 0; i < a->menu.nworlds; i++) found += !strcmp(a->menu.worlds[i].seed_text, seed);
+            SDL_Log("titletest: at the start screen (%s), %d worlds, this one %s, continue %s", a->in_menu ? "yes" : "no", a->menu.nworlds,
+                    found ? "listed" : "MISSING", a->menu.has_last ? a->menu.last.seed_text : "-");
+            snprintf(a->menu.text, sizeof a->menu.text, "%s", seed);
+            a->menu.done = true; /* CONTINUE */
+            a->shot_wait = 0;
+            a->demo_done = false;
+            stage = 1;
+        }
+    }
+}
+
+/* titletest: after the world loaded again */
+static void front_test_reloaded(App *a) {
+    Game *g = a->g;
+    if (!g_demo_kind || strcmp(g_demo_kind, "titletest")) return;
+    static int n;
+    if (++n != 2) return; /* the second start */
+    PlayerSlot *p1 = &g->players[0];
+    SDL_Log("titletest: loaded again %.2f m from where it was left, level %d, %d chunk slots", v3_len(v3_sub(p1->pl.pos, g_title_at)), p1->st.level,
+            g->map.pool_cap);
+}
+
 static void test_pad_step(App *a) {
     if (!a->vpad) return;
     float t = a->shot_wait;
@@ -1255,6 +1348,8 @@ static void screenshot_step(App *a, float frame_dt) {
     test_pad_step(a);
     story_test_step(a);
     tut_test_step(a);
+    front_test_step(a);
+    if (a->in_menu) return;
     if (g->opt.demo && !a->demo_done && a->shot_wait > 0.5f) {
         for (int i = 0; i < MAX_PLAYERS; i++) {
             PlayerSlot *ps = &g->players[i];
@@ -2224,6 +2319,7 @@ static void start_world(App *a) {
     }
     a->in_menu = false;
     g->world_started = true;
+    front_test_reloaded(a);
 #ifndef __EMSCRIPTEN__
     /* in the browser, pointer lock needs a click first */
     if ((!g->opt.shot || g->opt.grab) && !g->touch.active) mouse_capture(a, true);
@@ -2240,14 +2336,12 @@ static void menu_frame(App *a, float frame_dt) {
             SDL_GetWindowSizeInPixels(a->win, &w, &h);
             renderer_resize(&g->r, w, h);
         }
-#ifndef __EMSCRIPTEN__
-        else if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE) a->running = false;
-#endif
         else menu_event(&a->menu, g, &e);
     }
+    if (a->menu.quit) a->running = false; /* QUIT on the start screen (desktop) */
     menu_draw(&a->menu, g, frame_dt);
     music_update(g, frame_dt, true);
-    if (g->opt.shot) {
+    if (g->opt.shot && a->menu_shot) {
         /* screenshot of the start screen */
         save_screenshot(g, g->opt.shot);
         a->running = false;
@@ -2265,10 +2359,49 @@ static void menu_frame(App *a, float frame_dt) {
 #endif
 }
 
+/* The settings' window mode, v-sync and frame cap (openspec settings). */
+static void apply_window(App *a) {
+    Game *g = a->g;
+    if (!g->window_dirty) return;
+    g->window_dirty = false;
+#ifndef __EMSCRIPTEN__
+    if (g->opt.shot) return; /* screenshot runs keep their window and draw unsynced */
+    SDL_SetWindowFullscreen(a->win, g_set.fullscreen);
+    SDL_GL_SetSwapInterval(g_set.vsync ? 1 : 0);
+#endif
+}
+
+/* Save and quit (the pause menu): back to the start screen, or out of the game. */
+static void quit_request(App *a) {
+    Game *g = a->g;
+    int q = g->quit_request;
+    g->quit_request = QUIT_NONE;
+    if (q == QUIT_GAME) { a->running = false; return; } /* main() saves on the way out */
+    if (q != QUIT_TO_TITLE) return;
+    if (!g->opt.shot || g->opt.persist) {
+        bool ok = game_save(g);
+        SDL_Log("%s the world %s; back to the start screen", ok ? "Saved" : "Could not save", g->opt.seed_text);
+    }
+    mouse_capture(a, false);
+    if (a->touch_low_w) { g->r.set.low_w = a->touch_low_w; a->touch_low_w = 0; }
+    game_unload(g);
+    /* what the command line said was for the first world */
+    g->opt.fresh = g->opt.has_pos = g->opt.has_seed = false;
+    menu_init(&a->menu);
+    a->in_menu = true;
+}
+
 static void frame(void *user) {
     App *a = user;
     Game *g = a->g;
     const float DT = 1.0f / 60.0f;
+#ifndef __EMSCRIPTEN__
+    if (g_set.fps_cap > 0 && !g->opt.shot && !g->opt.bot) { /* the frame cap: wait out the rest of the frame */
+        u64 want = a->last + 1000000000ull / (u64)g_set.fps_cap, t = SDL_GetTicksNS();
+        if (t < want) SDL_DelayPrecise(want - t);
+    }
+#endif
+    apply_window(a);
     u64 now = SDL_GetTicksNS();
     float frame_dt = (float)((now - a->last) / 1e9);
     a->last = now;
@@ -2292,7 +2425,9 @@ static void frame(void *user) {
         return;
     }
 
+    bool was_paused = g->players[0].pause_open;
     handle_events(a);
+    if (g->quit_request) { quit_request(a); if (a->in_menu || !a->running) return; }
 
     const bool *keys = SDL_GetKeyboardState(NULL);
     PlayerInput in = { 0 };
@@ -2366,6 +2501,13 @@ static void frame(void *user) {
         game_update(g, &in, DT);
         a->acc -= DT;
     }
+    if (g->quit_request) { quit_request(a); if (a->in_menu || !a->running) return; } /* (from a pad) */
+#ifndef __EMSCRIPTEN__
+    /* resumed: the mouse is caught again (in the browser the pointer lock needs a click) */
+    if (was_paused && !g->players[0].pause_open && !g->mouse && !g->touch.active && g->players[0].keyboard && !g->opt.shot) mouse_capture(a, true);
+#else
+    (void)was_paused;
+#endif
     for (int i = 0; i < MAX_PLAYERS; i++)
         if (g->players[i].active) game_update_atmosphere(g, &g->players[i], frame_dt);
     sfx_update(g, frame_dt);
@@ -2382,7 +2524,7 @@ static void frame(void *user) {
 /* The browser may close or freeze the tab at any time: save when it is hidden or left. */
 static App *g_app;
 static EM_BOOL on_visibility(int type, const EmscriptenVisibilityChangeEvent *e, void *user) {
-    if (e->hidden && g_app && !g_app->in_menu && !g_app->g->opt.shot) game_save(g_app->g);
+    if (e->hidden && g_app && !g_app->in_menu && !g_app->g->opt.shot) { game_save(g_app->g); game_auto_pause(g_app->g); }
     return 0;
 }
 static const char *on_unload(int type, const void *reserved, void *user) {
@@ -2449,21 +2591,31 @@ int main(int argc, char **argv) {
     g->r.set.torch = true;
     g->r.set.fullbright = g->opt.fullbright;
     g->r.set.fov_deg = 72.0f;
+    g->r.set.bright = 1.0f;
     g->res_mode = 1;
+    /* the saved settings (not in test, screenshot or bot runs: those stay the same everywhere) */
+    settings_load(!g->opt.shot && !g->opt.bot && !g_demo_kind);
     int ww, wh;
     SDL_GetWindowSizeInPixels(a->win, &ww, &wh);
     if (!renderer_init(&g->r, ww, wh)) return 1;
     font_init();
     batch_init();
     sfx_init(g);
+    settings_apply(g); /* (what was given on the command line wins) */
+    apply_window(a);
     g->touch.active = g->touch.forced = g->opt.touch;
     /* the start screen picks the seed, unless it was given (or this is a screenshot run) */
-    bool menu_shot = g->opt.shot && g_demo_kind && !strcmp(g_demo_kind, "menu");
+    /* --demo menu, menu-new, menu-worlds, menu-settings, menu-help, menu-credits: the start screen */
+    bool menu_shot = g->opt.shot && g_demo_kind && !strncmp(g_demo_kind, "menu", 4);
+    a->menu_shot = menu_shot;
     /* screenshot runs pick a motive without asking, except the one that shows the question */
     g->opt.auto_motive = g->opt.shot && !(g_demo_kind && !strcmp(g_demo_kind, "motive"));
     if ((!g->opt.has_seed && !g->opt.shot) || menu_shot) {
         menu_init(&a->menu);
         a->in_menu = true;
+        static const char *SCREENS[] = { "menu", "menu-new", "menu-worlds", "menu-settings", "menu-help", "menu-credits" };
+        for (int i = 0; menu_shot && i < (int)ARRAY_LEN(SCREENS); i++)
+            if (!strcmp(g_demo_kind, SCREENS[i])) menu_show(&a->menu, i);
     } else {
         start_world(a);
     }

@@ -91,6 +91,41 @@ void game_init(Game *g, vec3 start, float yaw) {
     g->hud = g->opt.hud;
 }
 
+/* Quit to the start screen (openspec front-end): everything of this world goes (the caller saved
+ * it first); the window, renderer, options, touch controls and gamepads stay, so another world
+ * starts as if the game had just been opened. */
+void game_unload(Game *g) {
+    sfx_silence();
+    chunkmap_shutdown(&g->map);
+    free(g->looted);
+    free(g->spawned);
+    for (int i = 0; i < MAX_PLAYERS; i++) { free(g->players[i].flow); free(g->players[i].flow_solid); }
+    for (int i = 0; i < g->explored.cap; i++) free(g->explored.table[i]);
+    free(g->explored.table);
+    for (int i = 0; i < MAX_LORE; i++) free(g->lore[i].text);
+    /* what outlives a world */
+    Options opt = g->opt;
+    Renderer r = g->r;
+    TouchCtl touch = g->touch;
+    SDL_Gamepad *pads[ARRAY_LEN(g->idle_pads) + MAX_PLAYERS];
+    int npads = 0;
+    for (int i = 0; i < ARRAY_LEN(g->idle_pads); i++) if (g->idle_pads[i]) pads[npads++] = g->idle_pads[i];
+    for (int i = 0; i < MAX_PLAYERS; i++) if (g->players[i].active && g->players[i].pad) pads[npads++] = g->players[i].pad;
+    bool hud = g->hud;
+    int res_mode = g->res_mode;
+    float fps = g->fps;
+    memset(g, 0, sizeof *g);
+    g->opt = opt;
+    g->r = r;
+    g->touch.active = touch.active;
+    g->touch.forced = touch.forced;
+    for (int i = 0; i < npads && i < ARRAY_LEN(g->idle_pads); i++) g->idle_pads[i] = pads[i];
+    for (int i = ARRAY_LEN(g->idle_pads); i < npads; i++) SDL_CloseGamepad(pads[i]);
+    g->hud = hud;
+    g->res_mode = res_mode;
+    g->fps = fps;
+}
+
 /* A new character joins next to the first living player (or at the start). */
 PlayerSlot *game_add_player(Game *g) {
     for (int i = 0; i < MAX_PLAYERS; i++) {
@@ -247,7 +282,7 @@ void game_hurt_player(Game *g, PlayerSlot *ps, float dmg, vec3 from) {
     push.y = 0;
     push = v3_norm(push);
     ps->pl.vel = v3_add(ps->pl.vel, v3_scale(push, 4.0f * (1.0f - food_fx(s, ME_STUN_RES))));
-    if (ps->pad) SDL_RumbleGamepad(ps->pad, 0x6000, 0x9000, 180);
+    if (ps->pad && g_set.vibration) SDL_RumbleGamepad(ps->pad, 0x6000, 0x9000, 180);
     if (s->hp > 0) sfx_player(g, ps, SFX_PLAYER_HURT, clampf(0.6f + dmg / s->maxhp * 3.0f, 0.6f, 1.2f));
     if (s->hp <= 0 && alchemy_revive(g, ps)) return; /* the Phoenix Elixir */
     if (s->hp <= 0) {
@@ -574,6 +609,25 @@ void game_event(Game *g, const SDL_Event *e) {
     PlayerSlot *ps = keyboard_player(g);
     if (!ps) return;
     if (e->type == SDL_EVENT_KEY_UP && e->key.key == SDLK_Q) ps->spell_held = false;
+    if (ps->pause_open) { /* the pause menu takes the keys and the mouse (Esc: main.c, game_escape) */
+        if (e->type == SDL_EVENT_KEY_DOWN) {
+            switch (e->key.key) {
+            case SDLK_LEFT: case SDLK_A: pause_nav(g, ps, NAV_LEFT); break;
+            case SDLK_RIGHT: case SDLK_D: pause_nav(g, ps, NAV_RIGHT); break;
+            case SDLK_UP: case SDLK_W: pause_nav(g, ps, NAV_UP); break;
+            case SDLK_DOWN: case SDLK_S: pause_nav(g, ps, NAV_DOWN); break;
+            case SDLK_RETURN: case SDLK_SPACE: case SDLK_KP_ENTER: if (!e->key.repeat) pause_nav(g, ps, NAV_BUY); break;
+            case SDLK_BACKSPACE: if (!e->key.repeat) pause_nav(g, ps, NAV_BACK); break;
+            default: break;
+            }
+        } else if (e->type == SDL_EVENT_MOUSE_BUTTON_DOWN && e->button.button == SDL_BUTTON_LEFT && g->nplayers == 1 && g->r.win_w > 0) {
+            float x, y;
+            touch_to_low(g, e->button.x / g->r.win_w, e->button.y / g->r.win_h, &x, &y);
+            pause_tap(g, ps, g->r.fbo_w, g->r.fbo_h, x, y);
+        }
+        ps->attack_held = ps->alt_held = ps->spell_held = false;
+        return;
+    }
     if (e->type == SDL_EVENT_MOUSE_BUTTON_DOWN || e->type == SDL_EVENT_MOUSE_BUTTON_UP) {
         bool down = e->type == SDL_EVENT_MOUSE_BUTTON_DOWN;
         if (e->button.button == SDL_BUTTON_MIDDLE) ps->spell_held = down;
@@ -669,6 +723,26 @@ void game_event(Game *g, const SDL_Event *e) {
         case SDLK_PAGEDOWN: ps->pl.pos.y -= CHUNK; ps->pl.fly = true; break;
         default: break;
         }
+        /* the option keys change the same values as the settings screen, and are kept */
+        if ((k >= SDLK_F2 && k <= SDLK_F10 && k != SDLK_F5) || k == SDLK_MINUS || k == SDLK_EQUALS) settings_from_game(g);
+    }
+}
+
+/* Esc: closes what is open, else opens the pause menu (and lets the mouse go). */
+void game_escape(Game *g) {
+    PlayerSlot *ps = keyboard_player(g);
+    if (!ps) return;
+    if (ps->pause_open) pause_nav(g, ps, NAV_BACK);
+    else if (ps->show_skills || ps->show_map) ps->show_skills = ps->show_map = false;
+    else if (!story_motive_pending(g, ps) && !story_parley_open(ps)) pause_open(g, ps);
+}
+
+/* The window lost the focus, the tab was hidden or the mouse was let go: alone, the game pauses. */
+void game_auto_pause(Game *g) {
+    if (g->nplayers != 1 || !g->world_started) return;
+    for (int i = 0; i < MAX_PLAYERS; i++) {
+        PlayerSlot *ps = &g->players[i];
+        if (ps->active && !ps->pause_open && !ps->show_skills && !ps->show_map && !story_motive_pending(g, ps) && !story_parley_open(ps)) pause_open(g, ps);
     }
 }
 
@@ -732,6 +806,26 @@ static void read_pad(Game *g, PlayerSlot *ps, PlayerInput *in, float dt) {
     float rx = stick(pad, SDL_GAMEPAD_AXIS_RIGHTX), ry = stick(pad, SDL_GAMEPAD_AXIS_RIGHTY);
     deadzone(&lx, &ly, 0.2f);
     deadzone(&rx, &ry, 0.15f);
+
+    if (PRESSED(SDL_GAMEPAD_BUTTON_START)) {
+        if (ps->pause_open) pause_close(g, ps);
+        else pause_open(g, ps);
+        pressed &= ~(1u << SDL_GAMEPAD_BUTTON_START);
+    }
+    if (ps->pause_open) {
+        static float pause_cool[MAX_PLAYERS];
+        float *cool = &pause_cool[ps->index];
+        *cool -= dt;
+        if (PRESSED(SDL_GAMEPAD_BUTTON_DPAD_LEFT) || (lx < -0.6f && *cool <= 0)) { pause_nav(g, ps, NAV_LEFT); *cool = 0.25f; }
+        if (PRESSED(SDL_GAMEPAD_BUTTON_DPAD_RIGHT) || (lx > 0.6f && *cool <= 0)) { pause_nav(g, ps, NAV_RIGHT); *cool = 0.25f; }
+        if (PRESSED(SDL_GAMEPAD_BUTTON_DPAD_UP) || (ly < -0.6f && *cool <= 0)) { pause_nav(g, ps, NAV_UP); *cool = 0.25f; }
+        if (PRESSED(SDL_GAMEPAD_BUTTON_DPAD_DOWN) || (ly > 0.6f && *cool <= 0)) { pause_nav(g, ps, NAV_DOWN); *cool = 0.25f; }
+        if (fabsf(lx) < 0.3f && fabsf(ly) < 0.3f) *cool = 0;
+        if (PRESSED(SDL_GAMEPAD_BUTTON_SOUTH)) pause_nav(g, ps, NAV_BUY);
+        if (PRESSED(SDL_GAMEPAD_BUTTON_EAST)) pause_nav(g, ps, NAV_BACK);
+        ps->attack_held = ps->alt_held = ps->pad_attack = ps->pad_alt = ps->pad_spell = false;
+        return;
+    }
 
     if (story_parley_open(ps)) {
         static float parley_cool[MAX_PLAYERS];
@@ -802,7 +896,7 @@ static void read_pad(Game *g, PlayerSlot *ps, PlayerInput *in, float dt) {
     in->sprint |= ps->sprint_toggle;
 
     /* look speed in radians per second, with a cubic response for fine aim */
-    float sens = g->opt.sens > 0 ? g->opt.sens : 1.0f;
+    float sens = (g->opt.sens > 0 ? g->opt.sens : 1.0f) * (g_set.sens_pad > 0 ? g_set.sens_pad : 1.0f);
     float ax = rx * rx * rx * 0.6f + rx * 0.4f, ay = ry * ry * ry * 0.6f + ry * 0.4f;
     if (g->opt.invert_x) ax = -ax;
     if (g->opt.invert_y) ay = -ay;
@@ -1029,7 +1123,7 @@ void game_update(Game *g, const PlayerInput *kb, float dt) {
         if (ps->keyboard && kb) inputs[i] = *kb;
         if (ps->keyboard) touch_input(g, &inputs[i]);
         if (ps->pad) read_pad(g, ps, &inputs[i], dt);
-        bool modal = ps->show_skills || ps->show_map || story_motive_pending(g, ps) || story_parley_open(ps);
+        bool modal = ps->pause_open || ps->show_skills || ps->show_map || story_motive_pending(g, ps) || story_parley_open(ps);
         if (modal) memset(&inputs[i], 0, sizeof inputs[i]);
         /* menus pause the game only when playing alone */
         if (g->nplayers == 1 && modal) paused = true;
@@ -1354,8 +1448,9 @@ static void draw_hud(Game *g, PlayerSlot *ps, int W, int H) {
         int (*const T[3])(Game *, PlayerSlot *, int, int, int) = { king_draw_tracker, story_draw_tracker, town_draw_tracker };
         int has = 0;
         for (int k = 0; k < 3; k++) has += T[k](g, ps, W, 0, ty);
-        for (int k = 0; k < 3; k++)
-            if (T[(ps->track + k) % 3](g, ps, W, H, ty)) break;
+        if (g_set.line_top) /* (the settings can hide it; Y still shows the next line's name) */
+            for (int k = 0; k < 3; k++)
+                if (T[(ps->track + k) % 3](g, ps, W, H, ty)) break;
         /* the hint shows in the first five minutes and for a while after a new line opens */
         if (has > ps->tracker_has) ps->yhint_t = 10.0f;
         ps->tracker_has = (u8)has;
@@ -1506,6 +1601,7 @@ static void render_view(Game *g, PlayerSlot *ps, int vx, int vy, int vw, int vh)
     batch3d_flush(&vm_proj, &none);
     renderer_end_world(&g->r);
 
+    if (ps->pause_open) { pause_draw(g, ps, vw, vh); return; }
     if (story_motive_pending(g, ps)) { story_draw_picker(g, ps, vw, vh); return; }
     if (story_parley_open(ps)) { story_draw_parley(g, ps, vw, vh); return; }
     if (ps->show_map) explore_draw_map(g, ps, vw, vh);

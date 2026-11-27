@@ -78,6 +78,11 @@ shot tutorial         --demo tutorial --cast 5
 shot bestiary         --demo bestiary
 shot bestiary_bosses  --demo bestiary --grade 2
 shot start            1280x720 --demo menu
+shot start_new        1280x720 --demo menu-new
+shot settings         1280x720 --demo menu-settings
+shot credits          1280x720 --demo menu-credits
+shot pause            1280x720 --demo pause
+shot pause_settings   1280x720 --demo pause --cast 1
 shot coop2            1280x720 --demo coop --players 2
 shot coop3            1280x720 --demo coop --players 3
 

@@ -171,12 +171,14 @@ static const char *POST_FS =
     "uniform sampler2D u_tex;\n"
     "uniform float u_dither;\n"
     "uniform vec2 u_low;\n"
+    "uniform float u_bright;\n"
     "out vec4 frag;\n"
     "const float bayer[16] = float[](0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0);\n"
     "void main() {\n"
     "  vec3 c = texture(u_tex, v_uv).rgb;\n"
     "  vec2 p = v_uv - 0.5;\n"
     "  c *= 1.0 - 0.55 * dot(p, p);\n"
+    "  c = pow(max(c, vec3(0.0)), vec3(1.0 / u_bright));\n"
     "  if (u_dither > 0.5) {\n"
     "    ivec2 px = ivec2(v_uv * u_low);\n"
     "    float b = (bayer[(px.y & 3) * 4 + (px.x & 3)] + 0.5) / 16.0 - 0.5;\n"
@@ -246,6 +248,7 @@ bool renderer_init(Renderer *r, int win_w, int win_h) {
     r->p_tex = U(r->post_prog, "u_tex");
     r->p_dither = U(r->post_prog, "u_dither");
     r->p_low = U(r->post_prog, "u_low");
+    r->p_bright = U(r->post_prog, "u_bright");
 #undef U
 
     /* texture atlas, filled lazily per theme */
@@ -477,6 +480,7 @@ void renderer_present(Renderer *r, float time) {
     glUniform1i(r->p_tex, 0);
     glUniform1f(r->p_dither, r->set.dither ? 1.0f : 0.0f);
     glUniform2f(r->p_low, (float)r->fbo_w, (float)r->fbo_h);
+    glUniform1f(r->p_bright, r->set.bright > 0.1f ? r->set.bright : 1.0f);
     glBindVertexArray(r->empty_vao);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     glBindVertexArray(0);

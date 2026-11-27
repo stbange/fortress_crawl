@@ -36,6 +36,7 @@ int sfx_element_impact(int element);
 
 void sfx_toggle_mute(void);
 bool sfx_muted(void);
+void sfx_set_mute(bool on);
 
 /* Music (assets/music, made by tools/gen_music.mjs): the gate theme on the start screen and
  * outside, battle and champion music when fighting, and now and then, with long silences
@@ -43,5 +44,7 @@ bool sfx_muted(void);
 void music_update(struct Game *g, float dt, bool menu);
 void music_toggle(void);
 bool music_on(void);
+void sfx_set_levels(float master, float effects, float music, bool music_enabled);
+void sfx_silence(void);
 
 #endif
