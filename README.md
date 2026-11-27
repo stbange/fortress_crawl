@@ -168,7 +168,9 @@ Open http://localhost:8000 and click into the page to lock the mouse; Esc releas
 ### Phones and tablets
 
 On touch screens the web version shows on-screen controls (tap to start; it tries to go
-fullscreen and landscape, which iPhones do not allow, so turn the phone yourself there):
+fullscreen and landscape where the browser allows it). The game fits any shape: wide, 4:3 or
+held upright (the view grows in height), keeps clear of a notch and rounded corners, and makes
+every touch button at least 9 mm across:
 
 | Touch | Action |
 |-------|--------|
@@ -178,7 +180,7 @@ fullscreen and landscape, which iPhones do not allow, so turn the phone yourself
 | ALT | alternate attack (every weapon has one; dimmed without the mana for it) |
 | JUMP, DUCK, WPN | jump, crouch, next weapon |
 | CAST, > | cast the selected spell (hold for breath spells), next spell |
-| PATH, POT, MENU, MAP (top right) | Golden Thread to your target; drink a potion; character menu (tap tabs and items, tap again to equip, use or learn, X closes); map (tap to close) |
+| II, PATH, POT, MENU, MAP (top right) | pause menu; Golden Thread to your target; drink a potion; character menu (tap tabs and items, tap again to equip, use or learn, X closes); map (tap to close) |
 
 Bows and staffs get light aim assist on touch. Touch devices use a smaller view distance
 (`--radius 2`) to keep generation smooth. A Bluetooth gamepad also works in mobile browsers.
@@ -221,9 +223,25 @@ focus or the browser tab is hidden; in co-op the pause menu is yours and the wor
 
 **Settings** (from the start screen and the pause menu): resolution, window or full screen,
 v-sync, a frame cap, brightness, dithering, vertex snap, the torch; master, effects and music
-volume and mute; mouse and stick sensitivity, inverted look and vibration; the line at the
-top. They apply at once and are kept between sessions (the F-keys below change and keep the
-same values); what you pass on the command line wins for that run.
+volume and mute; the keys and gamepad buttons of every action (see below), sprint and crouch
+held or toggled, mouse and stick sensitivity, inverted look and vibration; text size (100, 150,
+200%), a screen margin for televisions and the line at the top; and accessibility. They apply
+at once and are kept between sessions (the F-keys below change and keep the same values); what
+you pass on the command line wins for that run, and `--set key=value` changes one for a run
+without keeping it.
+
+**Accessibility:** screen shake off, half or full; the hit pause on or off; reduced flashing;
+colour palettes for protanopia, deuteranopia and tritanopia (`tools/check_palettes.py` checks
+that every two elements and every two tiers of loot stay apart as seen with each); and assists:
+less damage taken (75 or 50%), slower enemy wind-ups, no gold lost on death. What colour says is
+also written (a find names its tier and element). A world played with an assist says so in the
+list of worlds; nothing else changes.
+
+**Keys and buttons:** SETTINGS, CONTROLS, KEYS or BUTTONS lists every action with its inputs:
+Enter (A) takes the next key, mouse button, pad button or trigger, Right a second key, Delete (X)
+clears it; a key another action has is offered as a swap. Menus keep their own fixed keys, so a
+binding can always be undone. The help, the tutorial and the hints name the keys or buttons you
+set, for the device you used last.
 
 **Layers:** the fortress is built like the floors of a building. Each layer has one floor:
 you walk through its rooms and corridors without falling into another layer, and the only
@@ -421,7 +439,16 @@ The browser keeps it in `localStorage` (a few KB per world); the desktop version
 to the user data folder (`~/.local/share/fortress-crawl/` on Linux,
 `%APPDATA%\fortress-crawl\` on Windows). The start screen offers the world you played
 last and lists the others; *Start again: new characters* (on *New world*, after asking) deletes
-the save of that world.
+the save of that world. SAVING shows in the top left while it saves. In *Worlds* each world
+can be exported to a `.fcsave` file (a file dialog, or a download in the browser) and imported
+on another computer or browser. Each save carries a check: a damaged save, or one from a newer
+version of the game, is never written over but kept aside (listed, to export or delete).
+
+**When something goes wrong** the game says so: a browser without WebGL 2 is told which browsers
+run the game, a desktop without OpenGL 3.3 gets a message box, a save that cannot be written (the
+storage full) a banner to export the world. After a crash the start screen says the last game
+ended unexpectedly; on the desktop `crash.txt` beside the saves holds the build, the world and
+the last lines of the log.
 `--fresh` starts without loading.
 
 ## Controls
@@ -475,6 +502,7 @@ its first page runs the tutorial once more. `--no-tutorial` starts without it.
 | - / = | mouse sensitivity down / up |
 | F12 | save `screenshot.bmp` (desktop only) |
 | Esc | close the menu, else pause (and release the mouse) |
+| (any) | every action's keys and buttons can be changed: SETTINGS, CONTROLS |
 
 ### Split screen and gamepads
 
@@ -860,6 +888,15 @@ It also rewrites `src/game/sfx_ids.h`, the list of sound ids the game uses.
 ./build/worldmap structs 12                    # halls, caverns and chasms near the gate, with positions
 tools/screenshots.sh [name...]                 # the README's screenshots again (xvfb-run, Pillow)
 ```
+
+Checks of the screens round the game: `--demo accesstest` (what the accessibility options do to
+a blow, a kill's pause, a wind-up and a death; run it with `--set screen_shake=0 --set
+damage_taken=50` and so on), `--demo savetest --persist` (damaged and newer saves kept aside, a
+world out to a file and back), `--demo remaptest` (a key changed through the remap screen, a
+clash swapped, the help naming it, the keys reset), `--demo titletest --persist`, `--demo
+pausetest`, `--crash-test` (crashes five seconds in: the next start notices, `crash.txt` is
+written), `FC_TEXTCHECK=1` (logs any text drawn past the edge of its screen; try it with
+`--window 960 720 --set text_size=200`) and `tools/check_palettes.py`.
 
 `--demo buffs` shows the HUD with a meal, an elixir and a bath working. The screenshots in the
 README come from `tools/screenshots.sh`, which lists the demo and position of each one; a few

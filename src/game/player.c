@@ -1,5 +1,7 @@
 #include "game/player.h"
 
+float g_player_dip = 1.0f; /* the settings' screen shake scales the landing's dip (openspec accessibility) */
+
 #define HALF_W PLAYER_HALF_W
 #define EPS 0.001f
 
@@ -165,7 +167,7 @@ void player_update(Player *p, const PlayerInput *in, float dt, SolidFn solid, vo
     p->on_ground = false;
     if (!phys_move_axis(&p->pos, 1, p->vel.y * dt, HALF_W, h, solid, user)) {
         if (was_falling) p->on_ground = true;
-        if (was_falling && p->vel.y < -7.0f) p->eye_offset -= fminf(0.3f, fmaxf(0.05f, -p->vel.y / 40.0f)); /* the eye dips on a hard landing */
+        if (was_falling && p->vel.y < -7.0f) p->eye_offset -= g_player_dip * fminf(0.3f, fmaxf(0.05f, -p->vel.y / 40.0f)); /* the eye dips on a hard landing */
         p->vel.y = 0;
     }
     p->eye_offset *= expf(-12.0f * dt);

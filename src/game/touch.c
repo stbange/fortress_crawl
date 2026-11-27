@@ -51,16 +51,10 @@ void touch_to_low(Game *g, float nx, float ny, float *x, float *y) {
     float sx = (float)r->win_w / r->fbo_w, sy = (float)r->win_h / r->fbo_h;
     float s = sx < sy ? sx : sy;
     float ox = (r->win_w - r->fbo_w * s) * 0.5f, oy = (r->win_h - r->fbo_h * s) * 0.5f;
-    *x = (nx * r->win_w - ox) / s;
-    *y = (ny * r->win_h - oy) / s;
+    *x = ((nx * r->win_w - ox) / s - g->ui.x) / g->ui.s; /* (in the UI's frame: ui.c) */
+    *y = ((ny * r->win_h - oy) / s - g->ui.y) / g->ui.s;
 }
 
-int touch_low_width(Game *g, int win_w, int win_h) {
-    int h = g->r.set.low_h;
-    float aspect = win_h > 0 ? (float)win_w / win_h : 16.0f / 9.0f;
-    aspect = clampf(aspect, 1.0f, 2.4f);
-    return ((int)(h * aspect) + 1) & ~1;
-}
 
 static int finger_find(TouchCtl *t, SDL_FingerID id) {
     for (int i = 0; i < t->nfingers; i++)
@@ -85,7 +79,7 @@ static void release(Game *g, int i) {
 
 /* A tap while a menu is open. */
 static void menu_tap(Game *g, PlayerSlot *ps, float x, float y) {
-    int W = g->r.fbo_w;
+    int W = g->ui.w;
     if (ps->show_map) { ps->show_map = false; return; }
     /* close box in the top right corner of the screen */
     if (x > W - 40 && y < 26) { ps->show_skills = false; return; }
@@ -100,7 +94,7 @@ void touch_event(Game *g, const SDL_Event *e) {
     const SDL_TouchFingerEvent *f = &e->tfinger;
     float x, y;
     touch_to_low(g, f->x, f->y, &x, &y);
-    int W = g->r.fbo_w, H = g->r.fbo_h;
+    int W = g->ui.w, H = g->ui.h;
     PlayerSlot *ps = &g->players[0];
     int i = finger_find(t, f->fingerID);
 
@@ -214,20 +208,11 @@ void touch_draw(Game *g) {
     TouchCtl *t = &g->touch;
     if (!t->active) return;
     Renderer *r = &g->r;
-    int W = r->fbo_w, H = r->fbo_h;
+    int W = g->ui.w, H = g->ui.h;
     PlayerSlot *ps = &g->players[0];
-    renderer_set_view(r, 0, 0, W, H);
+    ui_frame_view(g); /* (portrait too: the target grows in height, openspec layout) */
+    (void)r;
     batch2d_begin(W, H);
-    if (r->win_h > r->win_w) {
-        /* portrait: the game needs a wide screen */
-        batch2d_rect(0, 0, (float)W, (float)H, 0.02f, 0.015f, 0.02f, 0.85f);
-        batch2d_flush();
-        font_begin(W, H);
-        const char *a = "TURN YOUR PHONE SIDEWAYS";
-        font_text((W - font_text_width(a)) / 2, H / 2 - 4, a, 0.95f, 0.8f, 0.5f);
-        font_end();
-        return;
-    }
     if (story_motive_pending(g, ps) || story_parley_open(ps)) {
         batch2d_flush();
         return;

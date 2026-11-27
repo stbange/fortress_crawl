@@ -94,6 +94,9 @@ add_executable(fortress_crawl
   src/game/ui.c
   src/game/settings.c
   src/game/pause.c
+  src/game/transfer.c
+  src/game/crash.c
+  src/game/input.c
   src/game/dig.c
   src/game/sim.c
   src/game/bio.c

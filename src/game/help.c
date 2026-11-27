@@ -14,13 +14,8 @@
  * another weapon, casts, ...), and the last one hands them to the story: the line at the top and
  * the Golden Thread. It can be skipped, and comes back in the help. */
 
-enum { DEV_KEYS, DEV_PAD, DEV_TOUCH };
 
-static int device_of(const Game *g, const PlayerSlot *ps) {
-    if (ps->keyboard && g->touch.active) return DEV_TOUCH;
-    if (ps->pad && !ps->keyboard) return DEV_PAD;
-    return DEV_KEYS;
-}
+static int device_of(const Game *g, const PlayerSlot *ps) { return input_device(g, ps); } /* (the one used last: input.c) */
 
 /* ---------- the help's pages ---------- */
 
@@ -31,23 +26,23 @@ typedef struct HelpTopic {
 
 static const HelpTopic TOPICS[] = {
     { "CONTROLS",
-      { "WASD MOVE, MOUSE LOOK. SPACE JUMP, SHIFT SPRINT, CTRL OR C CROUCH (YOU DUCK AND CRAWL BY YOURSELF IN LOW TUNNELS).\n"
-        "LEFT MOUSE STRIKE OR SHOOT, RIGHT MOUSE THE WEAPON'S ALTERNATE ATTACK.\n"
-        "1 BLADE  2 BOW  3 STAFF  4 PICKAXE, OR THE WHEEL. Z: BACK TO THE WEAPON BEFORE.\n"
-        "Q CAST THE SPELL, R / SHIFT+R ANOTHER SPELL.\n"
-        "H / J HEALTH / MANA POTION.  K EAT  V ELIXIR  X THROW  C WHAT TO THROW  P CAMPFIRE.\n"
-        "G GOLDEN THREAD  Y ANOTHER LINE AT THE TOP  M MAP.\n"
-        "TAB MENU (Q/E TABS), I ITEMS, B SPELLS, L STORY, N FOOD, O ALCHEMY, U FORGE.\n"
-        "F1 OR ? THIS HELP.  F9 SOUND  F10 MUSIC  F7/F8 INVERT MOUSE  - / = MOUSE SPEED.\n"
-        "ESC PAUSES: RESUME, SETTINGS, THIS HELP, SAVE AND QUIT. THE SETTINGS ARE KEPT.",
-        "LEFT STICK MOVE, RIGHT STICK LOOK. A JUMP, B CROUCH, LEFT STICK CLICK SPRINT.\n"
-        "RT STRIKE OR SHOOT, LT THE WEAPON'S ALTERNATE ATTACK. BOWS AND STAVES AIM A LITTLE FOR YOU.\n"
-        "LB / RB THE WEAPON BEFORE / NEXT (BLADE, BOW, STAFF, PICKAXE).\n"
-        "X CAST THE SPELL, D-PAD LEFT / RIGHT ANOTHER SPELL.\n"
-        "D-PAD UP / DOWN HEALTH / MANA POTION.\n"
-        "RIGHT STICK CLICK THE GOLDEN THREAD.  BACK THE MAP.\n"
-        "Y THE MENU: LB / RB TABS, D-PAD SELECTS, A USES, X SCRAPS, B CLOSES. THIS HELP IS THE LAST TAB.\n"
-        "START PAUSES (SETTINGS, HELP, SAVE AND QUIT). START ON ANOTHER PAD: A SECOND PLAYER JOINS ON A SPLIT SCREEN.",
+      { "{MOVE} MOVE, MOUSE LOOK. {JUMP} JUMP, {SPRINT} SPRINT, {CROUCH} CROUCH (YOU DUCK AND CRAWL BY YOURSELF IN LOW TUNNELS).\n"
+        "{ATTACK} STRIKE OR SHOOT, {ALT} THE WEAPON'S ALTERNATE ATTACK.\n"
+        "{BLADE} BLADE  {BOW} BOW  {STAFF} STAFF  {PICKAXE} PICKAXE, OR {NEXT_WEAPON}. {SWAP}: BACK TO THE WEAPON BEFORE.\n"
+        "{CAST} CAST THE SPELL, {NEXT_SPELL} (SHIFT: BACK) ANOTHER SPELL.\n"
+        "{POTION} / {MANA_POTION} HEALTH / MANA POTION.  {EAT} EAT  {ELIXIR} ELIXIR  {THROW} THROW  {THROW_CHOICE} WHAT TO THROW  {CAMPFIRE} CAMPFIRE.\n"
+        "{THREAD} GOLDEN THREAD  {NEXT_LINE} ANOTHER LINE AT THE TOP  {MAP} MAP.\n"
+        "{MENU} MENU (Q/E TABS), {ITEMS} ITEMS, {SPELLBOOK} SPELLS, {STORY} STORY, {FOOD} FOOD, {ALCHEMY} ALCHEMY, {FORGE} FORGE.\n"
+        "{HELP} THIS HELP.  F9 SOUND  F10 MUSIC  F7/F8 INVERT MOUSE  - / = MOUSE SPEED.\n"
+        "ESC PAUSES: RESUME, SETTINGS, THIS HELP, SAVE AND QUIT. SETTINGS, CONTROLS: ANY KEY FOR ANY ACTION.",
+        "LEFT STICK MOVE, RIGHT STICK LOOK. {JUMP} JUMP, {CROUCH} CROUCH, {SPRINT} SPRINT.\n"
+        "{ATTACK} STRIKE OR SHOOT, {ALT} THE WEAPON'S ALTERNATE ATTACK. BOWS AND STAVES AIM A LITTLE FOR YOU.\n"
+        "{PREV_WEAPON} / {NEXT_WEAPON} THE WEAPON BEFORE / NEXT (BLADE, BOW, STAFF, PICKAXE).\n"
+        "{CAST} CAST THE SPELL, {PREV_SPELL} / {NEXT_SPELL} ANOTHER SPELL.\n"
+        "{POTION} / {MANA_POTION} HEALTH / MANA POTION.\n"
+        "{THREAD} THE GOLDEN THREAD.  {MAP} THE MAP.\n"
+        "{MENU} THE MENU: LB / RB TABS, D-PAD SELECTS, A USES, X SCRAPS, B CLOSES. THIS HELP IS THE LAST TAB.\n"
+        "START PAUSES (SETTINGS, HELP, SAVE AND QUIT; SETTINGS, CONTROLS: ANY BUTTON FOR ANY ACTION). START ON ANOTHER PAD: A SECOND PLAYER JOINS ON A SPLIT SCREEN.",
         "THE LEFT STICK MOVES; DRAG ANYWHERE ELSE TO LOOK.\n"
         "THE BIG BUTTON STRIKES (HOLD IT), THE BLUE ONE IS THE ALTERNATE ATTACK.\n"
         "JUMP AND CROUCH ARE BESIDE THEM; THE WEAPON BUTTON TAKES UP THE NEXT WEAPON.\n"
@@ -63,7 +58,10 @@ static const HelpTopic TOPICS[] = {
         "CHESTS, FALLEN FOES AND HIDDEN PLACES GIVE GOLD, POTIONS, WEAPONS, SPELL SCROLLS AND RELICS. WALK OVER THEM.\n"
         "STRIKE A LEVER, A STATUE OR A MIRROR TO USE IT. TO SPEAK TO SOMEONE IN A TOWN, FACE THEM "
         "CLOSE AND STRIKE: YOUR WEAPON STAYS DOWN, AND THEY ANSWER.\n"
-        "A WARNING TELLS YOU WHEN A PLACE IS WELL ABOVE YOUR LEVEL. TURN BACK, OR COME PREPARED." } },
+        "A WARNING TELLS YOU WHEN A PLACE IS WELL ABOVE YOUR LEVEL. TURN BACK, OR COME PREPARED.\n"
+        "THE GAME SAVES BY ITSELF (SAVING SHOWS IN THE TOP LEFT): EVERY HALF MINUTE, AT SHRINES, INNS AND BEDS, AND WHEN YOU "
+        "QUIT. ON THE START SCREEN, WORLDS LISTS EVERY WORLD: EXPORT ONE TO A FILE TO KEEP IT OR MOVE IT, IMPORT IT ELSEWHERE. "
+        "A SAVE THAT CANNOT BE READ IS KEPT ASIDE THERE, NEVER WRITTEN OVER." } },
     { "FIGHTING",
       { "EVERY WEAPON HAS A PRIMARY AND AN ALTERNATE ATTACK: THE BLADE WHIRLS, THE BOW LOOSES A POWER SHOT THROUGH THREE FOES, "
         "THE STAFF SENDS A SMALL NOVA. THE LAST SKILL OF EACH BRANCH MAKES IT STRONGER.\n"
@@ -144,6 +142,17 @@ static const HelpTopic TOPICS[] = {
         "EACH WORLD HAS ITS OWN LEGENDARIES, CARRIED BY NAMED FOES.\n"
         "IN THE ITEMS TAB ENTER EQUIPS, DEL SCRAPS FOR GOLD. GOLD BUYS RANKS, SEALED WEAPONS, KEYSTONES, BUILDING AT HOME "
         "AND THE TOWNS' WORKS." } },
+    { "ACCESSIBILITY",
+      { "SETTINGS (ESC, THEN SETTINGS) HAS AN ACCESSIBILITY PART:\n"
+        "SCREEN SHAKE OFF, HALF OR FULL. HIT PAUSE (THE WORLD HOLDS STILL A MOMENT ON A HEAVY HIT) ON OR OFF.\n"
+        "REDUCED FLASHING DIMS FLASHES OF LIGHT, THE RED OF BEING HURT AND MONSTERS FLASHING WHITE.\n"
+        "COLOURS: PALETTES FOR PROTANOPIA, DEUTERANOPIA AND TRITANOPIA KEEP THE ELEMENTS AND TIERS APART. "
+        "WHAT COLOUR SAYS IS ALSO WRITTEN: A FIND NAMES ITS TIER AND ELEMENT, A NAMED FOE ITS ELEMENT, A FRIEND IS MARKED.\n"
+        "ASSISTS: LESS DAMAGE TAKEN (75 OR 50%), SLOWER ENEMY WIND-UPS, AND NO GOLD LOST ON DEATH. A WORLD PLAYED "
+        "WITH AN ASSIST SAYS SO IN THE LIST OF WORLDS; NOTHING ELSE CHANGES.\n"
+        "TEXT SIZE (100, 150 OR 200%) MAKES EVERY SCREEN'S LETTERS AND BUTTONS BIGGER; SCREEN MARGIN KEEPS THE EDGES "
+        "CLEAR ON A TELEVISION. THE GAME FILLS ANY WINDOW, WIDE OR TALL, AND KEEPS CLEAR OF A PHONE'S NOTCH.\n"
+        "MOUSE AND STICK SPEED, INVERTED LOOK, VIBRATION, BRIGHTNESS AND THE VOLUMES ARE THERE TOO." } },
 };
 #define TOPIC_COUNT ((int)(sizeof TOPICS / sizeof TOPICS[0]))
 
@@ -194,49 +203,54 @@ void help_nav(Game *g, PlayerSlot *ps, int nav) {
     }
 }
 
+/* the topics' rows: 12 px, closer on a short screen (openspec layout) */
+static int topic_h(int H, int top) { return MAXI(9, MINI(12, (H - top - 8 - 14) / TOPIC_COUNT)); }
+
 void help_draw(Game *g, PlayerSlot *ps, int W, int H, int top) {
     int dev = device_of(g, ps);
     bool compact = W < 400;
-    int lw = compact ? 76 : 98; /* the list of topics */
-    int x0 = 6, y0 = top + 8;
+    int lw = compact ? 86 : 98; /* the list of topics */
+    int x0 = 6, y0 = top + 8, th = topic_h(H, top);
     batch2d_begin(W, H);
     for (int t = 0; t < TOPIC_COUNT; t++) {
         bool sel = t == ps->help_topic;
-        batch2d_rect((float)x0, (float)(y0 + t * 12), (float)lw, 11, sel ? 0.35f : 0.08f, sel ? 0.25f : 0.07f, sel ? 0.12f : 0.06f, 0.95f);
+        batch2d_rect((float)x0, (float)(y0 + t * th), (float)lw, (float)(th - 1), sel ? 0.35f : 0.08f, sel ? 0.25f : 0.07f, sel ? 0.12f : 0.06f, 0.95f);
     }
     batch2d_rect((float)(x0 + lw + 6), (float)y0, (float)(W - lw - 18), (float)(H - y0 - 16), 0.05f, 0.04f, 0.035f, 0.8f);
     batch2d_flush();
     font_begin(W, H);
     for (int t = 0; t < TOPIC_COUNT; t++) {
         float c = t == ps->help_topic ? 1.0f : 0.6f;
-        font_text(x0 + 3, y0 + t * 12 + 2, TOPICS[t].title, c, c * 0.85f, c * 0.6f);
+        font_text(x0 + 3, y0 + t * th + (th - 8) / 2, TOPICS[t].title, c, c * 0.85f, c * 0.6f);
     }
     const HelpTopic *T = &TOPICS[ps->help_topic % TOPIC_COUNT];
-    const char *text = T->text[dev] ? T->text[dev] : T->text[0];
+    char text[1400]; /* ({JUMP} and the like: the keys or buttons in use, input.c) */
+    input_expand_dev(dev, T->text[dev] ? T->text[dev] : T->text[0], text, sizeof text);
     char lines[64][96];
     int tx = x0 + lw + 10, maxc = (W - tx - 8) / 6;
     int n = wrap_lines(text, maxc, lines, 64);
-    int rows = (H - y0 - 30) / 9;
+    const char *foot = dev == DEV_PAD ? "D-PAD UP/DOWN TOPIC  RIGHT/LEFT MORE  B CLOSE"
+                     : dev == DEV_TOUCH ? "TAP A TOPIC  TAP THE PAGE FOR MORE"
+                                        : "UP/DOWN TOPIC  RIGHT/LEFT MORE  F1 OR TAB CLOSE";
+    int foot_lines = (font_text_width(foot) + W - 9) / (W - 4); /* (a narrow screen stacks the footer) */
+    int rows = (H - y0 - 30 - (foot_lines - 1) * 9) / 9;
     int first = ps->help_scroll * (rows - 2);
     if (first >= n) { ps->help_scroll = 0; first = 0; }
     font_text(tx, y0 + 3, T->title, 1.0f, 0.82f, 0.45f);
     for (int i = 0; i < rows - 1 && first + i < n; i++) font_text(tx, y0 + 14 + i * 9, lines[first + i], 0.85f, 0.82f, 0.74f);
-    const char *foot = dev == DEV_PAD ? "D-PAD UP/DOWN TOPIC  RIGHT/LEFT MORE  B CLOSE"
-                     : dev == DEV_TOUCH ? "TAP A TOPIC; TAP THE PAGE FOR MORE"
-                                        : "UP/DOWN TOPIC  RIGHT/LEFT MORE  F1 OR TAB CLOSE";
-    if (first + rows - 1 < n) font_text(tx, H - 12, "MORE ->", 1.0f, 0.8f, 0.4f);
-    font_text(W - font_text_width(foot) - 6, H - 12, foot, 0.55f, 0.5f, 0.45f);
-    if (ps->help_topic == 0 && !tutorial_active(ps))
-        font_text(x0, y0 + TOPIC_COUNT * 12 + 6, dev == DEV_PAD ? "A: TUTORIAL" : "ENTER: TUTORIAL", 0.7f, 0.75f, 0.9f);
+    if (first + rows - 1 < n) font_text(W - 6 - font_text_width("MORE ->"), y0 + 3, "MORE ->", 1.0f, 0.8f, 0.4f);
+    ui_footer(W, H, foot);
+    if (ps->help_topic == 0 && !tutorial_active(ps) && y0 + TOPIC_COUNT * th + 16 < H - 12 * foot_lines)
+        font_text(x0, y0 + TOPIC_COUNT * th + 6, dev == DEV_PAD ? "A: TUTORIAL" : "ENTER: TUTORIAL", 0.7f, 0.75f, 0.9f);
     font_end();
 }
 
 /* A tap in the HELP tab: a topic, or the page (more of it). */
 void help_tap(Game *g, PlayerSlot *ps, int W, int H, int top, float x, float y) {
-    (void)g; (void)H;
-    int lw = W < 400 ? 76 : 98, x0 = 6, y0 = top + 8;
+    (void)g;
+    int lw = W < 400 ? 86 : 98, x0 = 6, y0 = top + 8;
     if (x >= x0 && x < x0 + lw) {
-        int t = (int)((y - y0) / 12);
+        int t = (int)((y - y0) / topic_h(H, top));
         if (t >= 0 && t < TOPIC_COUNT) { ps->help_topic = (u8)t; ps->help_scroll = 0; }
     } else if (x > x0 + lw) ps->help_scroll++;
 }
@@ -250,23 +264,23 @@ typedef struct TutStep {
 
 static const TutStep STEPS[] = {
     { 0 },
-    { "MOVE", { "WASD WALKS, THE MOUSE LOOKS. SHIFT SPRINTS. WALK A FEW STEPS.", "THE LEFT STICK WALKS, THE RIGHT ONE LOOKS. CLICK THE LEFT STICK TO SPRINT. WALK A FEW STEPS.",
+    { "MOVE", { "{MOVE} WALKS, THE MOUSE LOOKS. {SPRINT} SPRINTS. WALK A FEW STEPS.", "THE LEFT STICK WALKS, THE RIGHT ONE LOOKS. {SPRINT} SPRINTS. WALK A FEW STEPS.",
                 "THE LEFT STICK WALKS; DRAG ELSEWHERE TO LOOK. WALK A FEW STEPS." } },
-    { "JUMP", { "SPACE JUMPS; HOLD IT TO CLIMB A LEDGE. CTRL OR C CROUCHES. JUMP.", "A JUMPS; B CROUCHES. JUMP.", "THE JUMP BUTTON JUMPS, THE ONE BESIDE IT CROUCHES. JUMP." } },
-    { "STRIKE", { "LEFT MOUSE STRIKES. RIGHT MOUSE IS THE ALTERNATE ATTACK: A WHIRL WITH THE BLADE (IT COSTS MANA). STRIKE.",
-                  "RT STRIKES. LT IS THE ALTERNATE ATTACK: A WHIRL WITH THE BLADE (IT COSTS MANA). STRIKE.",
+    { "JUMP", { "{JUMP} JUMPS; HOLD IT TO CLIMB A LEDGE. {CROUCH} CROUCHES. JUMP.", "{JUMP} JUMPS; {CROUCH} CROUCHES. JUMP.", "THE JUMP BUTTON JUMPS, THE ONE BESIDE IT CROUCHES. JUMP." } },
+    { "STRIKE", { "{ATTACK} STRIKES. {ALT} IS THE ALTERNATE ATTACK: A WHIRL WITH THE BLADE (IT COSTS MANA). STRIKE.",
+                  "{ATTACK} STRIKES. {ALT} IS THE ALTERNATE ATTACK: A WHIRL WITH THE BLADE (IT COSTS MANA). STRIKE.",
                   "THE BIG BUTTON STRIKES; THE BLUE ONE IS THE ALTERNATE ATTACK (IT COSTS MANA). STRIKE." } },
-    { "WEAPONS", { "1 BLADE, 2 BOW, 3 STAFF, 4 PICKAXE; Z SWAPS BACK. ARROWS BRING DOWN FLIERS, MACES AND THE STAFF CRACK ARMOUR. TAKE UP THE BOW.",
-                   "LB / RB CHANGE WEAPON: BLADE, BOW, STAFF, PICKAXE. ARROWS BRING DOWN FLIERS, MACES AND THE STAFF CRACK ARMOUR. TAKE UP ANOTHER.",
+    { "WEAPONS", { "{BLADE} BLADE, {BOW} BOW, {STAFF} STAFF, {PICKAXE} PICKAXE; {SWAP} SWAPS BACK. ARROWS BRING DOWN FLIERS, MACES AND THE STAFF CRACK ARMOUR. TAKE UP THE BOW.",
+                   "{PREV_WEAPON} / {NEXT_WEAPON} CHANGE WEAPON: BLADE, BOW, STAFF, PICKAXE. ARROWS BRING DOWN FLIERS, MACES AND THE STAFF CRACK ARMOUR. TAKE UP ANOTHER.",
                    "THE WEAPON BUTTON TAKES UP THE NEXT: BLADE, BOW, STAFF, PICKAXE. ARROWS BRING DOWN FLIERS. TAKE UP ANOTHER." } },
-    { "SPELLS", { "Q CASTS YOUR SPELL; THE BLUE BAR IS MANA. R CHOOSES ANOTHER, B OPENS THE SPELLBOOK. CAST A FLAME BOLT.",
-                  "X CASTS YOUR SPELL; THE BLUE BAR IS MANA. THE D-PAD LEFT / RIGHT CHOOSES ANOTHER. CAST A FLAME BOLT.",
+    { "SPELLS", { "{CAST} CASTS YOUR SPELL; THE BLUE BAR IS MANA. {NEXT_SPELL} CHOOSES ANOTHER, {SPELLBOOK} OPENS THE SPELLBOOK. CAST A FLAME BOLT.",
+                  "{CAST} CASTS YOUR SPELL; THE BLUE BAR IS MANA. {PREV_SPELL} / {NEXT_SPELL} CHOOSES ANOTHER. CAST A FLAME BOLT.",
                   "THE SPELL BUTTON CASTS; THE BLUE BAR IS MANA. > CHOOSES ANOTHER. CAST A FLAME BOLT." } },
-    { "STAY ALIVE", { "THE RED BAR IS HEALTH. H DRINKS A HEALTH POTION, J A MANA ONE. WOUNDS CLOSE OUT OF A FIGHT. TOUCH A SHRINE: YOU WAKE THERE IF YOU FALL.",
-                      "THE RED BAR IS HEALTH. D-PAD UP DRINKS A HEALTH POTION, DOWN A MANA ONE. WOUNDS CLOSE OUT OF A FIGHT. TOUCH A SHRINE: YOU WAKE THERE IF YOU FALL.",
+    { "STAY ALIVE", { "THE RED BAR IS HEALTH. {POTION} DRINKS A HEALTH POTION, {MANA_POTION} A MANA ONE. WOUNDS CLOSE OUT OF A FIGHT. TOUCH A SHRINE: YOU WAKE THERE IF YOU FALL.",
+                      "THE RED BAR IS HEALTH. {POTION} DRINKS A HEALTH POTION, {MANA_POTION} A MANA ONE. WOUNDS CLOSE OUT OF A FIGHT. TOUCH A SHRINE: YOU WAKE THERE IF YOU FALL.",
                       "THE RED BAR IS HEALTH; THE POTION BUTTON DRINKS ONE. WOUNDS CLOSE OUT OF A FIGHT. TOUCH A SHRINE: YOU WAKE THERE IF YOU FALL." } },
-    { "YOUR STORY", { "THE LINE AT THE TOP IS THE WAY TO THE OLD KING. PRESS G: THE GOLDEN THREAD SHOWS WHERE TO GO. Y FOLLOWS YOUR CHRONICLE INSTEAD. F1 IS HELP.",
-                      "THE LINE AT THE TOP IS THE WAY TO THE OLD KING. CLICK THE RIGHT STICK: THE GOLDEN THREAD SHOWS WHERE TO GO. THE MENU (Y) HAS HELP.",
+    { "YOUR STORY", { "THE LINE AT THE TOP IS THE WAY TO THE OLD KING. PRESS {THREAD}: THE GOLDEN THREAD SHOWS WHERE TO GO. {NEXT_LINE} FOLLOWS YOUR CHRONICLE INSTEAD. {HELP} IS HELP.",
+                      "THE LINE AT THE TOP IS THE WAY TO THE OLD KING. PRESS {THREAD}: THE GOLDEN THREAD SHOWS WHERE TO GO. THE MENU ({MENU}) HAS HELP.",
                       "THE LINE AT THE TOP IS THE WAY TO THE OLD KING. TAP THE THREAD BUTTON: THE GOLDEN THREAD SHOWS WHERE TO GO. THE MENU HAS HELP." } },
 };
 #define TUT_LAST ((int)(sizeof STEPS / sizeof STEPS[0]) - 1)
@@ -341,7 +355,9 @@ void tutorial_draw(Game *g, PlayerSlot *ps, int W, int H) {
     const TutStep *st = &STEPS[ps->tut_step];
     char lines[8][96];
     int cw = W < 400 ? 150 : 190;
-    int n = wrap_lines(st->text[dev], (cw - 10) / 6, lines, 8);
+    char text[400];
+    input_expand_dev(dev, st->text[dev], text, sizeof text);
+    int n = wrap_lines(text, (cw - 10) / 6, lines, 8);
     const char *skip = dev == DEV_PAD ? "HOLD BACK: SKIP" : dev == DEV_TOUCH ? "" : "BACKSPACE: SKIP";
     float x = 4, y = H * 0.32f, h = 18.0f + n * 9 + (skip[0] ? 10.0f : 0.0f);
     bool ok = ps->tut_ok_t > 0;

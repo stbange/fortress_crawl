@@ -1168,7 +1168,7 @@ static int behave(Game *g, Monster *m, const MCtx *x, vec3 *want) {
             m->vel = v3(0, 0, 0);
             m->t2 = boss ? 3.5f : 6.0f;
             m->state = MS_WINDUP;
-            m->timer = d->windup;
+            m->timer = access_windup() * d->windup;
             particles_burst(g, monster_centre(m), m->glow, 16, 3.0f, 0.06f, true);
             sfx_at(g, SFX_WRAITH_VANISH, m->pos, 1.0f);
             return BH_DONE;
@@ -1213,7 +1213,7 @@ static int behave(Game *g, Monster *m, const MCtx *x, vec3 *want) {
     case MON_EYE:
         if (x->los && x->dist < 22.0f && m->cooldown <= 0) {
             m->state = MS_WINDUP;
-            m->timer = d->windup * (boss ? 0.7f : 1.0f);
+            m->timer = access_windup() * d->windup * (boss ? 0.7f : 1.0f);
             m->charge_dir = x->eye; /* where the beam will go: step aside */
             sfx_monster(g, m, MSFX_ATTACK);
             return BH_DONE;
@@ -1233,7 +1233,7 @@ static int behave(Game *g, Monster *m, const MCtx *x, vec3 *want) {
             if (x->hdist < 1.6f && fabsf(x->dy) < 1.5f && m->cooldown <= 0) {
                 m->hidden = 0;
                 m->state = MS_WINDUP;
-                m->timer = d->windup;
+                m->timer = access_windup() * d->windup;
                 m->t2 = 3.5f;
                 particles_burst(g, v3_add(m->pos, v3(0, 0.3f, 0)), v3(0.45f, 0.35f, 0.25f), 20, 4.0f, 0.08f, false);
                 sfx_monster(g, m, MSFX_ATTACK); /* bursting up */
@@ -1577,7 +1577,7 @@ void monsters_update(Game *g, float dt) {
                         if (m->close_t > 1.0f && m->cooldown <= 0) {
                             sfx_monster(g, m, MSFX_ATTACK);
                             m->state = MS_WINDUP;
-                            m->timer = d->windup * 1.4f;
+                            m->timer = access_windup() * d->windup * 1.4f;
                             m->aux = 1;
                             break;
                         }
@@ -1585,7 +1585,7 @@ void monsters_update(Game *g, float dt) {
                     if (hdist < d->reach + d->hw * m->scale + 0.2f && fabsf(dy) < 1.8f && m->cooldown <= 0) {
                         sfx_monster(g, m, MSFX_ATTACK);
                         m->state = MS_WINDUP;
-                        m->timer = d->windup;
+                        m->timer = access_windup() * d->windup;
                         /* now and then an elite or a boss winds up a heavy blow on a ring round it,
                          * shown on the ground: step out (openspec encounters) */
                         bool can_heavy = (m->elite || m->grade == GRADE_BOSS) && !m->king && m->type != MON_BRUTE && m->type != MON_GOLEM &&

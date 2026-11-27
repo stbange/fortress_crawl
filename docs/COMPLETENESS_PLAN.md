@@ -9,6 +9,9 @@ difficulty assists, safe areas and aspect ratios; full remapping, save export an
 recovery, performance targets; auto-pause, credits with licences, a list of worlds, the version
 on the title.
 
+**Status (2026-11-27):** phases 1 and 2 are done (changes 1 to 7, archived under
+`openspec/changes/archive/2026-11-27-*`); phases 3 and 4 are to come.
+
 Each section is one OpenSpec change: proposed under `openspec/changes/<id>/` (proposal, design,
 tasks, delta specs; the drafts are in the audit), built, checked locally (native build,
 `test_worldgen 1337` and `42`, the browser build and smoke test, the change's own demo), then

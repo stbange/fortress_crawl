@@ -41,4 +41,6 @@ vec3 player_eye(const Player *p);
 float player_height(int stance);
 #define PLAYER_HALF_W 0.3f
 
+extern float g_player_dip;
+
 #endif

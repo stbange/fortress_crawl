@@ -83,6 +83,8 @@ shot settings         1280x720 --demo menu-settings
 shot credits          1280x720 --demo menu-credits
 shot pause            1280x720 --demo pause
 shot pause_settings   1280x720 --demo pause --cast 1
+shot keys             1280x720 --demo pause --cast 3
+shot large_text       1280x720 --demo pause --cast 0 --set text_size=200
 shot coop2            1280x720 --demo coop --players 2
 shot coop3            1280x720 --demo coop --players 3
 

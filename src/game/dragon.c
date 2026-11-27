@@ -609,7 +609,7 @@ static void great_update(Game *g, Monster *m, PlayerSlot *tp, float dt) {
                 m->dtimer = 4.0f;
                 sfx_at(g, SFX_DRAGON_INHALE, m->pos, 1.0f);
             } else if (r < 0.75f || m->dphase >= 1) { m->dstate = DST_LAND; m->dtimer = 4.0f; }
-            else { m->dstate = DST_INHALE; m->dtimer = 0.9f; sfx_at(g, SFX_DRAGON_INHALE, m->pos, 1.0f); }
+            else { m->dstate = DST_INHALE; m->dtimer = 0.9f * access_windup(); sfx_at(g, SFX_DRAGON_INHALE, m->pos, 1.0f); }
         }
         break;
     }
@@ -669,7 +669,7 @@ static void great_update(Game *g, Monster *m, PlayerSlot *tp, float dt) {
                 if (frnd(&g_drng) < 0.5f) rock_drop(g, tp->pl.pos, m->dmg * 0.5f);
             }
         }
-        if (m->dbreath <= 0 && d > reach * 0.6f) { m->dstate = DST_INHALE; m->dtimer = 0.9f - m->dphase * 0.15f; sfx_at(g, SFX_DRAGON_INHALE, m->pos, 1.0f); }
+        if (m->dbreath <= 0 && d > reach * 0.6f) { m->dstate = DST_INHALE; m->dtimer = (0.9f - m->dphase * 0.15f) * access_windup(); sfx_at(g, SFX_DRAGON_INHALE, m->pos, 1.0f); }
         /* burrowers go under; the stealthy vanish */
         if ((D->traits & DT_WINGLESS) && m->dkind == DK_WYRM && m->dtimer < 4.0f && frnd(&g_drng) < dt * 0.4f) { m->dstate = DST_BURROW; m->dtimer = 2.5f; m->hidden = 1; dragons_shake(g, m->pos, 0.5f, 30.0f); }
         else if ((D->traits & DT_STEALTH) && frnd(&g_drng) < dt * 0.08f) { m->dstate = DST_VANISH; m->dtimer = 2.0f; m->hidden = 1; }

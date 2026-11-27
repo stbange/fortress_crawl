@@ -1129,7 +1129,7 @@ int story_draw_tracker(Game *g, PlayerSlot *ps, int W, int H, int y) {
 void story_draw_plates(Game *g, PlayerSlot *viewer, int W, int H) {
     vec3 eye = player_eye(&viewer->pl);
     const float *m = g->r.vp.m;
-    struct { float x, y, frac; const char *name; int kind; } plates[16];
+    struct { float x, y, frac; char name[64]; int kind; } plates[16];
     int n = 0;
     for (int i = 0; i < MAX_MONSTERS && n < 16; i++) {
         Monster *mo = &g->mons[i];
@@ -1146,8 +1146,13 @@ void story_draw_plates(Game *g, PlayerSlot *viewer, int W, int H) {
         plates[n].x = sx;
         plates[n].y = sy;
         plates[n].frac = mo->hp / mo->maxhp;
-        plates[n].name = mo->name;
         plates[n].kind = mo->resident ? 9 : mo->parley == 1 ? 8 : mo->named_kind - 1; /* (a friend; one that yielded) */
+        /* what the plate's colour says, also in words (openspec accessibility): a friend, one that
+         * yielded, and the element it strikes with */
+        if (plates[n].kind == 9) snprintf(plates[n].name, sizeof plates[n].name, "%s (FRIEND)", mo->name);
+        else if (plates[n].kind == 8) snprintf(plates[n].name, sizeof plates[n].name, "%s (YIELDED)", mo->name);
+        else if (mo->element < EL_COUNT) snprintf(plates[n].name, sizeof plates[n].name, "%s - %s", mo->name, ELEMENT_NAMES[mo->element]);
+        else snprintf(plates[n].name, sizeof plates[n].name, "%s", mo->name);
         n++;
     }
     if (!n) return;
@@ -1267,7 +1272,7 @@ void story_draw_tab(Game *g, PlayerSlot *ps, int W, int H, int top) {
         snprintf(buf, sizeof buf, "WHAT YOU KNOW - %d FACTS OF THE HISTORY OF %.30s", nk, g->story.fortress);
         upper(buf);
         if ((int)strlen(buf) > maxc) buf[maxc] = 0;
-        font_text(x, y, buf, 0.95f, 0.78f, 0.42f);
+        if (y < H - 18) font_text(x, y, buf, 0.95f, 0.78f, 0.42f);
         y += 10;
         bool who = false;
         for (int q = 0; q < h->nq; q++) {
@@ -1300,7 +1305,7 @@ void story_draw_tab(Game *g, PlayerSlot *ps, int W, int H, int top) {
         else snprintf(buf, sizeof buf, "WHAT YOU DID");
         upper(buf);
         if ((int)strlen(buf) > maxc) buf[maxc] = 0;
-        font_text(x, y, buf, 0.95f, 0.78f, 0.42f);
+        if (y < H - 18) font_text(x, y, buf, 0.95f, 0.78f, 0.42f);
         y += 10;
         for (int i = 0; i < nd && y < H - 40; i++) {
             int n = wrap(dl[i], maxc - 2, lines, 2);
@@ -1312,7 +1317,7 @@ void story_draw_tab(Game *g, PlayerSlot *ps, int W, int H, int top) {
     }
     y += 5;
     snprintf(buf, sizeof buf, "WHAT THE DEAD SAY (%d)", g->nlore);
-    font_text(x, y, buf, 0.95f, 0.78f, 0.42f);
+    if (y < H - 18) font_text(x, y, buf, 0.95f, 0.78f, 0.42f);
     y += 10;
     /* newest first; up/down scroll */
     for (int i = g->nlore - 1 - ps->story_scroll; i >= 0 && y < H - 18; i--) {

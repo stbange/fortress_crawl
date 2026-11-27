@@ -375,7 +375,9 @@ typedef struct Options {
     const char *capture;
     float capture_start, capture_seconds, capture_fps;
     float capture_orbit, capture_drift; /* demos: turn the view this many degrees a second; walk or fly forward (0..1) */
-    bool cli_lowres, cli_sens, cli_invert; /* given on the command line: the saved settings do not override them */
+    bool cli_lowres, cli_sens, cli_invert;
+    bool crash_test;   /* --crash-test: crash 5 s into play (tests the crash report) */
+    char cli_set[512]; /* --set key=value (more than one): settings for this run only (tests) */ /* given on the command line: the saved settings do not override them */
 } Options;
 
 /* On-screen touch controls for player 1 (phones and tablets). */
@@ -406,7 +408,9 @@ typedef struct SaveInfo {
     char seed_text[24];
     int level, gold, kills;
     float play_time;
+    u32 flags; /* WF_* (save version 31) */
 } SaveInfo;
+enum { WF_ASSISTED = 1 }; /* the world was played with an assist on (openspec accessibility) */
 
 /* Where things are kept between sessions (store.c): localStorage in the browser, files on the desktop. */
 bool store_write(const char *key, const u8 *data, int n);
@@ -421,12 +425,20 @@ typedef struct UiItem {
     int id;
 } UiItem;
 typedef struct UiList { int sel, scroll; } UiList;
+/* Where the screens round the game are drawn (openspec layout): a viewport in the low-res target,
+ * inset by the safe areas and the margin, and the size the UI lays out in (w, h) when its pixels
+ * are s times bigger (text size, touch targets). Taps arrive in these units (touch_to_low). */
+typedef struct UiFrame { float s; int x, y, vw, vh, w, h; } UiFrame;
 typedef struct UiDialog {
     bool open;
     int action, sel; /* sel 0 yes, 1 no (the safe one is chosen first) */
     char title[48], text[160], yes[24], no[24];
 } UiDialog;
 void ui_dim(int W, int H, float a);
+void ui_footer(int W, int H, const char *text);
+struct Game;
+void ui_frame_update(struct Game *g, bool full);
+void ui_frame_view(const struct Game *g); /* sets the UI's viewport */
 void ui_list_fix(UiList *l, const UiItem *items, int n, int rows);
 void ui_list_nav(UiList *l, const UiItem *items, int n, int nav);
 void ui_list_draw(int W, int H, int top, const char *title, const UiItem *items, int n, UiList *l, const char *footer);
@@ -436,6 +448,21 @@ void ui_dialog_draw(int W, int H, const UiDialog *d);
 int ui_dialog_nav(UiDialog *d, int nav); /* 1 yes, 0 no or back, -1 still open */
 int ui_dialog_tap(UiDialog *d, int W, int H, float px, float py);
 int ui_page_draw(int W, int H, int top, const char *title, const char *text, int *scroll);
+
+/* The actions of play and their inputs (input.c; openspec controls: remapping). */
+enum {
+    A_FORWARD, A_BACK, A_LEFT, A_RIGHT, A_JUMP, A_CROUCH, A_SPRINT, A_ATTACK, A_ALT, A_CAST, A_NEXT_SPELL, A_PREV_SPELL,
+    A_WEAPON1, A_WEAPON2, A_WEAPON3, A_PICKAXE, A_SWAP, A_NEXT_WEAPON, A_PREV_WEAPON, A_THROW, A_THROW_CHOICE, A_CAMPFIRE,
+    A_POTION, A_MANA_POTION, A_EAT, A_ELIXIR, A_THREAD, A_NEXT_LINE, A_MAP, A_MENU, A_ITEMS, A_SPELLBOOK, A_STORY, A_FOOD,
+    A_ALCHEMY, A_FORGE, A_HELP, A_SKIP_TUTORIAL, A_COUNT
+};
+#define IN_AXIS 100        /* a gamepad code: IN_AXIS + a trigger's axis (else a button) */
+#define IN_MOUSE 1000      /* a keyboard code: IN_MOUSE + a mouse button (else a scancode) */
+#define IN_WHEEL_UP 1010
+#define IN_WHEEL_DOWN 1011
+enum { DEV_KEYS, DEV_PAD, DEV_TOUCH };
+typedef struct ActionInfo { const char *token, *label; } ActionInfo;
+extern const ActionInfo ACTIONS[A_COUNT];
 
 /* The settings (settings.c; openspec settings): kept between sessions. */
 typedef struct Settings {
@@ -449,14 +476,50 @@ typedef struct Settings {
     float sens_mouse, sens_pad;
     bool invert_x, invert_y, vibration;
     bool line_top;
+    int text_size;      /* percent: 100, 150, 200 (the UI's pixels; openspec layout) */
+    int margin;         /* percent of the screen kept clear at the edges (televisions): 0..10 */
+    /* accessibility (openspec accessibility) */
+    int shake;          /* 0 off, 1 half, 2 full */
+    bool hitstop, calm_flash;
+    int palette;        /* PAL_*: colours told apart with a colour-vision deficiency */
+    int dmg_taken;      /* percent: 100, 75, 50 */
+    int windup;         /* percent: 100, 150 (monsters' wind-ups last longer) */
+    bool keep_gold;     /* no gold lost on falling */
+    /* the inputs of the actions (input.c): two keyboard or mouse codes, one gamepad code (-1 none) */
+    int kb[A_COUNT][2];
+    int pad[A_COUNT];
+    bool kb_sprint_toggle, kb_crouch_toggle, pad_sprint_toggle, pad_crouch_toggle;
 } Settings;
+enum { PAL_NORMAL, PAL_PROTANOPIA, PAL_DEUTERANOPIA, PAL_TRITANOPIA, PAL_COUNT };
+/* the assists in effect (settings.c): any of them marks the world's save */
+bool access_assisted(void);
+float access_windup(void); /* 1 or 1.5 */
 extern Settings g_set;
-typedef struct SettingsScreen { UiList list; UiDialog dlg; } SettingsScreen;
+typedef struct SettingsScreen {
+    UiList list;
+    UiDialog dlg;
+    int page;          /* 0 the settings, 1 the keys, 2 the gamepad's buttons */
+    UiList rlist;      /* the inputs page's rows */
+    int capture;       /* the action waiting for an input, plus one (0: none) */
+    int pending_code;  /* an input that another action has (asked about in dlg) */
+    int dlg_action;    /* the action that input is for */
+} SettingsScreen;
+void input_defaults(Settings *s);
+void input_code_name(int code, bool pad, char *out, int n);
+void input_name_dev(int dev, int a, char *out, int n);
+void input_expand_dev(int dev, const char *src, char *out, int n);
+int input_kb_actions(int code, int *out, int max);
+bool input_kb_held(int a);
+bool input_pad_held(SDL_Gamepad *pad, int a);
+bool settings_capture_event(const SDL_Event *e); /* an input for the remap screen (true: taken) */
+bool settings_capturing(void);
 void settings_defaults(Settings *s);
 void settings_parse(Settings *s, const char *text);
+void settings_merge(Settings *s, const char *text);
 int settings_format(const Settings *s, char *out, int cap);
 void settings_load(bool enabled);
 void settings_save(void);
+void settings_no_save(void); /* --set: this run's settings are not written */
 
 #ifndef FC_VERSION
 #define FC_VERSION "dev"
@@ -465,7 +528,8 @@ enum { QUIT_NONE, QUIT_TO_TITLE, QUIT_GAME };
 
 /* The start screen (menu.c; openspec front-end): continue, a new world, the list of worlds, the
  * settings, the help and the credits. */
-enum { MS_MAIN, MS_NEW, MS_WORLDS, MS_SETTINGS, MS_HELP, MS_CREDITS };
+enum { MS_MAIN, MS_NEW, MS_WORLDS, MS_SETTINGS, MS_HELP, MS_CREDITS, MS_WORLD };
+enum { W_OK, W_DAMAGED, W_NEWER, W_ASIDE }; /* a world in the list: its save as it is */
 #define MENU_MAX_WORLDS 48
 typedef struct StartMenu {
     int screen;
@@ -477,7 +541,16 @@ typedef struct StartMenu {
     bool has_last;    /* the world played last (CONTINUE) */
     SaveInfo last;
     SaveInfo worlds[MENU_MAX_WORLDS];
-    int nworlds;
+    u8 wstate[MENU_MAX_WORLDS];
+    int nworlds, wsel;   /* wsel: the world open in MS_WORLD */
+    int save_state;      /* SAVE_* of the seed typed on NEW WORLD */
+    UiList olist;        /* MS_WORLD's rows */
+    char note[160];      /* a line of news (an export, an import) */
+    bool crashed;        /* the last session ended unexpectedly */
+    float note_t;
+    u8 *import_d;        /* an import waiting for the answer to replacing a world */
+    int import_n;
+    SaveInfo import_info;
     UiList list, wlist;
     UiDialog dlg;
     SettingsScreen set;
@@ -602,6 +675,11 @@ typedef struct PlayerSlot {
     int flow_ox, flow_oy, flow_oz;
     float flow_timer;
     int flow_px, flow_py, flow_pz;
+    /* input (input.c): the device used last (DEV_*), hold-or-toggle states, the pad's actions held */
+    u8 last_dev;
+    bool kb_sprint_on, kb_crouch_on, pad_crouch_on;
+    u64 pad_act_prev;
+    bool wait_pad;     /* alone, its pad was unplugged: paused until a pad answers */
     /* the pause menu (pause.c) */
     bool pause_open;
     int pause_screen;
@@ -733,6 +811,13 @@ typedef struct Game {
     float fps;
     int res_mode;
     float time;
+    u32 world_flags;   /* WF_*: kept in the save */
+    UiFrame ui;        /* the full screen's UI frame (ui_frame_update, each frame) */
+    int base_h;        /* the resolution's height: the target takes its width (or in portrait its height) from the window */
+    float safe[4];     /* the browser's safe areas (left, top, right, bottom) in target pixels */
+    float pts_w;       /* the window's width in points (CSS pixels in the browser) */
+    float save_mark_t; /* the saving mark in the corner (save.c, hud) */
+    float save_fail_t; /* a failed save was said: not again before this runs out */
     bool window_dirty; /* the settings changed the window mode, v-sync or frame cap (main.c) */
     int quit_request;  /* QUIT_*: the pause menu asked to leave (main.c saves and goes) */
 } Game;
@@ -743,6 +828,11 @@ void settings_from_game(Game *g);
 void settings_screen_draw(Game *g, SettingsScreen *ss, int W, int H, int top);
 bool settings_screen_nav(Game *g, SettingsScreen *ss, int nav); /* true: the screen is left */
 bool settings_screen_tap(Game *g, SettingsScreen *ss, int W, int H, int top, float x, float y);
+
+/* input.c, with the game */
+int input_device(const Game *g, const PlayerSlot *ps);
+void input_name(const Game *g, const PlayerSlot *ps, int a, char *out, int n);
+void input_expand(const Game *g, const PlayerSlot *ps, const char *src, char *out, int n);
 
 /* pause.c */
 bool pause_is_open(const PlayerSlot *ps);
@@ -843,7 +933,28 @@ void game_give_pad_to_p1(Game *g, SDL_JoystickID id);
 
 /* save.c */
 bool game_save(Game *g);
-bool game_load(Game *g);
+/* SAVE_*: what a world's save is (openspec saves: damaged and newer saves are kept, not overwritten) */
+enum { SAVE_NONE, SAVE_OK, SAVE_DAMAGED, SAVE_NEWER };
+int game_load(Game *g);   /* SAVE_NONE, SAVE_OK, or why nothing was loaded */
+int save_check_bytes(const u8 *d, int n, SaveInfo *info);
+int save_status(u64 seed, SaveInfo *info);
+bool save_set_aside(u64 seed);       /* kept as "<key>.bad", the save removed */
+u8 *save_bytes(u64 seed, bool aside, int *n);
+/* crash.c: the log's last lines, the session marker, crash.txt (openspec errors) */
+void crash_init(const Game *g);
+const char *crash_report_path(void);
+void crash_session_begin(const char *seed_text);
+void crash_session_end(void);
+bool crash_last_session(char *out, int n);
+/* transfer.c: a world's save to and from a .fcsave file */
+void transfer_export(const char *name, const u8 *d, int n);
+void transfer_import(void);
+void transfer_update(void);
+bool transfer_poll(char *note, int n, u8 **data, int *len);
+bool transfer_write_file(const char *path, const u8 *d, int n);
+u8 *transfer_read_file(const char *path, int *n);
+void save_delete_aside(u64 seed);
+int save_import_bytes(const u8 *d, int n, SaveInfo *info);
 bool save_peek(u64 seed, SaveInfo *info);
 void save_delete(u64 seed);
 bool save_last_seed(char *out, int n);
@@ -857,7 +968,6 @@ void touch_event(Game *g, const SDL_Event *e);
 void touch_input(Game *g, PlayerInput *in);
 void touch_draw(Game *g);
 /* Low-res width that fills a touch screen of this aspect (no letterbox). */
-int touch_low_width(Game *g, int win_w, int win_h);
 
 /* Character menu tabs. */
 enum { TAB_INVENTORY, TAB_SPELLS, TAB_SKILLS, TAB_STORY, TAB_SHOP, TAB_FOOD, TAB_ALCHEMY, TAB_FORGE, TAB_HELP, TAB_COUNT };

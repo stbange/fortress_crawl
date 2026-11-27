@@ -12,7 +12,7 @@
  * user's preference folder. The world itself never needs saving: the seed rebuilds it. */
 
 #define SAVE_MAGIC 0x56534346u /* "FCSV" */
-#define SAVE_VERSION 30 /* 30: how each weapon is made (its look); 29: the heirs of the Old King, kings settled, mercy, all king flags; the towns' works; dragon-scale armour; 28: the Old King (the steps done, what is known, the ending); 27: the great dragons slain; 26: the towns of the friendly peoples (reputation, tasks), company at an inn; 25: the realms behind the Gate (attuned, rulers fallen, plants and animals met; where you went through from); 24: seeds; 23: firewood; 22: insect swarms; 21: the numbers of animals and plants per chunk; 20: the marks on cells (wet, soot, scorch, plants' age); 19: flasks to throw; 18: the fur cloak, warmth and cold of each character; 17: when each chunk was last seen (the world goes on while you are away); 16: the clouds of gas in the air; 15: what was broken in the world, the pickaxe and bombs; 14: the ledger of deeds (choices); 13: the story generator of the world; 12: the forge (materials, smithing, blueprints, runes); 11: the Sanctum's decorations, keystones bought; 10: meal variety, toxicity, torn formulae; 9: alchemy (reagents, elixirs, formulae, the elixir working); 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms;
+#define SAVE_VERSION 31 /* 31: the world's flags in the header (played with assists), a CRC-32 of the rest at the end; 30: how each weapon is made (its look); 29: the heirs of the Old King, kings settled, mercy, all king flags; the towns' works; dragon-scale armour; 28: the Old King (the steps done, what is known, the ending); 27: the great dragons slain; 26: the towns of the friendly peoples (reputation, tasks), company at an inn; 25: the realms behind the Gate (attuned, rulers fallen, plants and animals met; where you went through from); 24: seeds; 23: firewood; 22: insect swarms; 21: the numbers of animals and plants per chunk; 20: the marks on cells (wet, soot, scorch, plants' age); 19: flasks to throw; 18: the fur cloak, warmth and cold of each character; 17: when each chunk was last seen (the world goes on while you are away); 16: the clouds of gas in the air; 15: what was broken in the world, the pickaxe and bombs; 14: the ledger of deeds (choices); 13: the story generator of the world; 12: the forge (materials, smithing, blueprints, runes); 11: the Sanctum's decorations, keystones bought; 10: meal variety, toxicity, torn formulae; 9: alchemy (reagents, elixirs, formulae, the elixir working); 2: story (motive, chapter, missions, lore); 3: layered world; 4: more spells, the pocket realm; 5: Sanctum rooms;
                           6: weapons with materials, powers, legendaries and memory; 7: the Sanctum per world (written by one
                           build still marked 6); 8: food (the larder, dishes, recipes, the meal) */
 #define EXPLORED_BUDGET (1200 * 1024)
@@ -20,6 +20,20 @@
 /* storage: store.c */
 
 static void save_key(u64 seed, char *out, size_t n) { snprintf(out, n, "fortress_crawl:save:%016llx", (unsigned long long)seed); }
+
+/* CRC-32 (IEEE), the check at the end of a save from version 31 (openspec saves: damaged saves) */
+static u32 crc32_of(const u8 *d, int n) {
+    static u32 table[256];
+    if (!table[1])
+        for (u32 i = 0; i < 256; i++) {
+            u32 c = i;
+            for (int k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320u ^ (c >> 1) : c >> 1;
+            table[i] = c;
+        }
+    u32 c = 0xFFFFFFFFu;
+    for (int i = 0; i < n; i++) c = table[(c ^ d[i]) & 0xFF] ^ (c >> 8);
+    return c ^ 0xFFFFFFFFu;
+}
 
 /* ---------- writing ---------- */
 
@@ -152,6 +166,7 @@ bool game_save(Game *g) {
     put(&b, g->opt.seed_text, sizeof g->opt.seed_text);
     w32(&b, (u32)p1->st.level); w32(&b, (u32)p1->st.gold); w32(&b, (u32)p1->st.kills);
     wf(&b, g->play_time);
+    w32(&b, g->world_flags);
     for (int i = 0; i < MAX_PLAYERS; i++) {
         PlayerSlot *ps = &g->players[i];
         if (ps->active) {
@@ -259,11 +274,20 @@ bool game_save(Game *g) {
     w8(&b, g->world.king_gen); w8(&b, g->world.king_wins); w8(&b, g->world.king_mercy);
     w8(&b, (u8)g->world.ntowns);
     for (int i = 0; i < g->world.ntowns; i++) w8(&b, g->world.towns[i].projects);
+    w32(&b, crc32_of(b.d, b.n)); /* (v31: a damaged save is known before anything of it is used) */
     char key[64];
     save_key(g->opt.seed, key, sizeof key);
     bool ok = store_write(key, b.d, b.n);
     if (ok) store_write("fortress_crawl:last", (const u8 *)g->opt.seed_text, (int)strlen(g->opt.seed_text));
     free(b.d);
+    g->save_mark_t = 1.2f; /* the mark in the corner (hud) */
+    if (!ok) { /* (openspec errors: saving) */
+        SDL_Log("Save: could not write the world %s", g->opt.seed_text);
+        if (g->save_fail_t <= 0) {
+            game_banner_all(g, "COULD NOT SAVE: THE STORAGE IS FULL OR LOCKED - EXPORT YOUR WORLD (ESC, SAVE AND QUIT, WORLDS)");
+            g->save_fail_t = 120.0f; /* (said again at most every two minutes; it keeps trying) */
+        }
+    }
     return ok;
 }
 
@@ -449,31 +473,99 @@ static bool read_header(Rd *r, SaveInfo *info) {
     info->seed_text[sizeof info->seed_text - 1] = 0;
     info->level = (int)r32(r); info->gold = (int)r32(r); info->kills = (int)r32(r);
     info->play_time = rf(r);
+    info->flags = r->ver >= 31 ? r32(r) : 0;
     return !r->bad;
 }
 
-bool save_peek(u64 seed, SaveInfo *info) {
+/* What a save's bytes are: SAVE_OK (and its header), SAVE_NEWER (a later version of the game
+ * wrote it), SAVE_DAMAGED (not a save, cut short, or its check does not match). */
+int save_check_bytes(const u8 *d, int n, SaveInfo *info) {
+    memset(info, 0, sizeof *info);
+    Rd r = { d, n, 0, false, 0 };
+    if (n < 8 || r32(&r) != SAVE_MAGIC) return SAVE_DAMAGED;
+    int ver = (int)r32(&r);
+    if (ver > SAVE_VERSION) return SAVE_NEWER;
+    r.at = 0;
+    if (!read_header(&r, info)) return SAVE_DAMAGED;
+    if (ver >= 31) {
+        if (n < r.at + 4) return SAVE_DAMAGED;
+        u32 want = (u32)d[n - 4] | (u32)d[n - 3] << 8 | (u32)d[n - 2] << 16 | (u32)d[n - 1] << 24;
+        if (crc32_of(d, n - 4) != want) return SAVE_DAMAGED;
+    }
+    return SAVE_OK;
+}
+
+int save_status(u64 seed, SaveInfo *info) {
     char key[64];
     save_key(seed, key, sizeof key);
     int n = 0;
     u8 *d = store_read(key, &n);
-    if (!d) return false;
-    Rd r = { d, n, 0, false };
-    bool ok = read_header(&r, info) && info->seed == seed;
+    if (!d) { memset(info, 0, sizeof *info); return SAVE_NONE; }
+    int st = save_check_bytes(d, n, info);
+    if (st == SAVE_OK && info->seed != seed) st = SAVE_DAMAGED;
     free(d);
+    return st;
+}
+
+bool save_peek(u64 seed, SaveInfo *info) { return save_status(seed, info) == SAVE_OK; }
+
+/* A save that cannot be read is never overwritten: it is kept under "<key>.bad" (where the
+ * worlds list shows it, to export or delete) and the world starts with new characters. */
+bool save_set_aside(u64 seed) {
+    char key[64], bad[72];
+    save_key(seed, key, sizeof key);
+    snprintf(bad, sizeof bad, "%s.bad", key);
+    int n = 0;
+    u8 *d = store_read(key, &n);
+    if (!d) return false;
+    bool ok = store_write(bad, d, n);
+    free(d);
+    if (ok) store_remove(key);
+    SDL_Log("Save: the world %016llx's save was set aside as %s", (unsigned long long)seed, bad);
     return ok;
 }
 
-bool game_load(Game *g) {
+/* The bytes of a world's save (or one set aside), for export. */
+u8 *save_bytes(u64 seed, bool aside, int *n) {
+    char key[64], k2[72];
+    save_key(seed, key, sizeof key);
+    snprintf(k2, sizeof k2, aside ? "%s.bad" : "%s", key);
+    return store_read(k2, n);
+}
+
+void save_delete_aside(u64 seed) {
+    char key[64], k2[72];
+    save_key(seed, key, sizeof key);
+    snprintf(k2, sizeof k2, "%s.bad", key);
+    store_remove(k2);
+}
+
+/* An imported save: checked, then stored as its world's save (the caller has asked before
+ * replacing one). Returns its status; only SAVE_OK is stored. */
+int save_import_bytes(const u8 *d, int n, SaveInfo *info) {
+    int st = save_check_bytes(d, n, info);
+    if (st != SAVE_OK) return st;
+    char key[64];
+    save_key(info->seed, key, sizeof key);
+    if (!store_write(key, d, n)) return SAVE_DAMAGED;
+    return SAVE_OK;
+}
+
+int game_load(Game *g) {
     char key[64];
     save_key(g->opt.seed, key, sizeof key);
     int n = 0;
     u8 *d = store_read(key, &n);
-    if (!d) return false;
-    Rd r = { d, n, 0, false };
+    if (!d) return SAVE_NONE;
     SaveInfo info;
-    if (!read_header(&r, &info) || info.seed != g->opt.seed) { free(d); return false; }
+    int st = save_check_bytes(d, n, &info);
+    if (st == SAVE_OK && info.seed != g->opt.seed) st = SAVE_DAMAGED;
+    if (st != SAVE_OK) { free(d); return st; } /* (nothing of it was used) */
+    Rd r = { d, n, 0, false };
+    if (!read_header(&r, &info)) { free(d); return SAVE_DAMAGED; }
+    if (r.ver >= 31) r.n = n - 4;
     g->play_time = info.play_time;
+    g->world_flags = info.flags;
     for (int i = 0; i < MAX_PLAYERS; i++)
         if (r8(&r)) read_player(&r, &g->saved[i]);
     u32 nl = r32(&r);
@@ -655,7 +747,7 @@ bool game_load(Game *g) {
     free(d);
     SDL_Log("Loaded the save of world %s: %d characters, %u chests and relics taken, %u map chunks, %d changed blocks", g->opt.seed_text,
             g->saved[0].valid + g->saved[1].valid + g->saved[2].valid + g->saved[3].valid, nl, nc, g->map.edits_total);
-    return g->saved[0].valid;
+    return SAVE_OK;
 }
 
 void save_delete(u64 seed) {

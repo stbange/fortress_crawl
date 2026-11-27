@@ -228,7 +228,7 @@ void explore_draw_map(Game *g, PlayerSlot *ps, int w, int h) {
     snprintf(buf, sizeof buf, "%s - %.60s", ln, ps->domain_name[0] ? ps->domain_name : ps->place);
     /* 6 px per glyph; leave room for the close hint */
     buf[MINI((int)sizeof buf - 1, size >= 160 ? (size - 66) / 6 : size / 6)] = 0;
-    font_text((int)ox, (int)(oy + size + 5), buf, 0.85f, 0.75f, 0.55f);
+    font_text((int)ox, MINI((int)(oy + size + 5), h - 9), buf, 0.85f, 0.75f, 0.55f); /* (kept on screen: openspec layout) */
     if (size >= 160) {
         font_text((int)(ox + size - 60), (int)(oy + size + 5), ps->keyboard && g->touch.active ? "TAP: CLOSE" : ps->pad && !ps->keyboard ? "B: CLOSE" : "M: CLOSE", 0.6f, 0.55f, 0.45f);
         font_text((int)(ox + size - 72), (int)oy - 12, "^ UP  v DOWN", 0.6f, 0.75f, 0.6f);

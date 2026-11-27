@@ -20,6 +20,9 @@
   #overlay .keys { color: #9c8f78; max-width: 640px; }
   #overlay .go { color: #fff2c8; font-size: 16px; }
   #overlay.hidden { display: none; }
+  #overlay.error { pointer-events: auto; background: rgba(5, 4, 8, 0.94); }
+  #overlay .err { color: #ffb08a; max-width: 560px; }
+  #overlay button { font: inherit; color: #07060a; background: #f0c870; border: 0; padding: 8px 18px; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -28,7 +31,7 @@
   <h1>FORTRESS CRAWL</h1>
   <div id="status">Loading...</div>
   <div class="keys" id="keys">WASD move &middot; mouse look &middot; left/right click attack &middot; 1-3 weapons &middot; Q spell, R next<br>
-    H/J potions &middot; TAB/I/B menu &middot; M map &middot; F1 debug &middot; Esc releases the mouse<br>
+    H/J potions &middot; TAB/I/B menu &middot; M map &middot; F1 help &middot; Esc pauses<br>
     Gamepads: press START to join (split screen, up to 4 players)</div>
   <div class="go" id="go"></div>
 </div>
@@ -68,6 +71,18 @@
       }
     }, { capture: true });
   }
+  // errors players can understand (openspec errors): a browser without WebGL 2, and the game stopping
+  var failed = false;
+  function showError(title, text, reload) {
+    failed = true;
+    overlay.classList.remove('hidden');
+    overlay.classList.add('error');
+    statusEl.textContent = title;
+    document.getElementById('keys').innerHTML = '<div class="err">' + text + '</div>';
+    goEl.innerHTML = reload ? '<button onclick="location.reload()">Reload</button>' : '';
+  }
+  var webgl2 = false;
+  try { webgl2 = !!document.createElement('canvas').getContext('webgl2'); } catch (e) {}
   var Module = {
     canvas: canvas,
     // extra command line options from the address, e.g. ?args=--debug+--seed+42
@@ -76,10 +91,20 @@
       (new URLSearchParams(location.search).get('args') || '').split(/[ +]/).filter(Boolean)),
     print: function (t) { console.log(t); },
     printErr: function (t) { console.warn(t); },
-    setStatus: function (t) { if (t) statusEl.textContent = t; },
-    onRuntimeInitialized: function () { ready = true; updateOverlay(); canvas.focus(); }
+    setStatus: function (t) { if (t && !failed) statusEl.textContent = t; },
+    onRuntimeInitialized: function () { ready = true; updateOverlay(); canvas.focus(); },
+    onAbort: function (what) {
+      showError('The game stopped', 'Something went wrong and the game had to stop. Your world was saved at the last autosave ' +
+        '(every 30 seconds); reload to go on. If it happens again, the browser console (F12) says what failed.', true);
+    }
   };
-  window.addEventListener('error', function () { statusEl.textContent = 'Something went wrong - see the browser console.'; });
+  if (!webgl2) {
+    showError('This browser cannot run Fortress Crawl', 'The game needs WebGL 2, which this browser (or its settings, or the ' +
+      'graphics driver) does not offer. A recent Firefox, Chrome, Edge or Safari (15 or later) runs it; check that hardware ' +
+      'acceleration is on.', false);
+    Module.instantiateWasm = function () { return {}; }; // (the game is not even downloaded)
+  }
+  window.addEventListener('error', function () { if (!ready) statusEl.textContent = 'Something went wrong - see the browser console.'; });
   // keep the browser from scrolling or switching focus on game keys
   window.addEventListener('keydown', function (e) {
     if (['Tab', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8'].indexOf(e.code) >= 0) e.preventDefault();

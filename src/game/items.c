@@ -1,4 +1,5 @@
 #include "game/game.h"
+#include "game/palette.h"
 
 #include "engine/font.h"
 #include "render/batch.h"
@@ -47,11 +48,7 @@ const RelicDef RELICS[RELIC_COUNT] = {
 };
 const char *RELIC_BONUS_TEXT[4] = { "+6% health", "+5% damage", "+8% mana", "+3% speed" };
 
-vec3 rarity_color(int r) {
-    static const vec3 C[RAR_COUNT] = { { 0.8f, 0.78f, 0.72f }, { 0.45f, 0.65f, 1.0f }, { 1.0f, 0.85f, 0.3f }, { 1.0f, 0.5f, 0.15f },
-                                       { 0.35f, 1.0f, 0.65f } };
-    return C[r < 0 || r >= RAR_COUNT ? 0 : r];
-}
+vec3 rarity_color(int r) { return RARITY_PAL[g_set.palette % PAL_COUNT][r < 0 || r >= RAR_COUNT ? 0 : r]; }
 
 bool item_has_affix(const Item *it, int affix) { return it->affix[0] == affix || it->affix[1] == affix || it->hidden == affix; }
 
@@ -502,7 +499,12 @@ static bool collect(Game *g, PlayerSlot *ps, Pickup *p) {
         if (p->item.base >= WB_CLASSIC) g_tele.lost_found++;
         sfx_player(g, ps, SFX_PICKUP_WEAPON, 1.0f);
         item_name(&p->item, name, sizeof name);
-        snprintf(buf, sizeof buf, "%s %s", p->item.rarity >= RAR_RARE ? RARITY_NAMES[p->item.rarity] : "FOUND", name);
+        { /* the rarity and the element in words, not only in colour (openspec accessibility) */
+            int el = item_affix_element(&p->item);
+            if (el != EL_NONE && el < EL_COUNT)
+                snprintf(buf, sizeof buf, "%s %s (%s)", RARITY_NAMES[p->item.rarity], name, ELEMENT_NAMES[el]);
+            else snprintf(buf, sizeof buf, "%s %s", RARITY_NAMES[p->item.rarity], name);
+        }
         game_banner(ps, buf);
         return true;
     }
@@ -959,6 +961,7 @@ void inventory_draw(Game *g, PlayerSlot *ps, int W, int H, int top) {
         if (it->unique) snprintf(buf, sizeof buf, "%s (LEGENDARY %s, LV %d)", name, WEAPON_BASES[it->base].name, it->level);
         else snprintf(buf, sizeof buf, "%s (%s, LV %d)", name, RARITY_NAMES[it->rarity], it->level);
         for (char *q = buf; *q; q++) if (*q >= 'a' && *q <= 'z') *q -= 32;
+        { int fit = (W - l.ex - 2) / 6; if (fit > 3 && (int)strlen(buf) > fit) { buf[fit - 2] = '.'; buf[fit - 1] = '.'; buf[fit] = 0; } }
         font_text(l.ex, y, buf, c.x, c.y, c.z);
         float cd = b->cooldown * item_speed_mult(it);
         if (b->wclass == WPN_SWORD) snprintf(buf, sizeof buf, "DAMAGE x%.2f  %.2fs  REACH %.1fm  ARC %.0f", item_damage_mult(it), cd, b->range, b->arc_deg);

@@ -64,6 +64,10 @@ void pause_draw(Game *g, PlayerSlot *ps, int W, int H) {
     char buf[96];
     snprintf(buf, sizeof buf, "WORLD %s  -  %s", g->opt.seed_text, FC_VERSION);
     font_text((W - font_text_width(buf)) / 2, PAUSE_TOP + 4, buf, 0.5f, 0.48f, 0.42f);
+    if (ps->wait_pad && !ps->pad) { /* (alone, its controller was unplugged) */
+        const char *t = "RECONNECT THE CONTROLLER AND PRESS A BUTTON";
+        font_text((W - font_text_width(t)) / 2, PAUSE_TOP - 8 > 0 ? PAUSE_TOP - 8 : 2, t, 1.0f, 0.6f, 0.4f);
+    }
     font_end();
 }
 

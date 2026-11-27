@@ -67,6 +67,11 @@ static bool parse_args(Options *o, int argc, char **argv) {
         else if (!strcmp(a, "--invert-x")) o->invert_x = o->cli_invert = true;
         else if (!strcmp(a, "--invert-y")) o->invert_y = o->cli_invert = true;
         else if (!strcmp(a, "--sens") && i + 1 < argc) { o->sens = strtof(argv[++i], NULL); o->cli_sens = true; }
+        else if (!strcmp(a, "--crash-test")) o->crash_test = true;
+        else if (!strcmp(a, "--set") && i + 1 < argc) { /* a setting for this run, e.g. --set screen_shake=0 */
+            size_t n = strlen(o->cli_set);
+            snprintf(o->cli_set + n, sizeof o->cli_set - n, "%s\n", argv[++i]);
+        }
         else if (!strcmp(a, "--shot-time") && i + 1 < argc) o->shot_time = strtof(argv[++i], NULL);
         else if (!strcmp(a, "--demo") && i + 1 < argc) { o->demo = true; g_demo_kind = argv[++i]; }
         else if (!strcmp(a, "--players") && i + 1 < argc) o->players = atoi(argv[++i]);
@@ -335,8 +340,9 @@ static void demo_setup(Game *g) {
     }
     if (!strcmp(g_demo_kind, "pause")) { /* the pause menu: --cast 0 the menu, 1 the settings, 2 the help */
         p1->pause_open = true;
-        p1->pause_screen = g_demo_cast > 0 ? g_demo_cast : 0;
+        p1->pause_screen = g_demo_cast > 0 ? MINI(g_demo_cast, 2) : 0;
         p1->pause_set.list.sel = 1;
+        if (g_demo_cast == 3 || g_demo_cast == 4) { p1->pause_screen = 1; p1->pause_set.page = g_demo_cast - 2; } /* the keys, the buttons */
         return;
     }
     if (!strcmp(g_demo_kind, "help")) { /* the HELP tab, at topic --cast */
@@ -1110,6 +1116,7 @@ static void handle_events(App *a) {
     Game *g = a->g;
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
+        if (settings_capture_event(&e)) continue; /* (an input for the remap screen) */
         if (e.type == SDL_EVENT_QUIT) a->running = false;
         else if (e.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED || e.type == SDL_EVENT_WINDOW_RESIZED) {
             int w, h;
@@ -1248,6 +1255,19 @@ static void story_test_step(App *a) {
 
 static void quit_request(App *a);
 static vec3 g_title_at;
+/* tests: a key pressed, as if by a hand (the game's event path) */
+static void push_key(SDL_Scancode sc) {
+    SDL_Event e;
+    memset(&e, 0, sizeof e);
+    e.type = SDL_EVENT_KEY_DOWN;
+    e.key.scancode = sc;
+    e.key.key = SDL_GetKeyFromScancode(sc, SDL_KMOD_NONE, false);
+    e.key.down = true;
+    SDL_PushEvent(&e);
+    e.type = SDL_EVENT_KEY_UP;
+    e.key.down = false;
+    SDL_PushEvent(&e);
+}
 
 /* --demo pausetest: the pause menu stops the world when alone; --demo titletest: save and quit
  * to the start screen, the world is in the list, and it loads again where it was left; the
@@ -1284,6 +1304,140 @@ static void front_test_step(App *a) {
                     p1->pause_open ? "open" : "closed");
             a->running = false;
         }
+    } else if (!strcmp(g_demo_kind, "accesstest")) {
+        /* what the accessibility settings do to a hit, a kill's pause, a wind-up and a death
+         * (run it once as it comes and once with --set screen_shake=0 --set damage_taken=50 ...) */
+        static int stage;
+        static int gold0;
+        Stats *s = &p1->st;
+        if (stage == 0 && t > 0.7f) {
+            s->hp = s->maxhp;
+            s->invuln = 0;
+            float before = s->hp;
+            g->hitstop = 0;
+            vec3 f = dir_from_angles(p1->pl.yaw, 0);
+            game_hurt_player(g, p1, s->maxhp * 0.3f, v3_add(p1->pl.pos, f));
+            float cam = fminf(p1->shake, 1.0f) * 0.18f * g_set.shake * 0.5f;
+            SDL_Log("accesstest: a blow of %.0f took %.1f, camera shake %.3f m, hit pause %.0f ms, wind-up %.2f s (skeleton), flash %s, palette %d",
+                    s->maxhp * 0.3f, before - s->hp, cam, g->hitstop * 1000.0f, MONSTERS[MON_SKELETON].windup * access_windup(),
+                    g_set.calm_flash ? "reduced" : "full", g_set.palette);
+            gold0 = s->gold = 500;
+            s->invuln = 0;
+            game_hurt_player(g, p1, s->maxhp * 10.0f, v3_add(p1->pl.pos, f));
+            stage = 1;
+        } else if (stage == 1 && s->dead) {
+            p1->attack_held = t > 3.0f; /* (press to rise) */
+        } else if (stage == 1 && !s->dead) {
+            p1->attack_held = false;
+            SDL_Log("accesstest: after a death %d of %d gold, world flags %u", s->gold, gold0, g->world_flags);
+            stage = 2;
+            a->running = false;
+        }
+    } else if (!strcmp(g_demo_kind, "savetest")) {
+        /* damaged and newer saves are found and kept aside; a world goes out to a file and back the
+         * same (openspec saves; run with --persist) */
+        static bool done;
+        if (done || t < 0.7f) return;
+        done = true;
+        u64 seed = g->opt.seed;
+        char key[64];
+        snprintf(key, sizeof key, "fortress_crawl:save:%016llx", (unsigned long long)seed);
+        SaveInfo info;
+        bool saved = game_save(g);
+        int n = 0;
+        u8 *orig = save_bytes(seed, false, &n);
+        SDL_Log("savetest: saved %d (%d bytes), status %d (1 ok)", saved, n, save_status(seed, &info));
+        if (!orig) { a->running = false; return; }
+        u8 *bad = malloc((size_t)n);
+        memcpy(bad, orig, (size_t)n);
+        bad[n / 2] ^= 0x5A; bad[n / 2 + 7] ^= 0xFF; /* a few bits gone wrong */
+        store_write(key, bad, n);
+        int st_damaged = save_status(seed, &info);
+        bool aside = save_set_aside(seed);
+        int m2 = 0;
+        u8 *kept = save_bytes(seed, true, &m2);
+        SDL_Log("savetest: damaged -> status %d (2 damaged); kept aside %d, the same bytes %s, the save itself %s", st_damaged, aside,
+                kept && m2 == n && !memcmp(kept, bad, (size_t)n) ? "yes" : "NO", save_status(seed, &info) == SAVE_NONE ? "gone" : "STILL THERE");
+        free(kept);
+        save_delete_aside(seed);
+        memcpy(bad, orig, (size_t)n);
+        bad[4] = (u8)(bad[4] + 1); /* the version, one more than this build knows */
+        store_write(key, bad, n);
+        SDL_Log("savetest: a newer version -> status %d (3 newer); game_load %d (nothing used)", save_status(seed, &info), game_load(g));
+        save_set_aside(seed);
+        save_delete_aside(seed);
+        /* out to a file and back */
+        char path[512];
+        char *base = SDL_GetPrefPath("fortress-crawl", "fortress-crawl");
+        snprintf(path, sizeof path, "%ssavetest.fcsave", base ? base : "");
+        SDL_free(base);
+        bool wrote = transfer_write_file(path, orig, n);
+        int rn = 0;
+        u8 *back = transfer_read_file(path, &rn);
+        int st_import = back ? save_import_bytes(back, rn, &info) : -1;
+        int bn = 0;
+        u8 *now = save_bytes(seed, false, &bn);
+        SDL_Log("savetest: exported %d, imported status %d (1 ok), world %s level %d, the same bytes %s", wrote, st_import, info.seed_text, info.level,
+                now && bn == n && !memcmp(now, orig, (size_t)n) ? "yes" : "NO");
+        /* an old save (version 30, no check at the end) still loads */
+        memcpy(bad, orig, (size_t)n);
+        bad[4] = 30;
+        SDL_Log("savetest: a version 30 save reads as status %d (1 ok)", save_check_bytes(bad, n - 4, &info));
+        remove(path);
+        free(back); free(now); free(bad); free(orig);
+        a->running = false;
+    } else if (!strcmp(g_demo_kind, "remaptest")) {
+        /* the remap screen through the game's own path: a new key for jump, a clash answered with a
+         * swap, the help naming the key, a remapped action used in play, and the keys reset
+         * (openspec controls: remapping) */
+        static int stage;
+        static float at;
+        SettingsScreen *ss = &p1->pause_set;
+        if (stage == 0 && t > 0.7f) {
+            p1->pause_open = true;
+            p1->pause_screen = 1; /* (PS_SETTINGS) */
+            ss->page = 1;
+            ss->rlist.sel = A_JUMP;
+            settings_screen_nav(g, ss, NAV_BUY);
+            push_key(SDL_SCANCODE_KP_0);
+            stage = 1; at = t;
+        } else if (stage == 1 && t > at + 0.5f) {
+            char name[32];
+            input_code_name(g_set.kb[A_JUMP][0], false, name, sizeof name);
+            SDL_Log("remaptest: jump is now %s (%s)", name, g_set.kb[A_JUMP][0] == SDL_SCANCODE_KP_0 ? "ok" : "FAILED");
+            settings_screen_nav(g, ss, NAV_BUY); /* again: H, which the health potion has */
+            push_key(SDL_SCANCODE_H);
+            stage = 2; at = t;
+        } else if (stage == 2 && t > at + 0.5f) {
+            SDL_Log("remaptest: a clash asks first: %s", ss->dlg.open ? ss->dlg.text : "NO DIALOG");
+            ss->dlg.sel = 0; /* SWAP */
+            settings_screen_nav(g, ss, NAV_BUY);
+            char help[128];
+            input_expand_dev(DEV_KEYS, "{JUMP} JUMPS; {POTION} DRINKS A POTION", help, sizeof help);
+            SDL_Log("remaptest: swapped %s; the help says \"%s\"", g_set.kb[A_JUMP][0] == SDL_SCANCODE_H && g_set.kb[A_POTION][0] == SDL_SCANCODE_KP_0 ? "ok" : "FAILED", help);
+            /* a remapped action in play: the Golden Thread on keypad 1 */
+            g_set.kb[A_THREAD][0] = SDL_SCANCODE_KP_1;
+            pause_close(g, p1);
+            p1->thread.n = 0;
+            push_key(SDL_SCANCODE_KP_1);
+            stage = 3; at = t;
+        } else if (stage == 3 && t > at + 0.6f) {
+            SDL_Log("remaptest: keypad 1 spun the Golden Thread: %s (%d points)", p1->thread.n > 0 ? "yes" : "NO", p1->thread.n);
+            p1->pause_open = true;
+            p1->pause_screen = 1;
+            ss->page = 1;
+            UiItem it[A_COUNT + 3]; (void)it;
+            ss->rlist.sel = A_COUNT + 1; /* RESET THE KEYS (after a gap) */
+            settings_screen_nav(g, ss, NAV_BUY);
+            ss->dlg.sel = 0;
+            settings_screen_nav(g, ss, NAV_BUY);
+            SDL_Log("remaptest: reset: jump %s, potion %s, thread %s", g_set.kb[A_JUMP][0] == SDL_SCANCODE_SPACE ? "SPACE" : "WRONG",
+                    g_set.kb[A_POTION][0] == SDL_SCANCODE_H ? "H" : "WRONG", g_set.kb[A_THREAD][0] == SDL_SCANCODE_G ? "G" : "WRONG");
+            char pad[64];
+            input_expand_dev(DEV_PAD, "{JUMP} JUMPS, {ATTACK} STRIKES, {MENU} OPENS THE MENU", pad, sizeof pad);
+            SDL_Log("remaptest: on a gamepad the help says \"%s\"", pad);
+            a->running = false;
+        }
     } else if (!strcmp(g_demo_kind, "titletest")) {
         static int stage;
         static char seed[24];
@@ -1292,7 +1446,7 @@ static void front_test_step(App *a) {
             Settings s, back;
             settings_defaults(&s);
             s.vol_music = 30; s.bright = 1.3f; s.fps_cap = 60; s.invert_y = true; s.line_top = false;
-            char buf[2048];
+            char buf[6144];
             settings_format(&s, buf, sizeof buf);
             settings_defaults(&back);
             settings_parse(&back, buf);
@@ -2302,12 +2456,18 @@ static void start_world(App *a) {
     heat_reset();
     collapse_reset();
     /* the saved characters of this world (screenshot and test runs start fresh) */
-    if ((!g->opt.shot || g->opt.persist) && !g->opt.fresh) game_load(g);
+    int loaded = SAVE_NONE;
+    if ((!g->opt.shot || g->opt.persist) && !g->opt.fresh) loaded = game_load(g);
+    /* a save that cannot be read is kept aside, never overwritten (openspec saves) */
+    if (loaded == SAVE_DAMAGED || loaded == SAVE_NEWER) save_set_aside(g->opt.seed);
     arms_story_lore(&g->world); /* the legendaries of a world with generated stories tell its history */
     vec3 start = g->opt.has_pos ? g->opt.pos : v3(-70.5f, 6.0f, 0.5f);
     bool touch = g->touch.active;
     game_init(g, start, g->opt.yaw);
     gate_init(g); /* the realms joined to this world */
+    if (loaded == SAVE_DAMAGED || loaded == SAVE_NEWER)
+        game_banner_all(g, loaded == SAVE_NEWER ? "THIS WORLD'S SAVE IS FROM A NEWER VERSION - KEPT ASIDE (WORLDS), NEW CHARACTERS START"
+                                                : "THIS WORLD'S SAVE WAS DAMAGED - KEPT ASIDE (WORLDS), NEW CHARACTERS START");
     g->touch.active = touch || g->opt.touch;
     g->touch.forced = g->opt.touch;
     g->players[0].pl.pitch = g->opt.pitch;
@@ -2319,6 +2479,7 @@ static void start_world(App *a) {
     }
     a->in_menu = false;
     g->world_started = true;
+    if (!g->opt.shot && !g->opt.bot) crash_session_begin(g->opt.seed_text); /* (removed on a clean quit) */
     front_test_reloaded(a);
 #ifndef __EMSCRIPTEN__
     /* in the browser, pointer lock needs a click first */
@@ -2330,6 +2491,7 @@ static void menu_frame(App *a, float frame_dt) {
     Game *g = a->g;
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
+        if (settings_capture_event(&e)) continue; /* (an input for the remap screen) */
         if (e.type == SDL_EVENT_QUIT) a->running = false;
         else if (e.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED || e.type == SDL_EVENT_WINDOW_RESIZED) {
             int w, h;
@@ -2359,6 +2521,61 @@ static void menu_frame(App *a, float frame_dt) {
 #endif
 }
 
+#ifdef __EMSCRIPTEN__
+/* the page's safe areas (a notch, rounded corners) in CSS pixels: left, top, right, bottom */
+EM_JS(void, js_safe_areas, (float *out), {
+    try {
+        var d = Module.fcSafe;
+        if (!d) {
+            d = document.createElement("div");
+            d.style.cssText = "position:fixed;left:0;top:0;visibility:hidden;pointer-events:none;" +
+                "padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)";
+            document.body.appendChild(d);
+            Module.fcSafe = d;
+        }
+        var cs = getComputedStyle(d);
+        HEAPF32[(out >> 2) + 0] = parseFloat(cs.paddingLeft) || 0;
+        HEAPF32[(out >> 2) + 1] = parseFloat(cs.paddingTop) || 0;
+        HEAPF32[(out >> 2) + 2] = parseFloat(cs.paddingRight) || 0;
+        HEAPF32[(out >> 2) + 3] = parseFloat(cs.paddingBottom) || 0;
+    } catch (e) {}
+});
+#endif
+
+/* The low-res target takes the window's shape (openspec layout): it keeps the resolution's height
+ * and takes its width from the window (4:3 to 21:9); a portrait window keeps the 16:9 width and
+ * grows in height. --lowres is kept exactly. Then the UI's frame: safe areas, margin, text size. */
+static void fit_target(App *a) {
+    Game *g = a->g;
+    int ww = 0, wh = 0;
+    SDL_GetWindowSize(a->win, &ww, &wh);
+    g->pts_w = (float)ww;
+    if (!g->opt.cli_lowres && g->r.win_w > 0 && g->r.win_h > 0) {
+        int bh = g->base_h > 0 ? g->base_h : g->r.set.low_h;
+        float aspect = (float)g->r.win_w / g->r.win_h;
+        int w, h;
+        if (aspect >= 1.0f) {
+            h = bh;
+            w = ((int)(bh * clampf(aspect, 4.0f / 3.0f, 21.0f / 9.0f) + 0.5f) + 1) & ~1;
+        } else {
+            w = ((int)(bh * 16.0f / 9.0f + 0.5f) + 1) & ~1;
+            h = ((int)(w / fmaxf(aspect, 9.0f / 21.0f) + 0.5f) + 1) & ~1;
+        }
+        g->r.set.low_w = w;
+        g->r.set.low_h = h;
+    }
+#ifdef __EMSCRIPTEN__
+    static int tick;
+    if (tick++ % 30 == 0 && ww > 0) {
+        float css[4];
+        js_safe_areas(css);
+        float k = (float)g->r.set.low_w / ww; /* target pixels per CSS pixel */
+        for (int i = 0; i < 4; i++) g->safe[i] = css[i] * k;
+    }
+#endif
+    ui_frame_update(g, a->in_menu || g->nplayers <= 1);
+}
+
 /* The settings' window mode, v-sync and frame cap (openspec settings). */
 static void apply_window(App *a) {
     Game *g = a->g;
@@ -2383,7 +2600,7 @@ static void quit_request(App *a) {
         SDL_Log("%s the world %s; back to the start screen", ok ? "Saved" : "Could not save", g->opt.seed_text);
     }
     mouse_capture(a, false);
-    if (a->touch_low_w) { g->r.set.low_w = a->touch_low_w; a->touch_low_w = 0; }
+    if (!g->opt.shot && !g->opt.bot) crash_session_end();
     game_unload(g);
     /* what the command line said was for the first world */
     g->opt.fresh = g->opt.has_pos = g->opt.has_seed = false;
@@ -2411,14 +2628,7 @@ static void frame(void *user) {
     a->fps_frames++;
     if (a->fps_acc > 0.5f) { g->fps = a->fps_frames / a->fps_acc; a->fps_acc = 0; a->fps_frames = 0; }
 
-    /* touch screens get no letterbox: the low-res target takes the screen's aspect */
-    if (g->touch.active) {
-        if (!a->touch_low_w) a->touch_low_w = g->r.set.low_w; /* to restore when touch ends */
-        g->r.set.low_w = touch_low_width(g, g->r.win_w, g->r.win_h);
-    } else if (a->touch_low_w) {
-        g->r.set.low_w = a->touch_low_w;
-        a->touch_low_w = 0;
-    }
+    fit_target(a);
 
     if (a->in_menu) {
         menu_frame(a, frame_dt);
@@ -2429,16 +2639,17 @@ static void frame(void *user) {
     handle_events(a);
     if (g->quit_request) { quit_request(a); if (a->in_menu || !a->running) return; }
 
-    const bool *keys = SDL_GetKeyboardState(NULL);
     PlayerInput in = { 0 };
     if (g->mouse && !g->players[0].show_skills && !g->players[0].show_map) {
-        in.move_z = (keys[SDL_SCANCODE_W] ? 1.0f : 0.0f) - (keys[SDL_SCANCODE_S] ? 1.0f : 0.0f);
-        in.move_x = (keys[SDL_SCANCODE_D] ? 1.0f : 0.0f) - (keys[SDL_SCANCODE_A] ? 1.0f : 0.0f);
-        in.jump = keys[SDL_SCANCODE_SPACE];
-        in.up = keys[SDL_SCANCODE_SPACE];
-        in.crouch = keys[SDL_SCANCODE_LCTRL] || keys[SDL_SCANCODE_C];
+        /* the actions' keys (input.c: remapping); sprint and crouch held, or toggled */
+        PlayerSlot *p1 = &g->players[0];
+        in.move_z = (input_kb_held(A_FORWARD) ? 1.0f : 0.0f) - (input_kb_held(A_BACK) ? 1.0f : 0.0f);
+        in.move_x = (input_kb_held(A_RIGHT) ? 1.0f : 0.0f) - (input_kb_held(A_LEFT) ? 1.0f : 0.0f);
+        in.jump = input_kb_held(A_JUMP);
+        in.up = in.jump;
+        in.crouch = g_set.kb_crouch_toggle ? p1->kb_crouch_on : input_kb_held(A_CROUCH);
         in.down = in.crouch;
-        in.sprint = keys[SDL_SCANCODE_LSHIFT];
+        in.sprint = g_set.kb_sprint_toggle ? p1->kb_sprint_on : input_kb_held(A_SPRINT);
     }
     if (g->opt.capture && g->opt.shot && !g->opt.bot && a->shot_wait > g->opt.capture_start) {
         /* footage of a demo: a slow turn and a steady walk (or flight) */
@@ -2502,6 +2713,7 @@ static void frame(void *user) {
         a->acc -= DT;
     }
     if (g->quit_request) { quit_request(a); if (a->in_menu || !a->running) return; } /* (from a pad) */
+    if (g->opt.crash_test && g->play_time > 5.0f) { SDL_Log("--crash-test: crashing now"); volatile uintptr_t bad = 8; *(volatile int *)bad = 1; }
 #ifndef __EMSCRIPTEN__
     /* resumed: the mouse is caught again (in the browser the pointer lock needs a click) */
     if (was_paused && !g->players[0].pause_open && !g->mouse && !g->touch.active && g->players[0].keyboard && !g->opt.shot) mouse_capture(a, true);
@@ -2528,7 +2740,7 @@ static EM_BOOL on_visibility(int type, const EmscriptenVisibilityChangeEvent *e,
     return 0;
 }
 static const char *on_unload(int type, const void *reserved, void *user) {
-    if (g_app && !g_app->in_menu && !g_app->g->opt.shot) game_save(g_app->g);
+    if (g_app && !g_app->in_menu && !g_app->g->opt.shot) { game_save(g_app->g); crash_session_end(); }
     return NULL;
 }
 #endif
@@ -2539,6 +2751,7 @@ int main(int argc, char **argv) {
     Game *g = calloc(1, sizeof(Game));
     a->g = g;
     if (!parse_args(&g->opt, argc, argv)) return 1;
+    crash_init(g); /* the log's last lines and crash.txt (openspec errors) */
     SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0"); /* touches drive the on-screen controls */
     SDL_SetHint(SDL_HINT_MOUSE_RELATIVE_WARP_MOTION, "1"); /* lets us detect broken relative mode */
     bool recenter = g->opt.recenter ? g->opt.recenter > 0 : !running_under_wsl();
@@ -2569,11 +2782,18 @@ int main(int argc, char **argv) {
     a->win = SDL_CreateWindow("Fortress Crawl", g->opt.win_w, g->opt.win_h, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
     if (!a->win) {
         SDL_Log("window failed: %s", SDL_GetError());
+        char msg[512];
+        snprintf(msg, sizeof msg, "Fortress Crawl could not open a window with OpenGL.\n\n%s\n\nIt needs a graphics card and driver for OpenGL 3.3.", SDL_GetError());
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Fortress Crawl cannot start", msg, NULL);
         return 1;
     }
     a->ctx = SDL_GL_CreateContext(a->win);
     if (!a->ctx || !gl_load()) {
         SDL_Log("OpenGL context failed: %s", SDL_GetError());
+        char msg[512];
+        snprintf(msg, sizeof msg, "Fortress Crawl needs OpenGL 3.3, which this computer's graphics driver does not offer.\n\n%s\n\n"
+                 "Updating the graphics driver usually helps; the browser version (WebGL 2) is another way to play.", SDL_GetError());
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Fortress Crawl cannot start", msg, a->win);
         return 1;
     }
     SDL_GL_SetSwapInterval(g->opt.shot ? 0 : 1);
@@ -2595,6 +2815,7 @@ int main(int argc, char **argv) {
     g->res_mode = 1;
     /* the saved settings (not in test, screenshot or bot runs: those stay the same everywhere) */
     settings_load(!g->opt.shot && !g->opt.bot && !g_demo_kind);
+    if (g->opt.cli_set[0]) { settings_merge(&g_set, g->opt.cli_set); settings_no_save(); } /* (this run only: nothing is written) */
     int ww, wh;
     SDL_GetWindowSizeInPixels(a->win, &ww, &wh);
     if (!renderer_init(&g->r, ww, wh)) return 1;
@@ -2645,6 +2866,7 @@ int main(int argc, char **argv) {
         SDL_Log("%s the world %s (%d changed blocks)", ok ? "Saved" : "Could not save", g->opt.seed_text, g->map.edits_total);
     }
     if (!a->in_menu) chunkmap_shutdown(&g->map);
+    if (!g->opt.shot && !g->opt.bot) crash_session_end(); /* a clean quit */
     jobs_shutdown();
     sfx_shutdown();
     SDL_GL_DestroyContext(a->ctx);

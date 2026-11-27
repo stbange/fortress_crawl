@@ -19,6 +19,28 @@ static void frame_rect(float x, float y, float w, float h, float r, float g, flo
     batch2d_rect(x + w - 1, y, 1, h, r, g, b, a);
 }
 
+/* A footer of hints, centred at the bottom; too wide for the screen, it breaks where its parts
+ * are two spaces apart, the lines stacked upward (openspec layout). Inside font_begin. */
+void ui_footer(int W, int H, const char *text) {
+    if (font_text_width(text) <= W - 4) { font_text((W - font_text_width(text)) / 2, H - 11, text, 0.55f, 0.5f, 0.45f); return; }
+    char lines[4][96];
+    int n = 0, len = 0;
+    lines[0][0] = 0;
+    for (const char *p = text; *p && n < 4;) {
+        const char *e = strstr(p, "  ");
+        int plen = e ? (int)(e - p) : (int)strlen(p);
+        int cur = (int)strlen(lines[n]);
+        if (cur && (cur + 2 + plen) * 6 > W - 4) { if (n == 3) break; lines[++n][0] = 0; cur = 0; }
+        snprintf(lines[n] + cur, sizeof lines[n] - (size_t)cur, "%s%.*s", cur ? "  " : "", plen, p);
+        len++;
+        if (!e) break;
+        p = e;
+        while (*p == ' ') p++;
+    }
+    (void)len;
+    for (int i = 0; i <= n; i++) font_text((W - font_text_width(lines[i])) / 2, H - 11 - (n - i) * 9, lines[i], 0.55f, 0.5f, 0.45f);
+}
+
 void ui_dim(int W, int H, float a) {
     batch2d_begin(W, H);
     batch2d_rect(0, 0, (float)W, (float)H, 0.02f, 0.015f, 0.02f, a);
@@ -95,7 +117,7 @@ void ui_list_draw(int W, int H, int top, const char *title, const UiItem *items,
             font_text(x + (w - font_text_width(it->label)) / 2, ry, it->label, c, c * 0.85f, c * 0.55f);
         }
     }
-    if (footer && footer[0]) font_text((W - font_text_width(footer)) / 2, H - 11, footer, 0.55f, 0.5f, 0.45f);
+    if (footer && footer[0]) ui_footer(W, H, footer);
     font_end();
 }
 
@@ -247,3 +269,29 @@ int ui_page_draw(int W, int H, int top, const char *title, const char *text, int
     font_end();
     return n;
 }
+
+/* ---------- the frame ---------- */
+
+/* The UI's frame for this frame: full (the start screen, or one player) uses the whole target
+ * inset by the safe areas and the margin, with pixels as big as the text size asks; with touch
+ * controls at least big enough that the smallest button is 9 mm (about 34 CSS pixels) across;
+ * never so big that the UI has less than 240 x 135 to lay out in (the size of a split-screen
+ * quarter, the smallest every screen is made for). Split screen: the plain target. */
+void ui_frame_update(Game *g, bool full) {
+    UiFrame *f = &g->ui;
+    int W = g->r.set.low_w, H = g->r.set.low_h; /* (the target is made this size at the frame's start) */
+    if (!full) { *f = (UiFrame){ 1.0f, 0, 0, W, H, W, H }; return; }
+    float m = g_set.margin / 100.0f;
+    int l = (int)(g->safe[0] + W * m), t = (int)(g->safe[1] + H * m), r = (int)(g->safe[2] + W * m), b = (int)(g->safe[3] + H * m);
+    int vw = MAXI(64, W - l - r), vh = MAXI(64, H - t - b);
+    float s = g_set.text_size / 100.0f;
+    if (g->touch.active && g->pts_w > 0) {
+        float css = g->pts_w / (float)W; /* CSS pixels per target pixel */
+        s = fmaxf(s, 34.0f / (22.0f * css));
+    }
+    s = fminf(s, fminf(vw / 240.0f, vh / 135.0f));
+    if (s < 1.0f) s = 1.0f;
+    *f = (UiFrame){ s, l, t, vw, vh, (int)(vw / s), (int)(vh / s) };
+}
+
+void ui_frame_view(const Game *g) { renderer_set_view((Renderer *)&g->r, g->ui.x, g->ui.y, g->ui.vw, g->ui.vh); }

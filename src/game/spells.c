@@ -1,4 +1,5 @@
 #include "game/game.h"
+#include "game/palette.h"
 
 #include "render/batch.h"
 
@@ -75,12 +76,8 @@ static const struct { const char *name, *desc; float mana, cooldown; int tier; }
     [SU_SANCTUM] = { "Sanctum Door", "opens a door to your castle in the pocket realm", 30, 10.0f, 0 },
 };
 
-vec3 element_color(int e) {
-    static const vec3 C[EL_COUNT] = {
-        { 1.0f, 0.5f, 0.15f }, { 0.55f, 0.85f, 1.0f }, { 0.75f, 0.8f, 1.0f }, { 0.45f, 0.95f, 0.3f },
-        { 0.85f, 0.4f, 1.0f }, { 1.0f, 0.95f, 0.6f }, { 0.55f, 0.25f, 0.75f }, { 0.75f, 0.6f, 0.4f },
-    };
-    return e >= 0 && e < EL_COUNT ? C[e] : v3(0.8f, 0.8f, 0.8f);
+vec3 element_color(int e) { /* (the palette from the settings: palette.h) */
+    return e >= 0 && e < EL_COUNT ? ELEMENT_PAL[g_set.palette % PAL_COUNT][e] : v3(0.8f, 0.8f, 0.8f);
 }
 
 void spell_info(int id, SpellInfo *out) {

@@ -102,10 +102,11 @@ void monsters_draw(Game *g, vec3 eye) {
          * a rim in their glow's colour on the faces seen edge-on; the rooms stay as dark as they are */
         light = v3(fmaxf(light.x, CREATURE_LIGHT_FLOOR), fmaxf(light.y, CREATURE_LIGHT_FLOOR * 0.95f), fmaxf(light.z, CREATURE_LIGHT_FLOOR * 0.9f));
         batch3d_set_rim(eye, v3_lerp(v3(0.6f, 0.58f, 0.55f), m->glow, 0.35f), CREATURE_RIM);
-        vec3 base = m->flash > 0 ? v3(1.6f, 1.6f, 1.6f) : m->color;
+        vec3 hitc = g_set.calm_flash ? v3(1.15f, 1.15f, 1.15f) : v3(1.6f, 1.6f, 1.6f); /* (reduced flashing) */
+        vec3 base = m->flash > 0 ? hitc : m->color;
         vec3 col = lit(base, light);
         vec3 dark = v3_scale(col, 0.6f);
-        vec3 col2 = lit(m->flash > 0 ? v3(1.6f, 1.6f, 1.6f) : m->color2, light);
+        vec3 col2 = lit(m->flash > 0 ? hitc : m->color2, light);
         vec3 glow = m->glow;
         vec3 eyes = m->grade >= GRADE_ELITE ? glow : v3(1.0f, 0.85f, 0.4f);
         if (m->state == MS_WINDUP || m->state == MS_CHARGE) eyes = v3(1.0f, 0.15f, 0.1f);
@@ -113,7 +114,7 @@ void monsters_draw(Game *g, vec3 eye) {
         vec3 f = v3(cosf(y), 0, sinf(y)), r = v3(-sinf(y), 0, cosf(y));
         vec3 p = m->pos;
         float bob = sinf(m->anim * 6.0f) * 0.04f;
-        float wp = m->state == MS_WINDUP ? clampf(1.0f - m->timer / fmaxf(0.05f, d->windup), 0.0f, 1.0f) : 0.0f; /* raising an attack */
+        float wp = m->state == MS_WINDUP ? clampf(1.0f - m->timer / fmaxf(0.05f, d->windup * access_windup()), 0.0f, 1.0f) : 0.0f; /* raising an attack */
         Body B = { p, f, r, s, y };
         Body *b = &B;
         switch (m->type) {

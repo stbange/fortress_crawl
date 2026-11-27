@@ -1,6 +1,8 @@
 #include "engine/font.h"
 
 #include <string.h>
+#include <stdlib.h>
+#include <SDL3/SDL_log.h>
 
 #include "core/common.h"
 #include "engine/gl.h"
@@ -135,7 +137,32 @@ void font_text_scaled(int x, int y, const char *s, int k, float r, float g, floa
     }
 }
 
+/* FC_TEXTCHECK=1: every text drawn past the edge of its screen is logged once (openspec layout:
+ * the check run over the screens at each aspect ratio and text size). */
+static void text_check(int x, int y, const char *s, int w, int h) {
+    static int on = -1;
+    if (on < 0) on = getenv("FC_TEXTCHECK") != NULL;
+    if (!on || !s[0]) return;
+    if (x >= 0 && y >= 0 && x + w <= g_tw && y + h <= g_th) return;
+    static u32 seen[512];
+    u32 k = 2166136261u;
+    for (const char *p = s; *p; p++) k = (k ^ (u8)*p) * 16777619u;
+    k ^= (u32)g_tw * 31u + (u32)g_th;
+    for (int i = 0; i < 512; i++) {
+        if (seen[i] == k) return;
+        if (!seen[i]) { seen[i] = k; break; }
+    }
+    SDL_Log("TEXTCHECK clipped in %dx%d at %d,%d (%dx%d): %.60s", g_tw, g_th, x, y, w, h, s);
+}
+
 void font_text(int x, int y, const char *s, float r, float g, float b) {
+    {
+        int lines = 1, longest = 0, cur = 0;
+        for (const char *p = s; *p; p++) {
+            if (*p == '\n') { lines++; cur = 0; } else if (++cur > longest) longest = cur;
+        }
+        text_check(x, y, s, longest * CELL_W, lines * FONT_LINE - 1);
+    }
     for (int pass = 0; pass < 2; pass++) {
         int cx = x + (pass == 0), cy = y + (pass == 0);
         for (const char *p = s; *p; p++) {
